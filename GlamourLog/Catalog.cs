@@ -1,4 +1,5 @@
 using Dalamud.Game;
+using GlamourLog.Services;
 using LuminaSupplemental.Excel.Model;
 using LuminaSupplemental.Excel.Services;
 using System.Collections.Immutable;

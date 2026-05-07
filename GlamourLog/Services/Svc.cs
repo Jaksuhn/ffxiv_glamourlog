@@ -2,7 +2,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 
-namespace GlamourLog;
+namespace GlamourLog.Services;
 
 public class Svc {
     [PluginService] public static IChatGui Chat { get; set; } = null!;
@@ -14,4 +14,7 @@ public class Svc {
     [PluginService] public static IPluginLog PluginLog { get; set; } = null!;
 
     public static Configuration Config { get; set; } = null!;
+    internal static CatalogService Catalog { get; set; } = null!;
+    internal static OwnershipService Ownership { get; set; } = null!;
+    internal static WindowsService Windows { get; set; } = null!;
 }

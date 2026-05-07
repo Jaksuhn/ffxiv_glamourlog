@@ -2,6 +2,7 @@ using clib;
 using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
+using GlamourLog.Services;
 using KamiToolKit;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,13 +12,14 @@ namespace GlamourLog;
 public sealed class Plugin : IAsyncDalamudPlugin {
     [PluginService] private static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     private readonly string[] _commands = ["/glamourlog", "/gl"];
-    private GlamourLogTracker? _tracker;
-
     public async Task LoadAsync(CancellationToken cancellationToken) {
         PluginInterface.Create<Svc>();
         CLibMain.Init(PluginInterface, this);
+        await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(PluginInterface));
 
         Svc.Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        Svc.Catalog = new CatalogService();
+        Svc.Ownership = new OwnershipService();
 
         foreach (var c in _commands) {
             Svc.CommandManager.AddHandler(c, new CommandInfo(OnCommand) {
@@ -25,25 +27,20 @@ public sealed class Plugin : IAsyncDalamudPlugin {
             });
         }
 
-        await Svc.Framework.RunOnFrameworkThread(() => {
-            KamiToolKitLibrary.Initialize(PluginInterface);
-            _tracker = new GlamourLogTracker();
-        });
+        await Svc.Framework.RunOnFrameworkThread(() => Svc.Windows = new WindowsService());
     }
 
     public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.CommandManager.RemoveHandler(c));
         await Svc.Framework.RunOnFrameworkThread(() => {
-            _tracker?.Dispose();
-            _tracker = null;
+            Svc.Windows.Dispose();
             KamiToolKitLibrary.Dispose();
         });
+        Svc.Catalog.Dispose();
+        Svc.Ownership.Dispose();
     }
 
     private void OnCommand(string command, string arguments) {
-        if (_tracker is { })
-            _tracker.ToggleMainWindow();
-        else
-            Svc.Chat.Print($"window not available");
+        Svc.Windows.ToggleMainWindow();
     }
 }

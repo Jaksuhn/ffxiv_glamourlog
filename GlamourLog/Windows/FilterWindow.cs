@@ -1,12 +1,13 @@
 using Dalamud.Interface.Colors;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Services;
 using KamiToolKit;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog;
 
 /// <summary> Filter window for set-list toggles (opened from the main log window cog). </summary>
-internal unsafe class FilterWindow(GlamourLogTracker state) : NativeAddon {
+internal unsafe class FilterWindow : NativeAddon {
     public const float WindowWidth = 456f;
     public const float WindowHeight = 276f;
     private readonly List<CheckboxNode> _checkboxes = [];
@@ -70,7 +71,7 @@ internal unsafe class FilterWindow(GlamourLogTracker state) : NativeAddon {
                     flip(config);
                     cb.IsChecked = read(config);
                     config.Save();
-                    state.MarkLogWindowDirty();
+                    Svc.Catalog.MarkLogWindowDirty();
                 },
             };
             y += rowHeight + 2f;
