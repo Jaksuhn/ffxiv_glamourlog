@@ -43,7 +43,7 @@ internal sealed class Catalog {
 
     internal static HashSet<uint> BuildCurrencyIdsFromCfcSupplemental<T>(string resourceName, Func<T, uint> itemIdSelector, Func<T, uint> cfcIdSelector, Func<T, bool>? rowFilter, params uint[] allowedContentTypes) where T : ICsv, new()
         => [.. Svc.Data.GetSupplemental<T>(resourceName)
-            .Where(r => rowFilter?.Invoke(r) ?? false && itemIdSelector(r) != 0
+            .Where(r => (rowFilter?.Invoke(r) ?? true) && itemIdSelector(r) != 0
             && cfcIdSelector(r) is not 0 and var cfcId && ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true } cfc
             && allowedContentTypes.Contains(cfc.Value.ContentType.RowId)).Select(r => itemIdSelector(r))];
 
