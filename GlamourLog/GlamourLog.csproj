@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>15.0</Version>
+    <LangVersion>preview</LangVersion>
+    <Author>croizat</Author>
+    <Name>Glamour Log</Name>
+    <InternalName>GlamourLog</InternalName>
+    <Punchline>Gotta collect 'em all</Punchline>
+    <Description>A log for all your glamours and other glam-related tweaks</Description>
+    <RepoUrl>https://github.com/Jaksuhn/ffxiv_glamourlog</RepoUrl>
+    <Tags>glamour</Tags>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="DalamudPackager.targets" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="croizat.clib" Version="1.0.6" />
+    <PackageReference Include="KamiToolKit" Version="1.1.2" />
+  </ItemGroup>
+</Project>
