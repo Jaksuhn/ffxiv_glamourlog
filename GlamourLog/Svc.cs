@@ -10,6 +10,7 @@ public class Svc {
     [PluginService] public static ICommandManager CommandManager { get; set; } = null!;
     [PluginService] public static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     [PluginService] public static IDataManager Data { get; set; } = null!;
+    [PluginService] public static IFramework Framework { get; set; } = null!;
     [PluginService] public static IPluginLog PluginLog { get; set; } = null!;
 
     public static Configuration Config { get; set; } = null!;

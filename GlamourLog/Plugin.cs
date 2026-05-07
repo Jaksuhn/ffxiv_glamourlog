@@ -13,14 +13,11 @@ public sealed class Plugin : IAsyncDalamudPlugin {
     private readonly string[] _commands = ["/glamourlog", "/gl"];
     private GlamourLogTracker? _tracker;
 
-    public Task LoadAsync(CancellationToken cancellationToken) {
+    public async Task LoadAsync(CancellationToken cancellationToken) {
         PluginInterface.Create<Svc>();
         CLibMain.Init(PluginInterface, this);
-        KamiToolKitLibrary.Initialize(PluginInterface);
 
         Svc.Config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-
-        _tracker = new GlamourLogTracker();
 
         foreach (var c in _commands) {
             Svc.CommandManager.AddHandler(c, new CommandInfo(OnCommand) {
@@ -28,15 +25,19 @@ public sealed class Plugin : IAsyncDalamudPlugin {
             });
         }
 
-        return Task.CompletedTask;
+        await Svc.Framework.RunOnFrameworkThread(() => {
+            KamiToolKitLibrary.Initialize(PluginInterface);
+            _tracker = new GlamourLogTracker();
+        });
     }
 
-    public ValueTask DisposeAsync() {
+    public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.CommandManager.RemoveHandler(c));
-        _tracker?.Dispose();
-        _tracker = null;
-        KamiToolKitLibrary.Dispose();
-        return ValueTask.CompletedTask;
+        await Svc.Framework.RunOnFrameworkThread(() => {
+            _tracker?.Dispose();
+            _tracker = null;
+            KamiToolKitLibrary.Dispose();
+        });
     }
 
     private void OnCommand(string command, string arguments) {

@@ -592,10 +592,7 @@ internal unsafe class LogWindow : NativeAddon {
                             ? GlamourIconNode.IconPart.Armoire
                             : GlamourIconNode.IconPart.Dresser;
                         if (!_setStorageIconPartByRow.TryGetValue(setNode, out var curPart) || curPart != part) {
-                            setStorageBadge.Dispose();
-                            setStorageBadge = new GlamourIconNode(part);
-                            setStorageBadge.AttachNode(setNode);
-                            _setStorageBadgeByRow[setNode] = setStorageBadge;
+                            setStorageBadge.SetPart(part);
                             _setStorageIconPartByRow[setNode] = part;
                         }
 
@@ -1065,9 +1062,7 @@ internal unsafe class LogWindow : NativeAddon {
         if (StorageIconPartFor(storageState) is { } part) {
             h.StorageBadge.IsVisible = true;
             if (h.LastStorageIconPart != part) {
-                h.StorageBadge.Dispose();
-                h.StorageBadge = new GlamourIconNode(part);
-                h.StorageBadge.AttachNode(itemNode);
+                h.StorageBadge.SetPart(part);
                 h.LastStorageIconPart = part;
             }
 
