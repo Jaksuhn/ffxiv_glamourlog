@@ -62,14 +62,14 @@ internal sealed unsafe class OwnershipService : IDisposable {
     internal bool IsPartiallyCompleted(GlamourSet glamourSet, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
         if (ownedSets.Contains(glamourSet))
             return false;
-        var ownedCount = glamourSet.Items.Count(ownedItems.Contains);
+        var ownedCount = GetOwnedPieceCountForSet(glamourSet, ownedItems);
         return ownedCount > 0 && ownedCount < glamourSet.Items.Count;
     }
 
     internal bool IsDoneButNotInDresser(GlamourSet glamourSet, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
         if (ownedSets.Contains(glamourSet))
             return false;
-        var ownedCount = glamourSet.Items.Count(ownedItems.Contains);
+        var ownedCount = GetOwnedPieceCountForSet(glamourSet, ownedItems);
         return ownedCount == glamourSet.Items.Count;
     }
 
@@ -99,19 +99,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     internal HashSet<uint> GetOwnedItems() {
         var dresserItemIds = GetDresserStoredItemIds();
-        HashSet<uint> ownedItems = [.. dresserItemIds];
-
-        foreach (var set in Svc.Catalog.GlamourSets) {
-            if (!dresserItemIds.Contains(set.ItemId))
-                continue;
-            if (_mirageService.TryGetSlotStates(set.ItemId, out var slots) && slots is not null) {
-                foreach (var st in slots) {
-                    if (st.InOutfit)
-                        ownedItems.Add(st.ItemId);
-                }
-            }
-            // Mirage prism box not loaded or outfit row missing from prism list: do not grant all pieces (partial outfit).
-        }
+        var setTokens = Svc.Catalog.GlamourSets.Select(s => s.ItemId).ToHashSet();
+        HashSet<uint> ownedItems = [.. dresserItemIds.Where(id => !setTokens.Contains(id))];
 
         var inventoryManager = InventoryManager.Instance();
         if (inventoryManager != null) {
@@ -139,7 +128,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         var dresserItemIds = GetDresserStoredItemIds();
         var ownedSets = new HashSet<GlamourSet>();
         foreach (var set in Svc.Catalog.GlamourSets) {
-            var fullByPieces = set.Items.All(ownedItems.Contains);
+            var fullByPieces = GetOwnedPieceCountForSet(set, ownedItems) == set.Items.Count;
             var fullByMirage = dresserItemIds.Contains(set.ItemId) && _mirageService.IsFullMirageOutfit(set);
             if (fullByPieces || fullByMirage)
                 ownedSets.Add(set);
@@ -189,7 +178,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     internal SetStorageState GetSetStorageState(GlamourSet set, HashSet<uint>? ownedItems = null) {
         var effectiveOwned = ownedItems ?? GetOwnedItems();
-        if (!set.Items.All(effectiveOwned.Contains))
+        if (GetOwnedPieceCountForSet(set, effectiveOwned) != set.Items.Count)
             return SetStorageState.None;
 
         var hasArmoire = false;
@@ -218,6 +207,34 @@ internal sealed unsafe class OwnershipService : IDisposable {
         if (hasDresserSet)
             return SetStorageState.Dresser;
         return SetStorageState.None;
+    }
+
+    internal int GetOwnedPieceCountForSet(GlamourSet set, HashSet<uint>? ownedItems = null) {
+        var effectiveOwned = ownedItems ?? GetOwnedItems();
+        var count = 0;
+        var hasSetToken = GetDresserStoredItemIds().Contains(set.ItemId);
+        IReadOnlyList<MirageService.SlotState>? slots = null;
+        if (hasSetToken)
+            _mirageService.TryGetSlotStates(set.ItemId, out slots);
+
+        foreach (var itemId in set.Items) {
+            if (effectiveOwned.Contains(itemId)) {
+                count++;
+                continue;
+            }
+
+            if (slots is null)
+                continue;
+
+            foreach (var slot in slots) {
+                if (slot.ItemId == itemId && slot.InOutfit) {
+                    count++;
+                    break;
+                }
+            }
+        }
+
+        return count;
     }
 
     // TODO: use inventorymanager/inventorytype extensions

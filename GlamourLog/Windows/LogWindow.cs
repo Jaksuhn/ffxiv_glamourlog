@@ -706,9 +706,9 @@ internal unsafe class LogWindow : NativeAddon {
             : InventoryManager.Instance()->GetInventoryItemCount(costItemId);
     }
 
-    private static string SetSublineText(GlamourSet set, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
+    private string SetSublineText(GlamourSet set, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
         var n = set.Items.Count;
-        var c = set.Items.Count(ownedItems.Contains);
+        var c = Svc.Ownership.GetOwnedPieceCountForSet(set, ownedItems);
         if (ownedSets.Contains(set))
             return $"Obt. {n}/{n}";
         if (n == 0)
