@@ -222,15 +222,9 @@ internal unsafe class LogWindow : NativeAddon {
 
         base.OnSetup(addon, atkValueSpan);
 
-        SyncCategoryPaneToDataVersion();
-        if (!_isFinalizing && CanPaintLists()) {
-            try {
-                PaintListsCore();
-            }
-            catch (Exception ex) {
-                Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] OnSetup paint");
-            }
-        }
+        // Avoid list teardown/rebuild work during Setup. Perform first sync/paint in OnUpdate pre-native.
+        if (!_isFinalizing && CanPaintLists())
+            _pendingRefreshListsAndDetails = true;
     }
 
     protected override void OnUpdate(AtkUnitBase* addon) {
@@ -327,7 +321,6 @@ internal unsafe class LogWindow : NativeAddon {
         if (list is null)
             return;
         list.ScrollBarNode.ScrollPosition = 0;
-        list.FullRebuild();
     }
 
     private void SyncCategoryPaneToDataVersion() {
