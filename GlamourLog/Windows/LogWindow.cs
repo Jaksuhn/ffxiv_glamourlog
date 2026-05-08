@@ -26,17 +26,13 @@ internal unsafe class LogWindow : NativeAddon {
     private readonly List<ListButtonNode> _categoryButtons = [];
     private readonly Dictionary<ListButtonNode, TextNode> _categoryCountByButton = [];
     private readonly Dictionary<ListButtonNode, string> _categoryButtonMap = [];
-    private readonly List<GatheringNoteItemNode> _setNodes = [];
-    private readonly Dictionary<GatheringNoteItemNode, GlamourSet> _setNodeMap = [];
-    private readonly List<GatheringNoteItemNode> _setRowPool = [];
-    private readonly Dictionary<GatheringNoteItemNode, GlamourIconNode> _setStorageBadgeByRow = [];
-    private readonly Dictionary<GatheringNoteItemNode, GlamourIconNode.IconPart> _setStorageIconPartByRow = [];
+    private readonly List<SetListRowData> _setListOptions = [];
     private TextNode? _statsSetsLine;
     private TextNode? _statsSpaceLine;
     private VerticalLineNode? _columnSeparatorLeft;
     private VerticalLineNode? _columnSeparatorRight;
     private ScrollingListNode? _categoryListNode;
-    private ScrollingListNode? _setListNode;
+    private ListNode<SetListRowData, GlamourSetListItemNode>? _setListNode;
     private ScrollingListNode? _detailListNode;
 
     private string _selectedCategoryId = "";
@@ -47,6 +43,7 @@ internal unsafe class LogWindow : NativeAddon {
     private bool _pendingPaintDetailsOnly;
     private bool _pendingResetSetScroll;
     private bool _pendingResetDetailScroll;
+    private bool _pendingClearSetSelection;
     private int _lastDataVersion = -1;
     private bool _detailPanelInitialized;
     private TreeComboSectionNode? _detailEmptySection;
@@ -141,7 +138,6 @@ internal unsafe class LogWindow : NativeAddon {
         if (_isFinalizing || !IsOpen || !CanPaintLists())
             return;
         try {
-            RefreshSetSelectionVisuals();
             RefreshDetails(Svc.Ownership.GetOwnedItems());
         }
         catch (Exception ex) {
@@ -153,7 +149,6 @@ internal unsafe class LogWindow : NativeAddon {
         // Set/detail columns reuse pooled rows; never ScrollingListNode.Clear() hot paths — that disposes natives
         // and races AtkComponentScrollBar (same pattern as NativeMeters breakdown pooling).
         RefreshRows();
-        RefreshSetSelectionVisuals();
         RefreshDetails(Svc.Ownership.GetOwnedItems());
     }
 
@@ -221,7 +216,23 @@ internal unsafe class LogWindow : NativeAddon {
 
         _categoryListNode = SimpleScrollList.Create(new Vector2(contentStart.X, listY), new Vector2(leftWidth, listHeight), true);
         _categoryListNode.AttachNode(this);
-        _setListNode = SimpleScrollList.Create(new Vector2(midColLeft, midListTop), new Vector2(middleWidth, midListHeight), false);
+        _setListNode = new ListNode<SetListRowData, GlamourSetListItemNode> {
+            Position = new Vector2(midColLeft, midListTop),
+            Size = new Vector2(middleWidth, midListHeight),
+            ItemSpacing = 0f,
+            OptionsList = [],
+            OnItemSelected = item => {
+                if (item is null)
+                    return;
+                if (ReferenceEquals(_selectedSet, item.Set))
+                    return;
+                _selectedSet = item.Set;
+                _sourceFilterPieceItemId = null;
+                _pendingPaintDetailsOnly = true;
+                _pendingResetDetailScroll = true;
+            },
+        };
+        GlamourSetListItemNode.OnRowRightClick = OpenSetContextMenu;
         _setListNode.AttachNode(this);
         var detailX = contentStart.X + leftWidth + middleWidth + columnGap * 2;
         var detailW = contentSize.X - (leftWidth + middleWidth + columnGap * 2);
@@ -275,6 +286,14 @@ internal unsafe class LogWindow : NativeAddon {
             if (Svc.Catalog.TryConsumePendingListRefresh())
                 _pendingRefreshListsAndDetails = true;
 
+            if (_pendingResetSetScroll && _pendingRefreshListsAndDetails && _setListNode is not null) {
+                // ListNode keeps an internal scroll index; clearing options first guarantees clamp to zero.
+                _setListNode.OptionsList = [];
+                _setListNode.FullRebuild();
+                _pendingClearSetSelection = true;
+                _pendingResetSetScroll = false;
+            }
+
             if (_pendingRefreshListsAndDetails) {
                 _pendingRefreshListsAndDetails = false;
                 _pendingPaintDetailsOnly = false;
@@ -303,6 +322,8 @@ internal unsafe class LogWindow : NativeAddon {
         base.OnUpdate(addon);
 
         try {
+            _setListNode?.Update();
+
             if (!IsOpen) {
                 try {
                     _filterWindow.CloseIfOpen();
@@ -328,6 +349,13 @@ internal unsafe class LogWindow : NativeAddon {
             return;
         list.ScrollPosition = 0;
         list.RecalculateLayout();
+    }
+
+    private static void ResetScrollToTop(ListNode<SetListRowData, GlamourSetListItemNode>? list) {
+        if (list is null)
+            return;
+        list.ScrollBarNode.ScrollPosition = 0;
+        list.FullRebuild();
     }
 
     private void SyncCategoryPaneToDataVersion() {
@@ -366,11 +394,7 @@ internal unsafe class LogWindow : NativeAddon {
         _categoryButtonMap.Clear();
         _categoryCountByButton.Clear();
         _setListNode = null;
-        _setNodes.Clear();
-        _setNodeMap.Clear();
-        _setRowPool.Clear();
-        _setStorageBadgeByRow.Clear();
-        _setStorageIconPartByRow.Clear();
+        _setListOptions.Clear();
         _detailPanelInitialized = false;
         _detailEmptySection = null;
         _detailEmptyHint = null;
@@ -384,6 +408,7 @@ internal unsafe class LogWindow : NativeAddon {
         _detailPieceItemByRow.Clear();
         _detailCostRowPool.Clear();
         _detailCostCurrencyByRow.Clear();
+        GlamourSetListItemNode.OnRowRightClick = null;
         _detailListNode = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;
@@ -471,6 +496,7 @@ internal unsafe class LogWindow : NativeAddon {
                 _selectedCategoryId = captured;
                 _selectedSet = null;
                 _sourceFilterPieceItemId = null;
+                _pendingClearSetSelection = true;
                 _pendingRefreshListsAndDetails = true;
                 _pendingResetSetScroll = true;
                 _pendingResetDetailScroll = true;
@@ -532,127 +558,38 @@ internal unsafe class LogWindow : NativeAddon {
 
         var config = Svc.Config;
 
-        _setNodes.Clear();
-        _setNodeMap.Clear();
-        foreach (var pooled in _setRowPool)
-            pooled.IsVisible = false;
-
         var rows = GetFilteredRows(config, ownedSets, ownedItems);
 
-        if (_selectedSet != null && !rows.Contains(_selectedSet))
+        if (_selectedSet != null && !rows.Contains(_selectedSet)) {
             _selectedSet = null;
+            _pendingClearSetSelection = true;
+        }
 
-        for (var i = 0; i < rows.Count; i++) {
-            while (_setRowPool.Count <= i)
-                CreatePooledSetRow();
-
-            var setNode = _setRowPool[i];
+        _setListOptions.Clear();
+        foreach (var set in rows) {
             try {
-                var set = rows[i];
-                // Guard against native component size drift after rapid scroll/click event churn.
-                // If a row height collapses, VerticalList layout stacks rows at near-identical Y.
-                setNode.Height = SetListRowHeight;
-                setNode.Width = _setListNode.Size.X;
-                setNode.IsVisible = true;
-                setNode.Selected = ReferenceEquals(_selectedSet, set);
-                var setItemRow = Item.GetRow(set.ItemId);
-                setNode.IconNode.IconId = setItemRow.Icon;
-                setNode.TitleNode.String = set.Name;
-                setNode.SubtitleNode.String = SetSublineText(set, ownedSets, ownedItems);
-                setNode.CheckBadge.IsVisible = ownedSets.Contains(set);
-                if (_setStorageBadgeByRow.TryGetValue(setNode, out var setStorageBadge)) {
-                    var setStorageState = Svc.Ownership.GetSetStorageState(set, ownedItems);
-                    var showStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire;
-                    if (!showStorage) {
-                        setStorageBadge.IsVisible = false;
-                    }
-                    else {
-                        var part = setStorageState == SetStorageState.Armoire
-                            ? GlamourIconNode.IconPart.Armoire
-                            : GlamourIconNode.IconPart.Dresser;
-                        if (!_setStorageIconPartByRow.TryGetValue(setNode, out var curPart) || curPart != part) {
-                            setStorageBadge.SetPart(part);
-                            _setStorageIconPartByRow[setNode] = part;
-                        }
-
-                        setStorageBadge.IsVisible = true;
-                    }
-                }
-
-                _setNodes.Add(setNode);
-                _setNodeMap[setNode] = set;
+                var setStorageState = Svc.Ownership.GetSetStorageState(set, ownedItems);
+                var showStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire;
+                _setListOptions.Add(new SetListRowData {
+                    Set = set,
+                    Title = set.Name,
+                    Subtitle = SetSublineText(set, ownedSets, ownedItems),
+                    IsOwned = ownedSets.Contains(set),
+                    ShowStorage = showStorage,
+                    StorageIconPart = setStorageState == SetStorageState.Armoire
+                        ? GlamourIconNode.IconPart.Armoire
+                        : GlamourIconNode.IconPart.Dresser,
+                });
             }
             catch (Exception ex) {
-                setNode.IsVisible = false;
-                Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] Bind set row failed");
+                Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
             }
         }
 
-        for (var i = rows.Count; i < _setRowPool.Count; i++)
-            _setRowPool[i].IsVisible = false;
-
-        _setListNode.RecalculateLayout();
-        PositionSetStorageBadges();
-    }
-
-    private void CreatePooledSetRow() {
-        if (_setListNode is null)
-            return;
-
-        var setNode = new GatheringNoteItemNode(SetListRowHeight, 29f, SetTitleWhite);
-        var storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);
-        storageBadge.AttachNode(setNode);
-        _setStorageBadgeByRow[setNode] = storageBadge;
-        _setStorageIconPartByRow[setNode] = GlamourIconNode.IconPart.Dresser;
-        setNode.AddEvent(AtkEventType.MouseClick, (_, _, _, _, e) => OnSetRowClick(setNode, e));
-        _setRowPool.Add(setNode);
-        _setListNode.AddNode(setNode);
-    }
-
-    private void PositionSetStorageBadges() {
-        foreach (var setNode in _setNodes) {
-            if (!_setStorageBadgeByRow.TryGetValue(setNode, out var badge))
-                continue;
-            badge.Position = new Vector2(Math.Max(0f, setNode.Width - badge.Size.X - 4f), 2f);
-        }
-    }
-
-    private void OnSetRowClick(GatheringNoteItemNode setNode, AtkEventData* atkEventData) {
-        if (atkEventData is null || _isFinalizing)
-            return;
-        if (!_setNodeMap.TryGetValue(setNode, out var set))
-            return;
-
-        ref var eventData = ref *atkEventData;
-        if (eventData.IsRightClick) {
-            OpenSetContextMenu(set);
-            return;
-        }
-
-        if (!eventData.IsLeftClick)
-            return;
-
-        if (!ReferenceEquals(_selectedSet, set)) {
-            _selectedSet = set;
-            _sourceFilterPieceItemId = null;
-            _pendingPaintDetailsOnly = true;
-            _pendingResetDetailScroll = true;
-        }
-        else {
-            try {
-                RefreshSetSelectionVisuals();
-            }
-            catch (Exception ex) {
-                Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] RefreshSetSelectionVisuals (same row)");
-            }
-        }
-    }
-
-    private void RefreshSetSelectionVisuals() {
-        foreach (var setNode in _setNodes) {
-            setNode.Selected = _selectedSet != null
-                && _setNodeMap.TryGetValue(setNode, out var set)
-                && ReferenceEquals(set, _selectedSet);
+        _setListNode.OptionsList = [.. _setListOptions];
+        if (_pendingClearSetSelection) {
+            _pendingClearSetSelection = false;
+            _setListNode.FullRebuild();
         }
     }
 

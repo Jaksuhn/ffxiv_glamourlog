@@ -1,0 +1,108 @@
+using FFXIVClientStructs.FFXIV.Component.GUI;
+using KamiToolKit.Extensions;
+using KamiToolKit.Nodes;
+
+namespace GlamourLog.Nodes;
+
+internal sealed class SetListRowData {
+    public required GlamourSet Set { get; init; }
+    public required string Title { get; init; }
+    public required string Subtitle { get; init; }
+    public required bool IsOwned { get; init; }
+    public required bool ShowStorage { get; init; }
+    public GlamourIconNode.IconPart StorageIconPart { get; init; } = GlamourIconNode.IconPart.Dresser;
+}
+
+internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowData>, IListItemNode {
+    private const float TextX = 36f;
+    private const float TextRightMargin = 6f;
+    private const uint TitleFontSize = 14;
+    private const uint SubFontSize = 12;
+    private const float IconSize = 29f;
+
+    public static float ItemHeight => 38f;
+    public static Action<GlamourSet>? OnRowRightClick { get; set; }
+
+    private readonly FramedItemIconNode _iconNode;
+    private readonly CheckMarkBadgeNode _checkBadge;
+    private readonly TextNode _titleNode;
+    private readonly TextNode _subtitleNode;
+    private readonly GlamourIconNode _storageBadge;
+    private GlamourIconNode.IconPart _lastStorageIconPart = GlamourIconNode.IconPart.Dresser;
+
+    public GlamourSetListItemNode() {
+        _iconNode = new FramedItemIconNode(IconSize);
+        _iconNode.AttachNode(this);
+
+        _checkBadge = new CheckMarkBadgeNode();
+        _checkBadge.AttachNode(this);
+
+        _titleNode = new TextNode {
+            Position = new Vector2(TextX, 2f),
+            FontType = FontType.Axis,
+            FontSize = TitleFontSize,
+            LineSpacing = TitleFontSize,
+            AlignmentType = AlignmentType.BottomLeft,
+            TextColor = new(1f, 1f, 1f, 1f),
+        };
+        _titleNode.AddTextFlags(TextFlags.Emboss, TextFlags.Ellipsis);
+        _titleNode.AttachNode(this);
+
+        _subtitleNode = new TextNode {
+            Position = new Vector2(TextX, 21f),
+            FontType = FontType.Axis,
+            FontSize = SubFontSize,
+            LineSpacing = SubFontSize,
+            AlignmentType = AlignmentType.TopLeft,
+            TextColor = new(157f / 255f, 131f / 255f, 91f / 255f, 1f),
+        };
+        _subtitleNode.AddTextFlags(TextFlags.Emboss);
+        _subtitleNode.AttachNode(this);
+
+        _storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);
+        _storageBadge.AttachNode(this);
+
+        AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => {
+            if (eventData is null || ItemData is null)
+                return;
+            if (eventData->IsLeftClick) {
+                OnClick?.Invoke(this);
+                return;
+            }
+            if (eventData->IsRightClick)
+                OnRowRightClick?.Invoke(ItemData.Set);
+        });
+    }
+
+    protected override void OnSizeChanged() {
+        base.OnSizeChanged();
+
+        var iconY = (Height - IconSize) * 0.5f;
+        _iconNode.Position = new Vector2(0f, iconY);
+        _iconNode.Size = new Vector2(IconSize, IconSize);
+        _checkBadge.Position = new Vector2(IconSize - _checkBadge.Size.X - 4f, iconY + IconSize - _checkBadge.Size.Y);
+
+        var textW = Math.Max(0f, Width - TextX - TextRightMargin);
+        _titleNode.Size = new Vector2(textW, 19f);
+        _subtitleNode.Size = new Vector2(textW, 17f);
+        _storageBadge.Position = new Vector2(Math.Max(0f, Width - _storageBadge.Size.X - 4f), 2f);
+    }
+
+    protected override void SetNodeData(SetListRowData itemData) {
+        _iconNode.SetItemId(itemData.Set.ItemId);
+        _titleNode.String = itemData.Title;
+        _subtitleNode.String = itemData.Subtitle;
+        _checkBadge.IsVisible = itemData.IsOwned;
+
+        if (itemData.ShowStorage) {
+            if (_lastStorageIconPart != itemData.StorageIconPart) {
+                _storageBadge.SetPart(itemData.StorageIconPart);
+                _lastStorageIconPart = itemData.StorageIconPart;
+            }
+            _storageBadge.IsVisible = true;
+        }
+        else {
+            _storageBadge.IsVisible = false;
+        }
+    }
+}
