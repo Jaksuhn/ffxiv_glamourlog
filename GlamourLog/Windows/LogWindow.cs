@@ -160,7 +160,7 @@ internal unsafe class LogWindow : NativeAddon {
         _isFinalizing = false;
 
         var topGap = 2f;
-        var leftWidth = 190f;
+        var leftWidth = 220f;
         var middleWidth = 320f;
         var columnGap = 4f;
         var contentStart = ContentStartPosition;
