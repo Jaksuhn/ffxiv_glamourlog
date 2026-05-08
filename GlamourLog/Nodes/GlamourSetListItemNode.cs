@@ -16,7 +16,8 @@ internal sealed class SetListRowData {
 
 internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowData>, IListItemNode {
     private const float TextX = 36f;
-    private const float TextRightMargin = 6f;
+    private const float TextRightMargin = 8f;
+    private const float StorageTextReserve = 14f;
     private const uint TitleFontSize = 14;
     private const uint SubFontSize = 12;
     private const float IconSize = 29f;
@@ -97,13 +98,11 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         _iconNode.Size = new Vector2(IconSize, IconSize);
         _checkBadge.Position = new Vector2(IconSize - _checkBadge.Size.X - 4f, iconY + IconSize - _checkBadge.Size.Y);
 
-        var textW = Math.Max(0f, Width - TextX - TextRightMargin);
-        _titleNode.Size = new Vector2(textW, 19f);
-        _subtitleNode.Size = new Vector2(textW, 17f);
         _storageBadge.Position = new Vector2(Math.Max(0f, Width - _storageBadge.Size.X - 4f), 2f);
         _armoireWarningBadge.Position = _storageBadge.Position + new Vector2(
             _storageBadge.Size.X - _armoireWarningBadge.Size.X,
             _storageBadge.Size.Y - _armoireWarningBadge.Size.Y);
+        UpdateTextBounds();
         _inputCollision.Position = Vector2.Zero;
         _inputCollision.Size = Size;
     }
@@ -128,5 +127,14 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
             _storageBadge.IsVisible = false;
             _armoireWarningBadge.IsVisible = false;
         }
+
+        UpdateTextBounds();
+    }
+
+    private void UpdateTextBounds() {
+        var reserve = _storageBadge.IsVisible ? StorageTextReserve : 0f;
+        var textW = Math.Max(0f, Width - TextX - TextRightMargin - reserve);
+        _titleNode.Size = new Vector2(textW, 19f);
+        _subtitleNode.Size = new Vector2(textW, 17f);
     }
 }

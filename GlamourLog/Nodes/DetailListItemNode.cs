@@ -86,6 +86,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             TextColor = ImGuiColors.DalamudWhite,
         };
         _primary.RemoveTextFlags(TextFlags.Emboss);
+        _primary.AddTextFlags(TextFlags.Ellipsis);
         _primary.AttachNode(this);
 
         _secondary = new TextNode {
@@ -211,6 +212,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 else if (itemData.ShowInventoryBadge) {
                     _inventoryBadge.IsVisible = true;
                 }
+                var pieceTextRightReserve = (_storageBadge.IsVisible || _inventoryBadge.IsVisible) ? (_storageBadge.Size.X + 16f) : 8f;
+                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 16f);
                 _inputCollision.ShowClickableCursor = true;
                 break;
             case DetailRowKind.Cost:
