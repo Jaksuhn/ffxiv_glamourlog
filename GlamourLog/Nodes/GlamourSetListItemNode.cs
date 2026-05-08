@@ -28,9 +28,13 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
     private readonly TextNode _titleNode;
     private readonly TextNode _subtitleNode;
     private readonly GlamourIconNode _storageBadge;
+    private readonly CollisionNode _inputCollision;
     private GlamourIconNode.IconPart _lastStorageIconPart = GlamourIconNode.IconPart.Dresser;
 
     public GlamourSetListItemNode() {
+        EnableSelection = false;
+        EnableHighlight = false;
+
         _iconNode = new FramedItemIconNode(IconSize);
         _iconNode.AttachNode(this);
 
@@ -62,7 +66,14 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         _storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);
         _storageBadge.AttachNode(this);
 
-        AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => {
+        _inputCollision = new CollisionNode {
+            CollisionType = CollisionType.Hit,
+            Uses = 0,
+            ShowClickableCursor = true
+        };
+        _inputCollision.AddDrawFlags(KamiToolKit.Enums.DrawFlags.ClickableCursor);
+        _inputCollision.AttachNode(this);
+        _inputCollision.AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => {
             if (eventData is null || ItemData is null)
                 return;
             if (eventData->IsLeftClick) {
@@ -86,6 +97,8 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         _titleNode.Size = new Vector2(textW, 19f);
         _subtitleNode.Size = new Vector2(textW, 17f);
         _storageBadge.Position = new Vector2(Math.Max(0f, Width - _storageBadge.Size.X - 4f), 2f);
+        _inputCollision.Position = Vector2.Zero;
+        _inputCollision.Size = Size;
     }
 
     protected override void SetNodeData(SetListRowData itemData) {
