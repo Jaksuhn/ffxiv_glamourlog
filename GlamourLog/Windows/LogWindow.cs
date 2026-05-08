@@ -73,6 +73,7 @@ internal unsafe class LogWindow : NativeAddon {
         public TextNode Status = null!;
         public GlamourIconNode StorageBadge = null!;
         public InventoryBadgeNode InventoryBadge = null!;
+        public ArmoireWarningBadgeNode ArmoireWarningBadge = null!;
         public GlamourIconNode.IconPart LastStorageIconPart;
     }
 
@@ -89,6 +90,7 @@ internal unsafe class LogWindow : NativeAddon {
     private const float DetailLabelLeft = 32f;
     private const float DetailStatusWidth = 40f;
     private const float DetailStorageBadgeReserve = 18f;
+    private const float DetailBadgeRightPadding = 16f;
     private const float CostListRowHeight = 40f;
     private const float SourceChestRowHeight = 26f;
     private const float SourceChestLabelWidth = 168f;
@@ -572,12 +574,16 @@ internal unsafe class LogWindow : NativeAddon {
             try {
                 var setStorageState = Svc.Ownership.GetSetStorageState(set, ownedItems);
                 var showStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire;
+                var showArmoireWarning =
+                    setStorageState is SetStorageState.Dresser &&
+                    set.Items.Any(Svc.Catalog.ArmoireItemIds.Contains);
                 _setListOptions.Add(new SetListRowData {
                     Set = set,
                     Title = set.Name,
                     Subtitle = SetSublineText(set, ownedSets, ownedItems),
                     IsOwned = ownedSets.Contains(set),
                     ShowStorage = showStorage,
+                    ShowArmoireWarning = showArmoireWarning,
                     StorageIconPart = setStorageState == SetStorageState.Armoire
                         ? GlamourIconNode.IconPart.Armoire
                         : GlamourIconNode.IconPart.Dresser,
@@ -955,6 +961,8 @@ internal unsafe class LogWindow : NativeAddon {
         storageBadge.AttachNode(itemNode);
         var inventoryBadge = new InventoryBadgeNode();
         inventoryBadge.AttachNode(itemNode);
+        var armoireWarningBadge = new ArmoireWarningBadgeNode();
+        armoireWarningBadge.AttachNode(itemNode);
 
         itemNode.AddEvent(AtkEventType.MouseClick, (_, _, _, _, e) => OnDetailPieceRowClick(itemNode, e));
 
@@ -964,6 +972,7 @@ internal unsafe class LogWindow : NativeAddon {
             Status = statusNode,
             StorageBadge = storageBadge,
             InventoryBadge = inventoryBadge,
+            ArmoireWarningBadge = armoireWarningBadge,
             LastStorageIconPart = GlamourIconNode.IconPart.Dresser,
         };
         _detailPieceRowPool.Add(h);
@@ -1003,14 +1012,27 @@ internal unsafe class LogWindow : NativeAddon {
                 h.LastStorageIconPart = part;
             }
 
-            h.StorageBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.StorageBadge.Size.X - 8f), 2f);
+            h.StorageBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.StorageBadge.Size.X - DetailBadgeRightPadding), 2f);
+            var shouldShowArmoireWarning =
+                storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose
+                && Svc.Catalog.ArmoireItemIds.Contains(itemId);
+            if (shouldShowArmoireWarning) {
+                h.ArmoireWarningBadge.IsVisible = true;
+                h.ArmoireWarningBadge.Position = h.StorageBadge.Position + new Vector2(
+                    h.StorageBadge.Size.X - h.ArmoireWarningBadge.Size.X,
+                    h.StorageBadge.Size.Y - h.ArmoireWarningBadge.Size.Y);
+            }
+            else {
+                h.ArmoireWarningBadge.IsVisible = false;
+            }
             h.InventoryBadge.IsVisible = false;
         }
         else {
             h.StorageBadge.IsVisible = false;
+            h.ArmoireWarningBadge.IsVisible = false;
             if (inventoryItems.Contains(itemId)) {
                 h.InventoryBadge.IsVisible = true;
-                h.InventoryBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.InventoryBadge.Size.X - 8f), 2f);
+                h.InventoryBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.InventoryBadge.Size.X - DetailBadgeRightPadding), 2f);
             }
             else {
                 h.InventoryBadge.IsVisible = false;

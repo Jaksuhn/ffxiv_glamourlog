@@ -10,6 +10,7 @@ internal sealed class SetListRowData {
     public required string Subtitle { get; init; }
     public required bool IsOwned { get; init; }
     public required bool ShowStorage { get; init; }
+    public bool ShowArmoireWarning { get; init; }
     public GlamourIconNode.IconPart StorageIconPart { get; init; } = GlamourIconNode.IconPart.Dresser;
 }
 
@@ -28,6 +29,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
     private readonly TextNode _titleNode;
     private readonly TextNode _subtitleNode;
     private readonly GlamourIconNode _storageBadge;
+    private readonly ArmoireWarningBadgeNode _armoireWarningBadge;
     private readonly CollisionNode _inputCollision;
     private GlamourIconNode.IconPart _lastStorageIconPart = GlamourIconNode.IconPart.Dresser;
 
@@ -65,6 +67,8 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
 
         _storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);
         _storageBadge.AttachNode(this);
+        _armoireWarningBadge = new ArmoireWarningBadgeNode();
+        _armoireWarningBadge.AttachNode(this);
 
         _inputCollision = new CollisionNode {
             CollisionType = CollisionType.Hit,
@@ -97,6 +101,9 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         _titleNode.Size = new Vector2(textW, 19f);
         _subtitleNode.Size = new Vector2(textW, 17f);
         _storageBadge.Position = new Vector2(Math.Max(0f, Width - _storageBadge.Size.X - 4f), 2f);
+        _armoireWarningBadge.Position = _storageBadge.Position + new Vector2(
+            _storageBadge.Size.X - _armoireWarningBadge.Size.X,
+            _storageBadge.Size.Y - _armoireWarningBadge.Size.Y);
         _inputCollision.Position = Vector2.Zero;
         _inputCollision.Size = Size;
     }
@@ -113,9 +120,13 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
                 _lastStorageIconPart = itemData.StorageIconPart;
             }
             _storageBadge.IsVisible = true;
+            _armoireWarningBadge.IsVisible =
+                itemData.ShowArmoireWarning &&
+                itemData.StorageIconPart is GlamourIconNode.IconPart.Dresser or GlamourIconNode.IconPart.DresserFaded;
         }
         else {
             _storageBadge.IsVisible = false;
+            _armoireWarningBadge.IsVisible = false;
         }
     }
 }
