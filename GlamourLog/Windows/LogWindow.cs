@@ -43,8 +43,10 @@ internal unsafe class LogWindow : NativeAddon {
     private GlamourSet? _selectedSet;
     private uint? _sourceFilterPieceItemId;
     private bool _isFinalizing;
-    private bool _pendingSetListRebuild;
-    private bool _pendingDetailListRebuild;
+    private bool _pendingRefreshListsAndDetails;
+    private bool _pendingPaintDetailsOnly;
+    private bool _pendingResetSetScroll;
+    private bool _pendingResetDetailScroll;
     private int _lastDataVersion = -1;
     private bool _detailPanelInitialized;
     private TreeComboSectionNode? _detailEmptySection;
@@ -107,8 +109,14 @@ internal unsafe class LogWindow : NativeAddon {
         _lastDataVersion = Svc.Catalog.DataVersion;
     }
 
-    /// <summary> Filter window, inventory hooks, etc.: refresh set list, stats, and details from live game data. </summary>
+    /// <summary> Filter window, inventory hooks, etc.: queue refresh from live game data; applied in OnUpdate. </summary>
     internal void RefreshListsAndDetails() {
+        if (_isFinalizing || !IsOpen || !CanPaintLists())
+            return;
+        _pendingRefreshListsAndDetails = true;
+    }
+
+    private void RefreshListsAndDetailsNow() {
         if (_isFinalizing || !IsOpen || !CanPaintLists())
             return;
         try {
@@ -126,10 +134,15 @@ internal unsafe class LogWindow : NativeAddon {
     private void PaintDetailsOnly() {
         if (_isFinalizing || !IsOpen || !CanPaintLists())
             return;
+        _pendingPaintDetailsOnly = true;
+    }
+
+    private void PaintDetailsOnlyNow() {
+        if (_isFinalizing || !IsOpen || !CanPaintLists())
+            return;
         try {
             RefreshSetSelectionVisuals();
             RefreshDetails(Svc.Ownership.GetOwnedItems());
-            SyncAddonCollision();
         }
         catch (Exception ex) {
             Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
@@ -137,15 +150,11 @@ internal unsafe class LogWindow : NativeAddon {
     }
 
     private void PaintListsCore() {
-        // When a full list rebuild is scheduled for the next OnUpdate pass, avoid touching that list now —
-        // painting and then disposing the same native subtree in one ATK frame corrupts ULD (crash in Dispose).
-        if (!_pendingSetListRebuild)
-            RefreshRows();
-        if (!_pendingSetListRebuild)
-            RefreshSetSelectionVisuals();
-        if (!_pendingDetailListRebuild)
-            RefreshDetails(Svc.Ownership.GetOwnedItems());
-        SyncAddonCollision();
+        // Set/detail columns reuse pooled rows; never ScrollingListNode.Clear() hot paths — that disposes natives
+        // and races AtkComponentScrollBar (same pattern as NativeMeters breakdown pooling).
+        RefreshRows();
+        RefreshSetSelectionVisuals();
+        RefreshDetails(Svc.Ownership.GetOwnedItems());
     }
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {
@@ -260,22 +269,40 @@ internal unsafe class LogWindow : NativeAddon {
             return;
         }
 
+        // Mutate scroll lists before NativeAddon.Update runs. If we Clear/reparent after base.OnUpdate,
+        // the game's scrollbar code can still be using freed textures/nodes from the prior frame input.
+        try {
+            if (Svc.Catalog.TryConsumePendingListRefresh())
+                _pendingRefreshListsAndDetails = true;
+
+            if (_pendingRefreshListsAndDetails) {
+                _pendingRefreshListsAndDetails = false;
+                _pendingPaintDetailsOnly = false;
+                RefreshListsAndDetailsNow();
+            }
+
+            if (_pendingPaintDetailsOnly) {
+                _pendingPaintDetailsOnly = false;
+                PaintDetailsOnlyNow();
+            }
+
+            if (_pendingResetSetScroll) {
+                _pendingResetSetScroll = false;
+                ResetScrollToTop(_setListNode);
+            }
+
+            if (_pendingResetDetailScroll) {
+                _pendingResetDetailScroll = false;
+                ResetScrollToTop(_detailListNode);
+            }
+        }
+        catch (Exception ex) {
+            Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] OnUpdate (pre-native)");
+        }
+
         base.OnUpdate(addon);
 
         try {
-            if (Svc.Catalog.TryConsumePendingListRefresh())
-                RefreshListsAndDetails();
-            if (_pendingSetListRebuild) {
-                _pendingSetListRebuild = false;
-                RebuildSetListNode();
-                RefreshListsAndDetails();
-            }
-            if (_pendingDetailListRebuild) {
-                _pendingDetailListRebuild = false;
-                RebuildDetailListNode();
-                PaintDetailsOnly();
-            }
-
             if (!IsOpen) {
                 try {
                     _filterWindow.CloseIfOpen();
@@ -295,58 +322,12 @@ internal unsafe class LogWindow : NativeAddon {
     private bool CanPaintLists()
         => _setListNode is not null && _statsSetsLine is not null && _statsSpaceLine is not null && _categoryListNode is not null && _detailListNode is not null;
 
-    private void RebuildSetListNode() {
-        if (_setListNode is null)
+    /// <summary> After content height collapses or rows are recreated, clamp native scrollbar offset. </summary>
+    private static void ResetScrollToTop(ScrollingListNode? list) {
+        if (list is null)
             return;
-
-        var position = _setListNode.Position;
-        var size = _setListNode.Size;
-        try {
-            _setListNode.Dispose();
-        }
-        catch {
-            // If disposal fails, we'll still attempt to create a fresh list node.
-        }
-
-        _setListNode = SimpleScrollList.Create(position, size, false);
-        _setListNode.AttachNode(this);
-
-        _setNodes.Clear();
-        _setNodeMap.Clear();
-        _setRowPool.Clear();
-        _setStorageBadgeByRow.Clear();
-        _setStorageIconPartByRow.Clear();
-    }
-
-    private void RebuildDetailListNode() {
-        if (_detailListNode is null)
-            return;
-
-        var position = _detailListNode.Position;
-        var size = _detailListNode.Size;
-        try {
-            _detailListNode.Dispose();
-        }
-        catch {
-            // If disposal fails, we'll still attempt to create a fresh details list node.
-        }
-
-        _detailListNode = SimpleScrollList.Create(position, size, false);
-        _detailListNode.AttachNode(this);
-
-        _detailPanelInitialized = false;
-        _detailEmptySection = null;
-        _detailEmptyHint = null;
-        _detailPiecesSection = null;
-        _detailSourcesSection = null;
-        _detailSourcesEmptyLine = null;
-        _detailCostsSection = null;
-        _sourceDutyHeaderPool.Clear();
-        _sourceChestRowPool.Clear();
-        _detailPieceRowPool.Clear();
-        _detailPieceItemByRow.Clear();
-        _detailCostRowPool.Clear();
-        _detailCostCurrencyByRow.Clear();
+        list.ScrollPosition = 0;
+        list.RecalculateLayout();
     }
 
     private void SyncCategoryPaneToDataVersion() {
@@ -362,13 +343,7 @@ internal unsafe class LogWindow : NativeAddon {
         if (!_categoryPaneOrder.Contains(_selectedCategoryId))
             _selectedCategoryId = Svc.Catalog.UncategorizedTab.Name;
         _lastDataVersion = Svc.Catalog.DataVersion;
-    }
-
-    private void SyncAddonCollision() {
-        if ((AtkUnitBase*)this is not null and var atk) {
-            atk->UldManager.UpdateDrawNodeList();
-            atk->UpdateCollisionNodeList(false);
-        }
+        ResetScrollToTop(_setListNode);
     }
 
     protected override void OnFinalize(AtkUnitBase* addon) {
@@ -496,9 +471,9 @@ internal unsafe class LogWindow : NativeAddon {
                 _selectedCategoryId = captured;
                 _selectedSet = null;
                 _sourceFilterPieceItemId = null;
-                _pendingDetailListRebuild = true;
-                _pendingSetListRebuild = true;
-                RefreshListsAndDetails();
+                _pendingRefreshListsAndDetails = true;
+                _pendingResetSetScroll = true;
+                _pendingResetDetailScroll = true;
             });
             _categoryButtons.Add(button);
             _categoryButtonMap[button] = categoryId;
@@ -508,6 +483,7 @@ internal unsafe class LogWindow : NativeAddon {
 
         _categoryListNode.RecalculateLayout();
         SyncCategoryCountLayouts();
+        ResetScrollToTop(_categoryListNode);
     }
 
     private void SyncCategoryCountLayouts() {
@@ -573,6 +549,10 @@ internal unsafe class LogWindow : NativeAddon {
             var setNode = _setRowPool[i];
             try {
                 var set = rows[i];
+                // Guard against native component size drift after rapid scroll/click event churn.
+                // If a row height collapses, VerticalList layout stacks rows at near-identical Y.
+                setNode.Height = SetListRowHeight;
+                setNode.Width = _setListNode.Size.X;
                 setNode.IsVisible = true;
                 setNode.Selected = ReferenceEquals(_selectedSet, set);
                 var setItemRow = Item.GetRow(set.ItemId);
@@ -655,8 +635,8 @@ internal unsafe class LogWindow : NativeAddon {
         if (!ReferenceEquals(_selectedSet, set)) {
             _selectedSet = set;
             _sourceFilterPieceItemId = null;
-            _pendingDetailListRebuild = true;
-            RefreshSetSelectionVisuals();
+            _pendingPaintDetailsOnly = true;
+            _pendingResetDetailScroll = true;
         }
         else {
             try {
@@ -773,12 +753,15 @@ internal unsafe class LogWindow : NativeAddon {
             _detailCostCurrencyByRow.Clear();
             var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
             for (var i = 0; i < ordered.Count; i++) {
-                CreatePooledCostRow(listWidth);
-                var h = _detailCostRowPool[^1];
+                while (_detailCostRowPool.Count <= i)
+                    CreatePooledCostRow(listWidth);
+                var h = _detailCostRowPool[i];
                 var kv = ordered[i];
                 BindCostRow(h, listWidth, kv.Key, kv.Value);
                 h.Row.IsVisible = true;
             }
+            for (var i = ordered.Count; i < _detailCostRowPool.Count; i++)
+                _detailCostRowPool[i].Row.IsVisible = false;
         }
         else {
             _detailCostsSection!.IsVisible = false;
@@ -797,13 +780,16 @@ internal unsafe class LogWindow : NativeAddon {
         else {
             _detailSourcesEmptyLine?.IsVisible = false;
 
+            var dutyIx = 0;
+            var chestIx = 0;
             foreach (var g in hierarchy) {
                 var nonEmptyChests = g.ChestRows.Where(x => x.ItemIds.Count > 0).ToList();
                 if (nonEmptyChests.Count == 0)
                     continue;
 
-                CreatePooledSourceDutyHeader(listWidth);
-                var dh = _sourceDutyHeaderPool[^1];
+                while (_sourceDutyHeaderPool.Count <= dutyIx)
+                    CreatePooledSourceDutyHeader(listWidth);
+                var dh = _sourceDutyHeaderPool[dutyIx++];
                 dh.String = g.DutyName;
                 dh.IsVisible = true;
                 if (ContentFinderCondition.GetRowRef(g.ContentFinderConditionId) is { RowId: > 0 })
@@ -812,8 +798,9 @@ internal unsafe class LogWindow : NativeAddon {
                     _sourceDutyFinderCfcByHeader.Remove(dh);
 
                 foreach (var chest in nonEmptyChests) {
-                    CreatePooledSourceChestRow(listWidth);
-                    var row = _sourceChestRowPool[^1];
+                    while (_sourceChestRowPool.Count <= chestIx)
+                        CreatePooledSourceChestRow(listWidth);
+                    var row = _sourceChestRowPool[chestIx++];
                     BindSourceChestRow(row, listWidth, chest);
                     row.Row.IsVisible = true;
                 }
@@ -1081,7 +1068,7 @@ internal unsafe class LogWindow : NativeAddon {
         ref var eventData = ref *atkEventData;
         if (eventData.IsLeftClick) {
             _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
-            PaintDetailsOnly();
+            _pendingPaintDetailsOnly = true;
             return;
         }
 
