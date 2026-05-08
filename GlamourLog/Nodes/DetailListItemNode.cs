@@ -128,8 +128,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _inputCollision = new CollisionNode {
             CollisionType = CollisionType.Hit,
             Uses = 0,
+            ShowClickableCursor = true
         };
-        _inputCollision.ShowClickableCursor = true;
         _inputCollision.AddDrawFlags(DrawFlags.ClickableCursor);
         _inputCollision.AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => HandleClick(eventData));
         _inputCollision.AttachNode(this);

@@ -173,7 +173,6 @@ internal unsafe class LogWindow : NativeAddon {
         _categoryListNode.AttachNode(this);
         _setListNode = new ListNode<SetListRowData, GlamourSetListItemNode> {
             Position = new Vector2(midColLeft, midListTop),
-            Size = new Vector2(middleWidth, midListHeight),
             OptionsList = [],
             OnItemSelected = item => {
                 if (item is null)
@@ -184,15 +183,15 @@ internal unsafe class LogWindow : NativeAddon {
                 _sourceFilterPieceItemId = null;
                 _pendingPaintDetailsOnly = true;
                 _pendingResetDetailScroll = true;
-            },
+            }
         };
         GlamourSetListItemNode.OnRowRightClick = OpenSetContextMenu;
         _setListNode.AttachNode(this);
+        _setListNode.Size = new Vector2(middleWidth, midListHeight);
         var detailX = contentStart.X + leftWidth + middleWidth + columnGap * 2;
         var detailW = contentSize.X - (leftWidth + middleWidth + columnGap * 2);
         _detailRowsListNode = new ListNode<DetailListRowData, DetailListItemNode> {
             Position = new Vector2(detailX, alignTop),
-            Size = new Vector2(detailW, listBottom - alignTop),
             OptionsList = [],
             OnItemSelected = _ => { },
         };
@@ -200,6 +199,7 @@ internal unsafe class LogWindow : NativeAddon {
         DetailListItemNode.OnItemRightClick = OpenItemContextMenu;
         DetailListItemNode.OnDutyRightClick = OpenDutySourceContextMenu;
         _detailRowsListNode.AttachNode(this);
+        _detailRowsListNode.Size = new Vector2(detailW, listBottom - alignTop);
 
         var sepHalf = 1.5f;
         var sepColumnHeight = listBottom - alignTop;

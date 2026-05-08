@@ -15,16 +15,31 @@ internal sealed unsafe class MirageService : IDisposable {
     private Dictionary<uint, IReadOnlyList<SlotState>> _slotStatesByOutfitId = [];
 
     internal MirageService() {
+        Svc.ClientState.Login += OnLogin;
         Svc.ClientState.Logout += OnLogout;
+        if (Svc.ClientState.IsLoggedIn)
+            RequestPrismBoxOnFramework();
     }
 
     internal event System.Action? MirageDataChanged;
 
     public void Dispose() {
+        Svc.ClientState.Login -= OnLogin;
         Svc.ClientState.Logout -= OnLogout;
     }
 
+    private void OnLogin() => RequestPrismBoxOnFramework();
+
     private void OnLogout(int _, int __) => InvalidateCache();
+
+    private void RequestPrismBoxOnFramework() {
+        var task = Svc.Framework.RunOnFrameworkThread(() => {
+            var mm = MirageManager.Instance();
+            if (mm is not null && !mm->PrismBoxRequested)
+                GameMain.ExecuteCommand(2350);
+        });
+        task.GetAwaiter().GetResult();
+    }
 
     private void InvalidateCache() {
         _slotStatesByOutfitId = [];
@@ -32,7 +47,7 @@ internal sealed unsafe class MirageService : IDisposable {
         _snapshotCatalogDataVersion = int.MinValue;
     }
 
-    /// <summary> Ensures prism data is requested if needed and rebuilds the slot map when <see cref="MirageManager.PrismBoxLoaded"/> is true. </summary>
+    /// <summary> Rebuilds the slot map when <see cref="MirageManager.PrismBoxLoaded"/> is true. </summary>
     internal void EnsureCacheCurrent() {
         if (!Svc.ClientState.IsLoggedIn)
             return;
@@ -50,22 +65,14 @@ internal sealed unsafe class MirageService : IDisposable {
         if (mm->PrismBoxLoaded && _hasValidSnapshot && _snapshotCatalogDataVersion == catalogVersion)
             return;
 
-        if (!mm->PrismBoxLoaded) {
-            MaybeRequestPrismBoxLoad(mm);
+        if (!mm->PrismBoxLoaded)
             return;
-        }
 
         mm->PrismBoxItemIds.CopyTo(_prismBoxItemIds);
         RebuildSlotMap(mm);
         _snapshotCatalogDataVersion = catalogVersion;
         _hasValidSnapshot = true;
         MirageDataChanged?.Invoke();
-    }
-
-    private void MaybeRequestPrismBoxLoad(MirageManager* mm) {
-        if (mm->PrismBoxRequested)
-            return;
-        GameMain.ExecuteCommand(2350);
     }
 
     private void RebuildSlotMap(MirageManager* mm) {
