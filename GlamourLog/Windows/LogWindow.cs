@@ -174,7 +174,6 @@ internal unsafe class LogWindow : NativeAddon {
         _setListNode = new ListNode<SetListRowData, GlamourSetListItemNode> {
             Position = new Vector2(midColLeft, midListTop),
             Size = new Vector2(middleWidth, midListHeight),
-            ItemSpacing = 0f,
             OptionsList = [],
             OnItemSelected = item => {
                 if (item is null)
@@ -194,7 +193,6 @@ internal unsafe class LogWindow : NativeAddon {
         _detailRowsListNode = new ListNode<DetailListRowData, DetailListItemNode> {
             Position = new Vector2(detailX, alignTop),
             Size = new Vector2(detailW, listBottom - alignTop),
-            ItemSpacing = 0f,
             OptionsList = [],
             OnItemSelected = _ => { },
         };
