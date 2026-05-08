@@ -33,7 +33,7 @@ internal unsafe class LogWindow : NativeAddon {
     private VerticalLineNode? _columnSeparatorRight;
     private ScrollingListNode? _categoryListNode;
     private ListNode<SetListRowData, GlamourSetListItemNode>? _setListNode;
-    private ScrollingListNode? _detailListNode;
+    private ListNode<DetailListRowData, DetailListItemNode>? _detailRowsListNode;
 
     private string _selectedCategoryId = "";
     private GlamourSet? _selectedSet;
@@ -45,59 +45,10 @@ internal unsafe class LogWindow : NativeAddon {
     private bool _pendingResetDetailScroll;
     private bool _pendingClearSetSelection;
     private int _lastDataVersion = -1;
-    private bool _detailPanelInitialized;
-    private TreeComboSectionNode? _detailEmptySection;
-    private TextNode? _detailEmptyHint;
-    private TreeComboSectionNode? _detailPiecesSection;
-    private TreeComboSectionNode? _detailSourcesSection;
-    private TextNode? _detailSourcesEmptyLine;
-    private TreeComboSectionNode? _detailCostsSection;
-    private readonly List<TreeListHeaderNode> _sourceDutyHeaderPool = [];
-    private readonly Dictionary<TreeListHeaderNode, uint> _sourceDutyFinderCfcByHeader = [];
-    private readonly List<PooledSourceChestRow> _sourceChestRowPool = [];
-    private readonly List<PooledDetailPieceRow> _detailPieceRowPool = [];
-    private readonly Dictionary<ListButtonNode, uint> _detailPieceItemByRow = [];
-    private readonly List<PooledDetailCostRow> _detailCostRowPool = [];
-    private readonly Dictionary<ListButtonNode, uint> _detailCostCurrencyByRow = [];
+    private readonly List<DetailListRowData> _detailRowOptions = [];
     private readonly KamiToolKit.ContextMenu.ContextMenu _contextMenu = new();
 
-    private sealed class PooledSourceChestRow {
-        public SimpleComponentNode Row = null!;
-        public TextNode Label = null!;
-        public readonly List<FramedItemIconNode> Icons = [];
-    }
-
-    private sealed class PooledDetailPieceRow {
-        public ListButtonNode Button = null!;
-        public FramedItemIconNode Icon = null!;
-        public TextNode Status = null!;
-        public GlamourIconNode StorageBadge = null!;
-        public InventoryBadgeNode InventoryBadge = null!;
-        public ArmoireWarningBadgeNode ArmoireWarningBadge = null!;
-        public GlamourIconNode.IconPart LastStorageIconPart;
-    }
-
-    private sealed class PooledDetailCostRow {
-        public GatheringNoteItemNode Row = null!;
-    }
-
-    private const float ListRowHeight = 28f;
-    private const float SetListRowHeight = 38f;
-    private static readonly Vector4 SetTitleWhite = new(1f, 1f, 1f, 1f);
-    private const float ListIconSize = 22f;
-    private const float ListIconPadX = 2f;
-    private const float ListIconPadY = 2f;
-    private const float DetailLabelLeft = 32f;
-    private const float DetailStatusWidth = 40f;
-    private const float DetailStorageBadgeReserve = 18f;
-    private const float DetailBadgeRightPadding = 16f;
-    private const float CostListRowHeight = 40f;
-    private const float SourceChestRowHeight = 26f;
-    private const float SourceChestLabelWidth = 168f;
-    private const float SourceLootIconSize = 22f;
-    private const float SourceLootIconGap = 2f;
     private const float BottomStatsBlockHeight = 34f;
-    private static readonly Vector4 ItemStatusGrey = new(0.65f, 0.65f, 0.65f, 1f);
     private static readonly Vector4 GatheringHeadingGrey = new(160f / 255f, 160f / 255f, 160f / 255f, 1f);
     private static readonly Vector4 CategoryNameGold = new(216f / 255f, 187f / 255f, 125f / 255f, 1f);
     private const float CategoryHeadingHeight = 26f;
@@ -240,8 +191,17 @@ internal unsafe class LogWindow : NativeAddon {
         _setListNode.AttachNode(this);
         var detailX = contentStart.X + leftWidth + middleWidth + columnGap * 2;
         var detailW = contentSize.X - (leftWidth + middleWidth + columnGap * 2);
-        _detailListNode = SimpleScrollList.Create(new Vector2(detailX, alignTop), new Vector2(detailW, listBottom - alignTop), false);
-        _detailListNode.AttachNode(this);
+        _detailRowsListNode = new ListNode<DetailListRowData, DetailListItemNode> {
+            Position = new Vector2(detailX, alignTop),
+            Size = new Vector2(detailW, listBottom - alignTop),
+            ItemSpacing = 0f,
+            OptionsList = [],
+            OnItemSelected = _ => { },
+        };
+        DetailListItemNode.OnPieceLeftClick = OnDetailPieceItemLeftClick;
+        DetailListItemNode.OnItemRightClick = OpenItemContextMenu;
+        DetailListItemNode.OnDutyRightClick = OpenDutySourceContextMenu;
+        _detailRowsListNode.AttachNode(this);
 
         var sepHalf = 1.5f;
         var sepColumnHeight = listBottom - alignTop;
@@ -279,7 +239,7 @@ internal unsafe class LogWindow : NativeAddon {
             return;
         }
 
-        if (_categoryListNode is null || _setListNode is null || _statsSetsLine is null || _statsSpaceLine is null || _detailListNode is null) {
+        if (_categoryListNode is null || _setListNode is null || _statsSetsLine is null || _statsSpaceLine is null || _detailRowsListNode is null) {
             base.OnUpdate(addon);
             return;
         }
@@ -316,7 +276,7 @@ internal unsafe class LogWindow : NativeAddon {
 
             if (_pendingResetDetailScroll) {
                 _pendingResetDetailScroll = false;
-                ResetScrollToTop(_detailListNode);
+                ResetScrollToTop(_detailRowsListNode);
             }
         }
         catch (Exception ex) {
@@ -327,6 +287,7 @@ internal unsafe class LogWindow : NativeAddon {
 
         try {
             _setListNode?.Update();
+            _detailRowsListNode?.Update();
 
             if (!IsOpen) {
                 try {
@@ -345,7 +306,7 @@ internal unsafe class LogWindow : NativeAddon {
     }
 
     private bool CanPaintLists()
-        => _setListNode is not null && _statsSetsLine is not null && _statsSpaceLine is not null && _categoryListNode is not null && _detailListNode is not null;
+        => _setListNode is not null && _statsSetsLine is not null && _statsSpaceLine is not null && _categoryListNode is not null && _detailRowsListNode is not null;
 
     /// <summary> After content height collapses or rows are recreated, clamp native scrollbar offset. </summary>
     private static void ResetScrollToTop(ScrollingListNode? list) {
@@ -356,6 +317,13 @@ internal unsafe class LogWindow : NativeAddon {
     }
 
     private static void ResetScrollToTop(ListNode<SetListRowData, GlamourSetListItemNode>? list) {
+        if (list is null)
+            return;
+        list.ScrollBarNode.ScrollPosition = 0;
+        list.FullRebuild();
+    }
+
+    private static void ResetScrollToTop(ListNode<DetailListRowData, DetailListItemNode>? list) {
         if (list is null)
             return;
         list.ScrollBarNode.ScrollPosition = 0;
@@ -399,21 +367,12 @@ internal unsafe class LogWindow : NativeAddon {
         _categoryCountByButton.Clear();
         _setListNode = null;
         _setListOptions.Clear();
-        _detailPanelInitialized = false;
-        _detailEmptySection = null;
-        _detailEmptyHint = null;
-        _detailPiecesSection = null;
-        _detailSourcesSection = null;
-        _detailSourcesEmptyLine = null;
-        _sourceDutyHeaderPool.Clear();
-        _sourceChestRowPool.Clear();
-        _detailCostsSection = null;
-        _detailPieceRowPool.Clear();
-        _detailPieceItemByRow.Clear();
-        _detailCostRowPool.Clear();
-        _detailCostCurrencyByRow.Clear();
+        _detailRowOptions.Clear();
         GlamourSetListItemNode.OnRowRightClick = null;
-        _detailListNode = null;
+        DetailListItemNode.OnPieceLeftClick = null;
+        DetailListItemNode.OnItemRightClick = null;
+        DetailListItemNode.OnDutyRightClick = null;
+        _detailRowsListNode = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;
         _statsSetsLine = null;
@@ -634,478 +593,109 @@ internal unsafe class LogWindow : NativeAddon {
     }
 
     private void RefreshDetails(HashSet<uint> ownedItems) {
-        if (_detailListNode is null)
+        if (_detailRowsListNode is null)
             return;
 
         if (_selectedSet == null)
             _sourceFilterPieceItemId = null;
 
-        var listWidth = _detailListNode.ContentWidth > 8f
-            ? _detailListNode.ContentWidth
-            : (_detailListNode.Size.X > 24f ? _detailListNode.Size.X - 16f : 280f);
-        EnsureDetailPanelShell(listWidth);
-        SyncDetailSectionWidths(listWidth);
-        ResetSourcesUiRows();
-        ResetCostsUiRows();
+        _detailRowOptions.Clear();
         var inventoryItems = Svc.Ownership.GetInventoryItemsOnly();
 
         if (_selectedSet == null) {
-            _detailEmptySection!.IsVisible = true;
-            _detailPiecesSection!.IsVisible = false;
-            _detailSourcesSection!.IsVisible = false;
-            _detailCostsSection!.IsVisible = false;
-            _detailEmptyHint!.String = "Select a set from the list to view pieces.";
-            if (_detailPiecesSection is { } ps)
-                ps.SetJournal("No set selected");
-
-            foreach (var h in _detailPieceRowPool)
-                h.Button.IsVisible = false;
-            _detailPieceItemByRow.Clear();
-
-            RecalculateDetailPanels();
+            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
+            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" });
+            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.EmptyHint, PrimaryText = "Select a set from the list to view pieces." });
+            _detailRowsListNode.OptionsList = [.. _detailRowOptions];
             return;
         }
 
-        _detailEmptySection!.IsVisible = false;
-        _detailPiecesSection!.IsVisible = true;
-        _detailSourcesSection!.IsVisible = true;
-        _detailPiecesSection.String = "Set Details";
-        var setJournalLine = string.IsNullOrWhiteSpace(_selectedSet.Name) ? Item.GetRow(_selectedSet.ItemId).Name.ToString() : _selectedSet.Name;
-        _detailPiecesSection.SetJournal(setJournalLine);
+        var setJournalLine = string.IsNullOrWhiteSpace(_selectedSet.Name)
+            ? Item.GetRow(_selectedSet.ItemId).Name.ToString()
+            : _selectedSet.Name;
+        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
+        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = setJournalLine });
 
-        _detailPieceItemByRow.Clear();
         var items = _selectedSet.Items;
         var selectedSetStorageState = Svc.Ownership.GetSetStorageState(_selectedSet, ownedItems);
-        for (var i = 0; i < items.Count; i++) {
-            while (_detailPieceRowPool.Count <= i)
-                CreatePooledPieceRow(listWidth);
-
-            var h = _detailPieceRowPool[i];
-            BindDetailPieceRow(h, listWidth, items[i], ownedItems, inventoryItems, selectedSetStorageState);
-            h.Button.IsVisible = true;
+        foreach (var itemId in items) {
+            var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState);
+            var iconPart = StorageIconPartFor(storageState);
+            _detailRowOptions.Add(new DetailListRowData {
+                Kind = DetailRowKind.Piece,
+                ItemId = itemId,
+                PrimaryText = Item.GetRow(itemId).Name.ToString(),
+                IsSelected = _sourceFilterPieceItemId == itemId,
+                StorageIconPart = iconPart,
+                ShowInventoryBadge = iconPart is null && inventoryItems.Contains(itemId),
+                ShowArmoireWarning =
+                    storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose
+                    && Svc.Catalog.ArmoireItemIds.Contains(itemId),
+            });
         }
-
-        for (var i = items.Count; i < _detailPieceRowPool.Count; i++)
-            _detailPieceRowPool[i].Button.IsVisible = false;
 
         if (items.Count > 0 && TryGetCostTotals(_selectedSet, _sourceFilterPieceItemId, out var costTotals)) {
-            _detailCostsSection!.IsVisible = true;
-            if (_detailCostsSection.JournalHeader is { } costsJournal) {
-                costsJournal.String = _sourceFilterPieceItemId is not null
+            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Costs" });
+            _detailRowOptions.Add(new DetailListRowData {
+                Kind = DetailRowKind.JournalHeader,
+                PrimaryText = _sourceFilterPieceItemId is not null
                     ? "Currencies Required (Single Item)"
-                    : "Currencies Required (Full Set)";
-            }
-            _detailCostsSection.String = "Costs";
-
-            _detailCostCurrencyByRow.Clear();
+                    : "Currencies Required (Full Set)"
+            });
             var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
-            for (var i = 0; i < ordered.Count; i++) {
-                while (_detailCostRowPool.Count <= i)
-                    CreatePooledCostRow(listWidth);
-                var h = _detailCostRowPool[i];
-                var kv = ordered[i];
-                BindCostRow(h, listWidth, kv.Key, kv.Value);
-                h.Row.IsVisible = true;
+            foreach (var kv in ordered) {
+                var owned = GetOwnedCurrencyCount(kv.Key);
+                _detailRowOptions.Add(new DetailListRowData {
+                    Kind = DetailRowKind.Cost,
+                    ItemId = kv.Key,
+                    PrimaryText = Item.GetRow(kv.Key).Name.ToString(),
+                    SecondaryText = $"Obt. {owned}/{kv.Value}",
+                });
             }
-            for (var i = ordered.Count; i < _detailCostRowPool.Count; i++)
-                _detailCostRowPool[i].Row.IsVisible = false;
-        }
-        else {
-            _detailCostsSection!.IsVisible = false;
         }
 
-        _detailSourcesSection!.String = "Sources";
+        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources" });
         var hierarchy = Svc.Catalog.GetDutyChestSourceHierarchy(_selectedSet, _sourceFilterPieceItemId);
-
         if (hierarchy.Count == 0) {
-            if (_detailSourcesEmptyLine is not null) {
-                _detailSourcesEmptyLine.String = Addon.GetRow(5494).Text; // No resuls found.
-                _detailSourcesEmptyLine.TextColor = ItemStatusGrey;
-                _detailSourcesEmptyLine.IsVisible = true;
-            }
+            _detailRowOptions.Add(new DetailListRowData {
+                Kind = DetailRowKind.EmptyHint,
+                PrimaryText = Addon.GetRow(5494).Text.ToString()
+            });
         }
         else {
-            _detailSourcesEmptyLine?.IsVisible = false;
-
-            var dutyIx = 0;
-            var chestIx = 0;
             foreach (var g in hierarchy) {
                 var nonEmptyChests = g.ChestRows.Where(x => x.ItemIds.Count > 0).ToList();
                 if (nonEmptyChests.Count == 0)
                     continue;
 
-                while (_sourceDutyHeaderPool.Count <= dutyIx)
-                    CreatePooledSourceDutyHeader(listWidth);
-                var dh = _sourceDutyHeaderPool[dutyIx++];
-                dh.String = g.DutyName;
-                dh.IsVisible = true;
-                if (ContentFinderCondition.GetRowRef(g.ContentFinderConditionId) is { RowId: > 0 })
-                    _sourceDutyFinderCfcByHeader[dh] = g.ContentFinderConditionId;
-                else
-                    _sourceDutyFinderCfcByHeader.Remove(dh);
+                _detailRowOptions.Add(new DetailListRowData {
+                    Kind = DetailRowKind.SourceDuty,
+                    PrimaryText = g.DutyName,
+                    ContentFinderConditionId = g.ContentFinderConditionId,
+                });
 
                 foreach (var chest in nonEmptyChests) {
-                    while (_sourceChestRowPool.Count <= chestIx)
-                        CreatePooledSourceChestRow(listWidth);
-                    var row = _sourceChestRowPool[chestIx++];
-                    BindSourceChestRow(row, listWidth, chest);
-                    row.Row.IsVisible = true;
+                    _detailRowOptions.Add(new DetailListRowData {
+                        Kind = DetailRowKind.SourceChest,
+                        PrimaryText = FormatChestSourceLabel(chest),
+                        SourceItemIds = chest.ItemIds,
+                    });
                 }
             }
         }
-
-        RecalculateDetailPanels();
-    }
-
-    private void EnsureDetailPanelShell(float listWidth) {
-        if (_detailPanelInitialized || _detailListNode is null)
-            return;
-
-        _detailEmptySection = new TreeComboSectionNode("Set Details", "No set selected", listWidth);
-        _detailEmptyHint = new TextNode { Height = 20f, FontType = FontType.Axis, FontSize = 12, String = "Select a set from the list to view pieces.", TextColor = ImGuiColors.DalamudWhite };
-        _detailEmptyHint.RemoveTextFlags(TextFlags.Emboss);
-        _detailEmptySection.AddNode(_detailEmptyHint);
-
-        _detailPiecesSection = new TreeComboSectionNode("Set Details", "", listWidth);
-
-        _detailCostsSection = new TreeComboSectionNode("Costs", "", listWidth) { // TODO check for addon text
-            IsVisible = false
-        };
-
-        _detailSourcesSection = new TreeComboSectionNode("Sources", listWidth) {
-            IsVisible = false
-        };
-        _detailSourcesEmptyLine = new TextNode {
-            Height = 20f,
-            FontType = FontType.Axis,
-            FontSize = 12,
-            LineSpacing = 12,
-            TextColor = ItemStatusGrey,
-            Size = new Vector2(Math.Max(20f, listWidth - 8f), 20f),
-            AlignmentType = AlignmentType.Left,
-        };
-        _detailSourcesEmptyLine.RemoveTextFlags(TextFlags.Emboss);
-        _detailSourcesSection.AddNode(_detailSourcesEmptyLine);
-        _detailSourcesEmptyLine.IsVisible = false;
-
-        _detailListNode.AddNode(_detailEmptySection);
-        _detailListNode.AddNode(_detailPiecesSection);
-        _detailListNode.AddNode(_detailCostsSection);
-        _detailListNode.AddNode(_detailSourcesSection);
-
-        _detailPanelInitialized = true;
-    }
-
-    private void SyncDetailSectionWidths(float listWidth) {
-        if (_detailEmptySection is { } e) {
-            e.Width = listWidth;
-            foreach (var h in e.HeaderNodes)
-                h.Width = listWidth;
-        }
-
-        if (_detailPiecesSection is { } p) {
-            p.Width = listWidth;
-            foreach (var h in p.HeaderNodes)
-                h.Width = listWidth;
-        }
-
-        if (_detailSourcesSection is { } s) {
-            s.Width = listWidth;
-            foreach (var h in s.HeaderNodes)
-                h.Width = listWidth;
-            _detailSourcesEmptyLine?.Size = new Vector2(Math.Max(20f, listWidth - 8f), 20f);
-            foreach (var r in _sourceChestRowPool) {
-                r.Row.Width = listWidth;
-                r.Label.Size = new Vector2(SourceChestLabelWidth, SourceChestRowHeight - 4f);
-            }
-        }
-
-        if (_detailCostsSection is { } c) {
-            c.Width = listWidth;
-            foreach (var h in c.HeaderNodes)
-                h.Width = listWidth;
-        }
-    }
-
-    private void ResetSourcesUiRows() {
-        _sourceDutyFinderCfcByHeader.Clear();
-        foreach (var h in _sourceDutyHeaderPool)
-            h.IsVisible = false;
-        foreach (var r in _sourceChestRowPool) {
-            r.Row.IsVisible = false;
-            foreach (var icon in r.Icons)
-                icon.IsVisible = false;
-        }
-    }
-
-    private void ResetCostsUiRows() {
-        foreach (var h in _detailCostRowPool)
-            h.Row.IsVisible = false;
-        _detailCostCurrencyByRow.Clear();
-    }
-
-    private void RecalculateDetailPanels() {
-        _detailEmptySection?.RecalculateLayout();
-        _detailPiecesSection?.RecalculateLayout();
-        _detailSourcesSection?.RecalculateLayout();
-        _detailCostsSection?.RecalculateLayout();
-        _detailListNode?.RecalculateLayout();
-    }
-
-    private void CreatePooledSourceDutyHeader(float listWidth) {
-        if (_detailSourcesSection is null)
-            return;
-        var h = new TreeListHeaderNode {
-            Width = listWidth,
-            Height = 24f,
-            String = string.Empty,
-        };
-        h.LabelNode.TextColor = ColorHelper.GetColor(7);
-        h.LabelNode.Position = new Vector2(22f, 0f);
-        h.LabelNode.RemoveTextFlags(TextFlags.Emboss);
-        h.AddEvent(AtkEventType.MouseClick, (_, _, _, _, e) => OnSourceDutyHeaderClick(h, e));
-        _detailSourcesSection.AddNode(h);
-        _sourceDutyHeaderPool.Add(h);
-    }
-
-    private void OnSourceDutyHeaderClick(TreeListHeaderNode dutyHeader, AtkEventData* atkEventData) {
-        if (atkEventData is null || _isFinalizing)
-            return;
-        if (!_sourceDutyFinderCfcByHeader.TryGetValue(dutyHeader, out var cfcId))
-            return;
-        if (!atkEventData->IsRightClick)
-            return;
-        OpenDutySourceContextMenu(cfcId);
-    }
-
-    private void CreatePooledSourceChestRow(float listWidth) {
-        if (_detailSourcesSection is null)
-            return;
-        var row = new SimpleComponentNode {
-            Height = SourceChestRowHeight,
-            Width = listWidth,
-        };
-        var label = new TextNode {
-            Position = new Vector2(4f, 2f),
-            Size = new Vector2(SourceChestLabelWidth, SourceChestRowHeight - 4f),
-            FontType = FontType.Axis,
-            FontSize = 12,
-            LineSpacing = 12,
-            AlignmentType = AlignmentType.Left,
-            TextColor = ImGuiColors.DalamudWhite,
-        };
-        label.RemoveTextFlags(TextFlags.Emboss);
-        label.AttachNode(row);
-        _detailSourcesSection.AddNode(row);
-        _sourceChestRowPool.Add(new PooledSourceChestRow { Row = row, Label = label });
+        _detailRowsListNode.OptionsList = [.. _detailRowOptions];
     }
 
     private static string FormatChestSourceLabel(ChestSourceRow chest)
         => chest.TerritoryTypeId == uint.MaxValue ? "FATE" : (chest.ChestNo != 0 ? $"Chest {chest.ChestNo}" : "Chest");
 
-    private void BindSourceChestRow(PooledSourceChestRow h, float listWidth, ChestSourceRow chest) {
-        h.Row.Width = listWidth;
-        h.Label.String = FormatChestSourceLabel(chest);
-        var n = chest.ItemIds.Count;
-        var originX = SourceChestLabelWidth + 10f;
-        var slot = Math.Max(0f, listWidth - originX - 6f);
-        var iconSize = n == 0
-            ? SourceLootIconSize
-            : Math.Min(SourceLootIconSize, (slot - Math.Max(0, n - 1) * SourceLootIconGap) / n);
-        iconSize = Math.Max(16f, iconSize);
-        var iconY = (SourceChestRowHeight - iconSize) * 0.5f;
-
-        for (var i = 0; i < n; i++) {
-            while (h.Icons.Count <= i) {
-                var icon = new FramedItemIconNode(SourceLootIconSize);
-                icon.AttachNode(h.Row);
-                h.Icons.Add(icon);
-            }
-            var img = h.Icons[i];
-            img.SetItemId(chest.ItemIds[i]);
-            img.Size = new Vector2(iconSize, iconSize);
-            img.Position = new Vector2(originX + i * (iconSize + SourceLootIconGap), iconY);
-            img.IsVisible = true;
-        }
-        for (var j = n; j < h.Icons.Count; j++)
-            h.Icons[j].IsVisible = false;
+    private void OnDetailPieceItemLeftClick(uint itemId) {
+        if (_isFinalizing)
+            return;
+        _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
+        _pendingPaintDetailsOnly = true;
     }
 
-    private void CreatePooledPieceRow(float listWidth) {
-        if (_detailPiecesSection is null)
-            return;
-
-        var itemNode = new ListButtonNode {
-            Height = ListRowHeight,
-            Width = listWidth,
-            String = string.Empty,
-            Selected = false,
-        };
-        itemNode.LabelNode.Position = new Vector2(DetailLabelLeft, 1f);
-
-        var iconNode = new FramedItemIconNode(ListIconSize) {
-            Position = new Vector2(ListIconPadX, ListIconPadY),
-            Size = new Vector2(ListIconSize, ListIconSize),
-        };
-        iconNode.AttachNode(itemNode);
-
-        var statusNode = new TextNode {
-            FontType = FontType.Axis,
-            FontSize = 12,
-            LineSpacing = 12,
-            AlignmentType = AlignmentType.Right,
-            TextColor = ItemStatusGrey,
-        };
-        statusNode.AttachNode(itemNode);
-        var storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);
-        storageBadge.AttachNode(itemNode);
-        var inventoryBadge = new InventoryBadgeNode();
-        inventoryBadge.AttachNode(itemNode);
-        var armoireWarningBadge = new ArmoireWarningBadgeNode();
-        armoireWarningBadge.AttachNode(itemNode);
-
-        itemNode.AddEvent(AtkEventType.MouseClick, (_, _, _, _, e) => OnDetailPieceRowClick(itemNode, e));
-
-        var h = new PooledDetailPieceRow {
-            Button = itemNode,
-            Icon = iconNode,
-            Status = statusNode,
-            StorageBadge = storageBadge,
-            InventoryBadge = inventoryBadge,
-            ArmoireWarningBadge = armoireWarningBadge,
-            LastStorageIconPart = GlamourIconNode.IconPart.Dresser,
-        };
-        _detailPieceRowPool.Add(h);
-        _detailPiecesSection.AddNode(itemNode);
-    }
-
-    private void BindDetailPieceRow(
-        PooledDetailPieceRow h,
-        float listWidth,
-        uint itemId,
-        HashSet<uint> ownedItems,
-        HashSet<uint> inventoryItems,
-        SetStorageState selectedSetStorageState) {
-        var itemNode = h.Button;
-        var rowWidth = Math.Max(listWidth, _detailListNode is { } d && d.ContentWidth > 8f ? d.ContentWidth : listWidth);
-        itemNode.Width = rowWidth;
-        itemNode.Selected = _sourceFilterPieceItemId == itemId;
-        var itemRow = Item.GetRow(itemId);
-        itemNode.LabelNode.String = itemRow.Name.ToString();
-        itemNode.LabelNode.TextColor = ColorHelper.GetColor(itemRow.AtkUiRarityColorId);
-        itemNode.LabelNode.Size = new Vector2(
-            Math.Max(20f, rowWidth - DetailLabelLeft - DetailStorageBadgeReserve),
-            itemNode.Height - 1f);
-        itemNode.ItemTooltip = itemId;
-
-        h.Icon.SetItemId(itemId);
-        h.Icon.Position = new Vector2(ListIconPadX, ListIconPadY);
-        h.Icon.Size = new Vector2(ListIconSize, ListIconSize);
-        h.Status.IsVisible = false;
-        h.Status.String = string.Empty;
-
-        var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState);
-        if (StorageIconPartFor(storageState) is { } part) {
-            h.StorageBadge.IsVisible = true;
-            if (h.LastStorageIconPart != part) {
-                h.StorageBadge.SetPart(part);
-                h.LastStorageIconPart = part;
-            }
-
-            h.StorageBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.StorageBadge.Size.X - DetailBadgeRightPadding), 2f);
-            var shouldShowArmoireWarning =
-                storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose
-                && Svc.Catalog.ArmoireItemIds.Contains(itemId);
-            if (shouldShowArmoireWarning) {
-                h.ArmoireWarningBadge.IsVisible = true;
-                h.ArmoireWarningBadge.Position = h.StorageBadge.Position + new Vector2(
-                    h.StorageBadge.Size.X - h.ArmoireWarningBadge.Size.X,
-                    h.StorageBadge.Size.Y - h.ArmoireWarningBadge.Size.Y);
-            }
-            else {
-                h.ArmoireWarningBadge.IsVisible = false;
-            }
-            h.InventoryBadge.IsVisible = false;
-        }
-        else {
-            h.StorageBadge.IsVisible = false;
-            h.ArmoireWarningBadge.IsVisible = false;
-            if (inventoryItems.Contains(itemId)) {
-                h.InventoryBadge.IsVisible = true;
-                h.InventoryBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.InventoryBadge.Size.X - DetailBadgeRightPadding), 2f);
-            }
-            else {
-                h.InventoryBadge.IsVisible = false;
-            }
-        }
-        _detailPieceItemByRow[itemNode] = itemId;
-    }
-
-    private void OnDetailPieceRowClick(ListButtonNode itemNode, AtkEventData* atkEventData) {
-        if (atkEventData is null || _isFinalizing)
-            return;
-        if (!_detailPieceItemByRow.TryGetValue(itemNode, out var itemId))
-            return;
-
-        ref var eventData = ref *atkEventData;
-        if (eventData.IsLeftClick) {
-            _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
-            _pendingPaintDetailsOnly = true;
-            return;
-        }
-
-        if (eventData.IsRightClick)
-            OpenItemContextMenu(itemId);
-    }
-
-    private void CreatePooledCostRow(float listWidth) {
-        if (_detailCostsSection is null)
-            return;
-
-        var row = new GatheringNoteItemNode(SetListRowHeight, 29f, SetTitleWhite) {
-            Width = listWidth,
-            Selected = false,
-            String = string.Empty,
-        };
-        row.CheckBadge.IsVisible = false;
-        row.AddEvent(AtkEventType.MouseClick, (_, _, _, _, e) => OnDetailCostRowClick(row, e));
-
-        var h = new PooledDetailCostRow { Row = row };
-        _detailCostRowPool.Add(h);
-        _detailCostsSection.AddNode(row);
-    }
-
-    private void BindCostRow(PooledDetailCostRow h, float listWidth, uint costItemId, uint amountRequired) {
-        var row = h.Row;
-        var rowWidth = Math.Max(listWidth, _detailListNode is { } d && d.Size.X > 8f ? d.Size.X : listWidth);
-        row.Width = rowWidth;
-        row.Height = SetListRowHeight;
-        row.Selected = false;
-        row.CheckBadge.IsVisible = false;
-
-        var currencyItem = Item.GetRow(costItemId);
-        row.IconNode.IconId = currencyItem.Icon;
-        row.ItemTooltip = costItemId;
-        row.TitleNode.String = currencyItem.Name.ToString();
-        row.TitleNode.TextColor = SetTitleWhite;
-
-        var owned = GetOwnedCurrencyCount(costItemId);
-        row.SubtitleNode.String = $"Obt. {owned}/{amountRequired}";
-
-        _detailCostCurrencyByRow[row] = costItemId;
-    }
-
-    private void OnDetailCostRowClick(ListButtonNode row, AtkEventData* atkEventData) {
-        if (atkEventData is null || _isFinalizing)
-            return;
-        if (!_detailCostCurrencyByRow.TryGetValue(row, out var costItemId))
-            return;
-
-        ref var eventData = ref *atkEventData;
-        if (!eventData.IsRightClick)
-            return;
-        OpenItemContextMenu(costItemId);
-    }
 
     private bool TryGetCostTotals(GlamourSet set, uint? pieceFilterPieceItemId, out Dictionary<uint, uint> totals) {
         totals = [];
