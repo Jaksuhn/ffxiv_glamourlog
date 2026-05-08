@@ -6,6 +6,7 @@ namespace GlamourLog.Services;
 
 internal sealed unsafe class OwnershipService : IDisposable {
     private readonly ArmoireService _armoireService;
+    private readonly MirageService _mirageService;
     private static readonly Lazy<FrozenDictionary<uint, uint>> CabinetLookup = new(()
         => Cabinet.Where(row => row.RowId >= 1048 && row.Item.RowId != 0)
             .ToFrozenDictionary(row => row.Item.RowId, row => row.RowId));
@@ -16,17 +17,23 @@ internal sealed unsafe class OwnershipService : IDisposable {
     public OwnershipService() {
         _armoireService = new ArmoireService();
         _armoireService.ArmoireChanged += OnArmoireChanged;
+        _mirageService = new MirageService();
+        _mirageService.MirageDataChanged += OnMirageDataChanged;
     }
 
     public void Dispose() {
         _armoireService.ArmoireChanged -= OnArmoireChanged;
         _armoireService.Dispose();
+        _mirageService.MirageDataChanged -= OnMirageDataChanged;
+        _mirageService.Dispose();
     }
 
     private void OnArmoireChanged() {
         Svc.Catalog.OnArmoireChanged();
         Svc.Catalog.NotifyDisplayedOwnershipMayHaveChanged();
     }
+
+    private void OnMirageDataChanged() => Svc.Catalog.NotifyDisplayedOwnershipMayHaveChanged();
 
     internal bool CanAffordAllMissingGearPieces(GlamourSet glamourSet, HashSet<uint> ownedItems) {
         (uint CostItemId, uint TotalAmount)? firstCost = null;
@@ -97,8 +104,13 @@ internal sealed unsafe class OwnershipService : IDisposable {
         foreach (var set in Svc.Catalog.GlamourSets) {
             if (!dresserItemIds.Contains(set.ItemId))
                 continue;
-            foreach (var setItemId in set.Items)
-                ownedItems.Add(setItemId);
+            if (_mirageService.TryGetSlotStates(set.ItemId, out var slots) && slots is not null) {
+                foreach (var st in slots) {
+                    if (st.InOutfit)
+                        ownedItems.Add(st.ItemId);
+                }
+            }
+            // Mirage prism box not loaded or outfit row missing from prism list: do not grant all pieces (partial outfit).
         }
 
         var inventoryManager = InventoryManager.Instance();
@@ -119,19 +131,37 @@ internal sealed unsafe class OwnershipService : IDisposable {
             if (IsInCabinet(itemId))
                 ownedItems.Add(itemId);
         }
+
         return ownedItems;
     }
 
-    internal HashSet<GlamourSet> GetOwnedSets(HashSet<uint> ownedItems)
-        => [.. Svc.Catalog.GlamourSets.Where(set => GetDresserStoredItemIds().Contains(set.ItemId) || set.Items.All(ownedItems.Contains))];
+    internal HashSet<GlamourSet> GetOwnedSets(HashSet<uint> ownedItems) {
+        var dresserItemIds = GetDresserStoredItemIds();
+        var ownedSets = new HashSet<GlamourSet>();
+        foreach (var set in Svc.Catalog.GlamourSets) {
+            var fullByPieces = set.Items.All(ownedItems.Contains);
+            var fullByMirage = dresserItemIds.Contains(set.ItemId) && _mirageService.IsFullMirageOutfit(set);
+            if (fullByPieces || fullByMirage)
+                ownedSets.Add(set);
+        }
+
+        return ownedSets;
+    }
 
     internal ItemStorageState GetItemStorageState(uint itemId, GlamourSet? forSet) {
         if (GetArmoireOwnedItemIds().Contains(itemId) || IsInCabinet(itemId))
             return ItemStorageState.Armoire;
 
         var dresserItemIds = GetDresserStoredItemIds();
-        if (forSet is not null && dresserItemIds.Contains(forSet.ItemId) && forSet.Items.Contains(itemId))
-            return ItemStorageState.DresserSet;
+        if (forSet is not null && dresserItemIds.Contains(forSet.ItemId) && forSet.Items.Contains(itemId)) {
+            if (_mirageService.TryGetSlotStates(forSet.ItemId, out var slots) && slots is not null) {
+                foreach (var s in slots) {
+                    if (s.ItemId == itemId && s.InOutfit)
+                        return ItemStorageState.DresserSet;
+                }
+            }
+            return ItemStorageState.None;
+        }
 
         if (dresserItemIds.Contains(itemId))
             return ItemStorageState.DresserLoose;
