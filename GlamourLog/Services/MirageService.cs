@@ -21,7 +21,7 @@ internal sealed unsafe class MirageService : IDisposable {
         Svc.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh, "MiragePrismPrismBox", OnPrismBoxRefresh);
 
         if (Svc.ClientState.IsLoggedIn)
-            RefreshCache();
+            OnLogin();
     }
 
     internal event System.Action? MirageDataChanged;
