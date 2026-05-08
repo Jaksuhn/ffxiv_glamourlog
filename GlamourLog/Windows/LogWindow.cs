@@ -72,6 +72,7 @@ internal unsafe class LogWindow : NativeAddon {
         public FramedItemIconNode Icon = null!;
         public TextNode Status = null!;
         public GlamourIconNode StorageBadge = null!;
+        public InventoryBadgeNode InventoryBadge = null!;
         public GlamourIconNode.IconPart LastStorageIconPart;
     }
 
@@ -87,6 +88,7 @@ internal unsafe class LogWindow : NativeAddon {
     private const float ListIconPadY = 2f;
     private const float DetailLabelLeft = 32f;
     private const float DetailStatusWidth = 40f;
+    private const float DetailStorageBadgeReserve = 18f;
     private const float CostListRowHeight = 40f;
     private const float SourceChestRowHeight = 26f;
     private const float SourceChestLabelWidth = 168f;
@@ -632,12 +634,13 @@ internal unsafe class LogWindow : NativeAddon {
         if (_selectedSet == null)
             _sourceFilterPieceItemId = null;
 
-        var listWidth = _detailListNode.Size.X > 8f ? _detailListNode.Size.X : 280f;
+        var listWidth = _detailListNode.ContentWidth > 8f
+            ? _detailListNode.ContentWidth
+            : (_detailListNode.Size.X > 24f ? _detailListNode.Size.X - 16f : 280f);
         EnsureDetailPanelShell(listWidth);
         SyncDetailSectionWidths(listWidth);
         ResetSourcesUiRows();
         ResetCostsUiRows();
-
         var inventoryItems = Svc.Ownership.GetInventoryItemsOnly();
 
         if (_selectedSet == null) {
@@ -666,12 +669,13 @@ internal unsafe class LogWindow : NativeAddon {
 
         _detailPieceItemByRow.Clear();
         var items = _selectedSet.Items;
+        var selectedSetStorageState = Svc.Ownership.GetSetStorageState(_selectedSet, ownedItems);
         for (var i = 0; i < items.Count; i++) {
             while (_detailPieceRowPool.Count <= i)
                 CreatePooledPieceRow(listWidth);
 
             var h = _detailPieceRowPool[i];
-            BindDetailPieceRow(h, listWidth, items[i], ownedItems, inventoryItems);
+            BindDetailPieceRow(h, listWidth, items[i], ownedItems, inventoryItems, selectedSetStorageState);
             h.Button.IsVisible = true;
         }
 
@@ -949,6 +953,8 @@ internal unsafe class LogWindow : NativeAddon {
         statusNode.AttachNode(itemNode);
         var storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);
         storageBadge.AttachNode(itemNode);
+        var inventoryBadge = new InventoryBadgeNode();
+        inventoryBadge.AttachNode(itemNode);
 
         itemNode.AddEvent(AtkEventType.MouseClick, (_, _, _, _, e) => OnDetailPieceRowClick(itemNode, e));
 
@@ -957,31 +963,39 @@ internal unsafe class LogWindow : NativeAddon {
             Icon = iconNode,
             Status = statusNode,
             StorageBadge = storageBadge,
+            InventoryBadge = inventoryBadge,
             LastStorageIconPart = GlamourIconNode.IconPart.Dresser,
         };
         _detailPieceRowPool.Add(h);
         _detailPiecesSection.AddNode(itemNode);
     }
 
-    private void BindDetailPieceRow(PooledDetailPieceRow h, float listWidth, uint itemId, HashSet<uint> ownedItems, HashSet<uint> inventoryItems) {
+    private void BindDetailPieceRow(
+        PooledDetailPieceRow h,
+        float listWidth,
+        uint itemId,
+        HashSet<uint> ownedItems,
+        HashSet<uint> inventoryItems,
+        SetStorageState selectedSetStorageState) {
         var itemNode = h.Button;
-        itemNode.Width = listWidth;
+        var rowWidth = Math.Max(listWidth, _detailListNode is { } d && d.ContentWidth > 8f ? d.ContentWidth : listWidth);
+        itemNode.Width = rowWidth;
         itemNode.Selected = _sourceFilterPieceItemId == itemId;
         var itemRow = Item.GetRow(itemId);
         itemNode.LabelNode.String = itemRow.Name.ToString();
         itemNode.LabelNode.TextColor = ColorHelper.GetColor(itemRow.AtkUiRarityColorId);
         itemNode.LabelNode.Size = new Vector2(
-            Math.Max(20f, itemNode.Width - DetailLabelLeft - DetailStatusWidth - 4f),
+            Math.Max(20f, rowWidth - DetailLabelLeft - DetailStorageBadgeReserve),
             itemNode.Height - 1f);
         itemNode.ItemTooltip = itemId;
 
         h.Icon.SetItemId(itemId);
         h.Icon.Position = new Vector2(ListIconPadX, ListIconPadY);
         h.Icon.Size = new Vector2(ListIconSize, ListIconSize);
-        h.Status.Position = new Vector2(itemNode.Width - DetailStatusWidth, 1f);
-        h.Status.Size = new Vector2(DetailStatusWidth - 4f, itemNode.Height - 2f);
-        h.Status.String = FormatItemStorageStatus(itemId, ownedItems, inventoryItems);
-        var storageState = Svc.Ownership.GetItemStorageState(itemId, _selectedSet);
+        h.Status.IsVisible = false;
+        h.Status.String = string.Empty;
+
+        var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState);
         if (StorageIconPartFor(storageState) is { } part) {
             h.StorageBadge.IsVisible = true;
             if (h.LastStorageIconPart != part) {
@@ -989,10 +1003,19 @@ internal unsafe class LogWindow : NativeAddon {
                 h.LastStorageIconPart = part;
             }
 
-            h.StorageBadge.Position = new Vector2(Math.Max(0f, itemNode.Width - h.StorageBadge.Size.X - 4f), 2f);
+            h.StorageBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.StorageBadge.Size.X - 8f), 2f);
+            h.InventoryBadge.IsVisible = false;
         }
-        else
+        else {
             h.StorageBadge.IsVisible = false;
+            if (inventoryItems.Contains(itemId)) {
+                h.InventoryBadge.IsVisible = true;
+                h.InventoryBadge.Position = new Vector2(Math.Max(0f, rowWidth - h.InventoryBadge.Size.X - 8f), 2f);
+            }
+            else {
+                h.InventoryBadge.IsVisible = false;
+            }
+        }
         _detailPieceItemByRow[itemNode] = itemId;
     }
 
@@ -1161,15 +1184,20 @@ internal unsafe class LogWindow : NativeAddon {
             _ => null,
         };
 
-    private string FormatItemStorageStatus(uint itemId, HashSet<uint> ownedItems, HashSet<uint> inventoryItems) {
-        if (!ownedItems.Contains(itemId) && !Svc.Catalog.ArmoireItemIds.Contains(itemId))
-            return "\u2014";
-        var storageState = Svc.Ownership.GetItemStorageState(itemId, _selectedSet);
-        var d = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose;
-        var a = storageState is ItemStorageState.Armoire;
-        var i = inventoryItems.Contains(itemId);
-        if (!d && !a && !i)
-            return "\u2022";
-        return (d ? "D" : "") + (d && (a || i) ? "\u00B7" : "") + (a ? "A" : "") + (a && i ? "\u00B7" : "") + (i ? "I" : "");
+    private ItemStorageState ResolvePieceStorageState(
+        uint itemId,
+        SetStorageState setStorageState) {
+        var direct = Svc.Ownership.GetItemStorageState(itemId, _selectedSet);
+        if (direct is not ItemStorageState.None)
+            return direct;
+
+        return setStorageState switch {
+            SetStorageState.Armoire => ItemStorageState.Armoire,
+            SetStorageState.Dresser => ItemStorageState.DresserSet,
+            SetStorageState.Mixed when Svc.Ownership.GetItemStorageState(itemId, null) is ItemStorageState.Armoire => ItemStorageState.Armoire,
+            SetStorageState.Mixed => ItemStorageState.DresserSet,
+            _ => ItemStorageState.None,
+        };
     }
+
 }

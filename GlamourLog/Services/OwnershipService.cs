@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 
@@ -5,6 +6,12 @@ namespace GlamourLog.Services;
 
 internal sealed unsafe class OwnershipService : IDisposable {
     private readonly ArmoireService _armoireService;
+    private static readonly Lazy<FrozenDictionary<uint, uint>> CabinetLookup = new(()
+        => Cabinet.Where(row => row.RowId >= 1048 && row.Item.RowId != 0)
+            .ToFrozenDictionary(row => row.Item.RowId, row => row.RowId));
+    private static readonly Lazy<FrozenDictionary<uint, uint>> CabinetByRowLookup = new(()
+        => Cabinet.Where(row => row.RowId > 0 && row.Item.RowId != 0)
+            .ToFrozenDictionary(row => row.RowId, row => row.Item.RowId));
 
     public OwnershipService() {
         _armoireService = new ArmoireService();
@@ -71,7 +78,17 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return dresserItemIds;
     }
 
-    internal HashSet<uint> GetArmoireOwnedItemIds() => _armoireService.GetArmoireItems();
+    internal HashSet<uint> GetArmoireOwnedItemIds()
+    {
+        var owned = new HashSet<uint>();
+        foreach (var rawId in _armoireService.GetArmoireItems()) {
+            // Some sources emit item ids, others emit cabinet row ids.
+            owned.Add(ItemUtil.GetBaseId(rawId).ItemId);
+            if (CabinetByRowLookup.Value.TryGetValue(rawId, out var itemId))
+                owned.Add(ItemUtil.GetBaseId(itemId).ItemId);
+        }
+        return owned;
+    }
 
     internal HashSet<uint> GetOwnedItems() {
         var dresserItemIds = GetDresserStoredItemIds();
@@ -98,6 +115,10 @@ internal sealed unsafe class OwnershipService : IDisposable {
             }
         }
         ownedItems.UnionWith(GetArmoireOwnedItemIds());
+        foreach (var itemId in CabinetLookup.Value.Keys) {
+            if (IsInCabinet(itemId))
+                ownedItems.Add(itemId);
+        }
         return ownedItems;
     }
 
@@ -105,7 +126,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         => [.. Svc.Catalog.GlamourSets.Where(set => GetDresserStoredItemIds().Contains(set.ItemId) || set.Items.All(ownedItems.Contains))];
 
     internal ItemStorageState GetItemStorageState(uint itemId, GlamourSet? forSet) {
-        if (GetArmoireOwnedItemIds().Contains(itemId))
+        if (GetArmoireOwnedItemIds().Contains(itemId) || IsInCabinet(itemId))
             return ItemStorageState.Armoire;
 
         var dresserItemIds = GetDresserStoredItemIds();
@@ -116,6 +137,24 @@ internal sealed unsafe class OwnershipService : IDisposable {
             return ItemStorageState.DresserLoose;
 
         return ItemStorageState.None;
+    }
+
+    private static bool IsInCabinet(uint itemId) {
+        if (!CabinetLookup.Value.TryGetValue(itemId, out var cabinetRowId))
+            return false;
+
+        var uiState = FFXIVClientStructs.FFXIV.Client.Game.UI.UIState.Instance();
+        var liveInCabinet = uiState->Cabinet.IsCabinetLoaded() && uiState->Cabinet.IsItemInCabinet(cabinetRowId);
+
+        var itemFinderModule = FFXIVClientStructs.FFXIV.Client.UI.Misc.ItemFinderModule.Instance();
+        var bitsetInCabinet = false;
+        if (itemFinderModule is not null) {
+            var (byteIndex, bitOffset) = Math.DivRem(cabinetRowId - 1048, 32u);
+            if (itemFinderModule->CabinetItemUnlockBits.Length > byteIndex)
+                bitsetInCabinet = (itemFinderModule->CabinetItemUnlockBits[(int)byteIndex] & (1 << (int)bitOffset)) != 0;
+        }
+
+        return liveInCabinet || bitsetInCabinet;
     }
 
     internal SetStorageState GetSetStorageState(GlamourSet set, HashSet<uint>? ownedItems = null) {
