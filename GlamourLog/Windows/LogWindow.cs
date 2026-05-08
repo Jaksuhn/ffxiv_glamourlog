@@ -613,10 +613,10 @@ internal unsafe class LogWindow : NativeAddon {
             var hasPositiveFilters = config.HideNonPartials || config.HideUnaffordable || config.HideUnready || config.HideNoMarketboard;
             if (hasPositiveFilters) {
                 rows = [.. rows.Where(r =>
-                    (config.HideNonPartials && Svc.Ownership.IsPartiallyCompleted(r, ownedSets, ownedItems)) ||
-                    (config.HideUnaffordable && Svc.Ownership.CanAffordAllMissingGearPieces(r, ownedItems)) ||
-                    (config.HideUnready && Svc.Ownership.IsDoneButNotInDresser(r, ownedSets, ownedItems)) ||
-                    (config.HideNoMarketboard && Svc.Ownership.IsMarketboardPurchasable(r))
+                    (!config.HideNonPartials || Svc.Ownership.IsPartiallyCompleted(r, ownedSets, ownedItems)) &&
+                    (!config.HideUnaffordable || Svc.Ownership.CanAffordAllMissingGearPieces(r, ownedItems)) &&
+                    (!config.HideUnready || Svc.Ownership.IsDoneButNotInDresser(r, ownedSets, ownedItems)) &&
+                    (!config.HideNoMarketboard || Svc.Ownership.IsMarketboardPurchasable(r))
                 )];
             }
         }
