@@ -1,4 +1,5 @@
 using Dalamud.IoC;
+using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 
@@ -12,6 +13,7 @@ public class Svc {
     [PluginService] public static IDataManager Data { get; set; } = null!;
     [PluginService] public static IFramework Framework { get; set; } = null!;
     [PluginService] public static IPluginLog PluginLog { get; set; } = null!;
+    [PluginService] public static IAddonLifecycle AddonLifecycle { get; set; } = null!;
 
     public static Configuration Config { get; set; } = null!;
     internal static CatalogService Catalog { get; set; } = null!;

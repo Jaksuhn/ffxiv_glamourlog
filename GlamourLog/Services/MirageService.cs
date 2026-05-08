@@ -1,3 +1,5 @@
+using Dalamud.Game.Addon.Lifecycle;
+using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace GlamourLog.Services;
@@ -9,73 +11,91 @@ internal sealed unsafe class MirageService : IDisposable {
     /// <param name="InOutfit">Whether this slot is registered as part of the partial/full outfit at <paramref name="PrismBoxIndex"/>.</param>
     internal readonly record struct SlotState(int PrismBoxIndex, uint ItemId, bool InOutfit);
 
-    private bool _hasValidSnapshot;
-    private int _snapshotCatalogDataVersion = int.MinValue;
     private readonly uint[] _prismBoxItemIds = new uint[800];
     private Dictionary<uint, IReadOnlyList<SlotState>> _slotStatesByOutfitId = [];
+    private int _cachedCatalogVersion = -1;
 
     internal MirageService() {
         Svc.ClientState.Login += OnLogin;
         Svc.ClientState.Logout += OnLogout;
+        Svc.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh, "MiragePrismPrismBox", OnPrismBoxRefresh);
+
         if (Svc.ClientState.IsLoggedIn)
-            RequestPrismBoxOnFramework();
+            RefreshCache();
     }
 
     internal event System.Action? MirageDataChanged;
 
     public void Dispose() {
+        Svc.AddonLifecycle.UnregisterListener(AddonEvent.PostRefresh, "MiragePrismPrismBox", OnPrismBoxRefresh);
         Svc.ClientState.Login -= OnLogin;
         Svc.ClientState.Logout -= OnLogout;
+        ClearCache();
     }
 
-    private void OnLogin() => RequestPrismBoxOnFramework();
-
-    private void OnLogout(int _, int __) => InvalidateCache();
-
-    private void RequestPrismBoxOnFramework() {
-        var task = Svc.Framework.RunOnFrameworkThread(() => {
-            var mm = MirageManager.Instance();
-            if (mm is not null && !mm->PrismBoxRequested)
-                GameMain.ExecuteCommand(2350);
-        });
-        task.GetAwaiter().GetResult();
+    private void OnLogin() {
+        Svc.PluginLog.Debug($"[{nameof(MirageService)}] Refreshing prism box.");
+        GameMain.ExecuteCommand(2350);
+        RefreshCache();
     }
 
-    private void InvalidateCache() {
+    private void OnLogout(int _, int __) => ClearCache();
+
+    private void OnPrismBoxRefresh(AddonEvent _, AddonArgs __) => BuildCache(notify: true);
+
+    internal void RefreshCache() => BuildCache(notify: true);
+
+    private void ClearCache() {
+        var hadAny = _slotStatesByOutfitId.Count > 0;
         _slotStatesByOutfitId = [];
-        _hasValidSnapshot = false;
-        _snapshotCatalogDataVersion = int.MinValue;
+        _cachedCatalogVersion = -1;
+        if (hadAny)
+            MirageDataChanged?.Invoke();
     }
 
-    /// <summary> Rebuilds the slot map when <see cref="MirageManager.PrismBoxLoaded"/> is true. </summary>
-    internal void EnsureCacheCurrent() {
-        if (!Svc.ClientState.IsLoggedIn)
+    private void BuildCache(bool notify) {
+        if (!Svc.ClientState.IsLoggedIn) {
+            ClearCache();
             return;
-
-        var task = Svc.Framework.RunOnFrameworkThread(EnsureCacheCurrentCore);
-        task.GetAwaiter().GetResult();
-    }
-
-    private void EnsureCacheCurrentCore() {
-        var mm = MirageManager.Instance();
-        if (mm is null)
-            return;
+        }
 
         var catalogVersion = Svc.Catalog.DataVersion;
-        if (mm->PrismBoxLoaded && _hasValidSnapshot && _snapshotCatalogDataVersion == catalogVersion)
+        if (!notify && _slotStatesByOutfitId.Count > 0 && _cachedCatalogVersion == catalogVersion)
             return;
 
-        if (!mm->PrismBoxLoaded)
+        var mm = MirageManager.Instance();
+        if (mm is null || !mm->PrismBoxLoaded)
             return;
 
         mm->PrismBoxItemIds.CopyTo(_prismBoxItemIds);
-        RebuildSlotMap(mm);
-        _snapshotCatalogDataVersion = catalogVersion;
-        _hasValidSnapshot = true;
-        MirageDataChanged?.Invoke();
+        var next = RebuildSlotMap(mm);
+        var changed = !MapsEqual(_slotStatesByOutfitId, next);
+        _slotStatesByOutfitId = next;
+        _cachedCatalogVersion = catalogVersion;
+
+        if (notify && changed)
+            MirageDataChanged?.Invoke();
     }
 
-    private void RebuildSlotMap(MirageManager* mm) {
+    private static bool MapsEqual(Dictionary<uint, IReadOnlyList<SlotState>> lhs, Dictionary<uint, IReadOnlyList<SlotState>> rhs) {
+        if (lhs.Count != rhs.Count)
+            return false;
+
+        foreach (var (setId, leftSlots) in lhs) {
+            if (!rhs.TryGetValue(setId, out var rightSlots))
+                return false;
+            if (leftSlots.Count != rightSlots.Count)
+                return false;
+            for (var i = 0; i < leftSlots.Count; i++) {
+                if (leftSlots[i] != rightSlots[i])
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    private Dictionary<uint, IReadOnlyList<SlotState>> RebuildSlotMap(MirageManager* mm) {
         var map = new Dictionary<uint, IReadOnlyList<SlotState>>();
         foreach (var set in Svc.Catalog.GlamourSets) {
             var prismIndex = FindPrismIndexForOutfit(set.ItemId);
@@ -104,7 +124,7 @@ internal sealed unsafe class MirageService : IDisposable {
             map[set.ItemId] = list;
         }
 
-        _slotStatesByOutfitId = map;
+        return map;
     }
 
     /// <returns> First matching index, or -1. </returns>
@@ -129,7 +149,7 @@ internal sealed unsafe class MirageService : IDisposable {
 
     /// <summary> Returns slot states when prism box has been loaded and the outfit token appears in the prism list. </summary>
     internal bool TryGetSlotStates(uint outfitItemId, out IReadOnlyList<SlotState>? slots) {
-        EnsureCacheCurrent();
+        BuildCache(notify: false);
         return _slotStatesByOutfitId.TryGetValue(outfitItemId, out slots);
     }
 
