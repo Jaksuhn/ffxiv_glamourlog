@@ -327,10 +327,9 @@ internal unsafe class LogWindow : NativeAddon {
         if (_lastDataVersion == Svc.Catalog.DataVersion)
             return;
 
-        _selectedCategoryId = MigrateLegacyCategoryKey(_selectedCategoryId);
         _categoryPaneOrder.Clear();
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
-        BuildCategoryButtons();
+        RebuildCategoryButtonsFromPaneOrder();
         if (!_categoryPaneOrder.Contains(_selectedCategoryId))
             _selectedCategoryId = Svc.Catalog.UncategorizedTab.Name;
         _lastDataVersion = Svc.Catalog.DataVersion;
@@ -387,13 +386,6 @@ internal unsafe class LogWindow : NativeAddon {
         return FilterWindow.ClampFilterWindowTopLeft(topLeft);
     }
 
-    // TODO: don't need this?
-    private static string MigrateLegacyCategoryKey(string key) => key switch {
-        "__uncategorized" => "Unsorted",
-        "__unobtainable" => "Unobtainable",
-        _ => key,
-    };
-
     private List<string> BuildOrderedCategoryPaneList() {
         var r = new List<string> { Svc.Catalog.UncategorizedTab.Name };
         foreach (var (category, _) in Svc.Catalog.OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
@@ -405,7 +397,17 @@ internal unsafe class LogWindow : NativeAddon {
     private void BuildCategoryButtons() {
         if (_categoryListNode is null)
             return;
+        if (_categoryButtons.Count > 0)
+            return;
+        RebuildCategoryButtonsFromPaneOrder();
+    }
 
+    /// <summary> Rebuilds the category column from <see cref="_categoryPaneOrder"/> (used on first setup and when catalog <see cref="CatalogService.DataVersion"/> changes). </summary>
+    private void RebuildCategoryButtonsFromPaneOrder() {
+        if (_categoryListNode is null)
+            return;
+
+        // Category list is small and only rebuilt when catalog topology changes — full clear is OK (unlike set/detail hot paths).
         _categoryListNode.Clear();
         _categoryButtons.Clear();
         _categoryButtonMap.Clear();
