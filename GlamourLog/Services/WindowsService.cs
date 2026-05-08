@@ -12,7 +12,7 @@ internal sealed class WindowsService : IDisposable {
             RememberClosePosition = false,
         };
         LogWindow = new LogWindow(FilterWindow) {
-            InternalName = "GlamourLogMain",
+            InternalName = "GlamourLog",
             Title = "Glamour Sets",
             Size = new Vector2(920f, 640f),
         };
