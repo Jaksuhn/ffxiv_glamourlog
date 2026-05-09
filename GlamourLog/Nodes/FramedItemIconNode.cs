@@ -43,6 +43,7 @@ public sealed class FramedItemIconNode : SimpleComponentNode {
     public void SetItemId(uint itemId) {
         ItemId = itemId;
         IconId = Item.GetRowRef(itemId) is { IsValid: true } row ? (uint)row.Value.Icon : 0;
+        ItemTooltip = itemId;
     }
 
     protected override void OnSizeChanged() {

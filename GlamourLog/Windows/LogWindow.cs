@@ -1,18 +1,12 @@
-using Dalamud.Bindings.ImGui;
-using Dalamud.Game.Text.SeStringHandling;
-using Dalamud.Interface.Colors;
-using Dalamud.Memory;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using KamiToolKit;
-using KamiToolKit.Classes;
 using KamiToolKit.Extensions;
 using KamiToolKit.Nodes;
-using KamiToolKit.Premade.Node.Simple;
+using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
 namespace GlamourLog;
 
@@ -46,7 +40,7 @@ internal unsafe class LogWindow : NativeAddon {
     private bool _pendingClearSetSelection;
     private int _lastDataVersion = -1;
     private readonly List<DetailListRowData> _detailRowOptions = [];
-    private readonly KamiToolKit.ContextMenu.ContextMenu _contextMenu = new();
+    private readonly ContextMenu _contextMenu = new();
 
     private const float BottomStatsBlockHeight = 34f;
     private static readonly Vector4 GatheringHeadingGrey = new(160f / 255f, 160f / 255f, 160f / 255f, 1f);
@@ -187,7 +181,7 @@ internal unsafe class LogWindow : NativeAddon {
                 _pendingResetDetailScroll = true;
             }
         };
-        GlamourSetListItemNode.OnRowRightClick = OpenSetContextMenu;
+        GlamourSetListItemNode.OnRowRightClick = set => SetContextMenu.Open(this, set, _contextMenu);
         _setListNode.AttachNode(this);
         _setListNode.Size = new Vector2(middleWidth, midListHeight);
         var detailX = contentStart.X + leftWidth + middleWidth + columnGap * 2;
@@ -198,8 +192,8 @@ internal unsafe class LogWindow : NativeAddon {
             OnItemSelected = _ => { },
         };
         DetailListItemNode.OnPieceLeftClick = OnDetailPieceItemLeftClick;
-        DetailListItemNode.OnItemRightClick = OpenItemContextMenu;
-        DetailListItemNode.OnDutyRightClick = OpenDutySourceContextMenu;
+        DetailListItemNode.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
+        DetailListItemNode.OnDutyRightClick = id => SourceContextMenu.Open(this, id, _contextMenu);
         _detailRowsListNode.AttachNode(this);
         _detailRowsListNode.Size = new Vector2(detailW, listBottom - alignTop);
 
@@ -720,67 +714,6 @@ internal unsafe class LogWindow : NativeAddon {
             return "Completable";
         return $"Obt. {c}/{n}";
     }
-
-    private void OpenSetContextMenu(GlamourSet set) {
-        _contextMenu.Clear();
-        _contextMenu.AddItem($"{Addon.GetRow(2426).Text} ({Addon.GetRow(1043).Text})", () => {
-            AgentTryon.Instance()->SaveDeleteOutfit = true;
-            set.Items.ForEach(i => AgentTryon.TryOn(0, i));
-        });
-        _contextMenu.Open();
-    }
-
-    private void OpenItemContextMenu(uint itemId) {
-        var item = Item.GetRow(itemId);
-        var itemName = item.Name.ToString();
-        _contextMenu.Clear();
-
-        _contextMenu.AddItem(Addon.GetRow(4379).Text, () => Svc.CommandManager.ProcessCommand($"/isearch {EscapeText(itemName)}"));
-        _contextMenu.AddItem("Link Item In Chat", () => {
-            try { Svc.Chat.Print(SeString.CreateItemLink(itemId, false)); } catch { }
-        });
-        _contextMenu.AddItem(Addon.GetRow(159).Text, () => ImGui.SetClipboardText(itemName));
-        _contextMenu.AddItem(Addon.GetRow(2426).Text, () => AgentTryon.TryOn(0, itemId));
-
-        if (Recipe.FirstOrNull(r => r.RowId > 0 && r.ItemResult.RowId == itemId) is { RowId: var id }) {
-            _contextMenu.AddItem("Open Recipe", () => AgentRecipeNote.Instance()->OpenRecipeByRecipeId(id));
-        }
-
-        if (!item.IsUntradable) {
-            if (Svc.PluginInterface.IsPluginLoaded("MarketBoardPlugin")) {
-                _contextMenu.AddItem("Open In MarketBoardPlugin", () => Svc.CommandManager.ProcessCommand($"/pmb {itemId}"));
-            }
-            if (Svc.PluginInterface.IsPluginLoaded("vmarket")) {
-                _contextMenu.AddItem("Open In vmarket", () => Svc.CommandManager.ProcessCommand($"/vmarket {itemId}"));
-            }
-        }
-
-        _contextMenu.Open();
-    }
-
-    private void OpenDutySourceContextMenu(uint contentFinderConditionId) {
-        if (contentFinderConditionId == 0)
-            return;
-
-        _contextMenu.Clear();
-        _contextMenu.AddItem(Addon.GetRow(15890).Text, () => AgentContentsFinder.Instance()->OpenRegularDuty(contentFinderConditionId));
-        _contextMenu.AddItem($"{Addon.GetRow(9663).Text} ({Addon.GetRow(1145).Text})", () => {
-            if (ContentFinderCondition.GetRowRef(contentFinderConditionId) is { IsValid: true, Value: var cfc })
-                cfc.QueueDuty(levelSync: true);
-        });
-        _contextMenu.AddItem($"{Addon.GetRow(9663).Text} ({Addon.GetRow(10008).Text})", () => {
-            if (ContentFinderCondition.GetRowRef(contentFinderConditionId) is { IsValid: true, Value: var cfc })
-                cfc.QueueDuty(levelSync: false);
-        });
-        if (Svc.PluginInterface.IsPluginLoaded("AutoDuty")) {
-            _contextMenu.AddItem("AutoDuty", () => {
-                // TODO
-            });
-        }
-        _contextMenu.Open();
-    }
-
-    private static string EscapeText(string text) => $"\"{text.Replace("\"", "\\\"")}\"";
 
     private static GlamourIconNode.IconPart? StorageIconPartFor(ItemStorageState storageState)
         => storageState switch {
