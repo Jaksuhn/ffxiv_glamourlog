@@ -4,9 +4,9 @@
     "net10.0-windows7.0": {
       "croizat.clib": {
         "type": "Direct",
-        "requested": "[1.0.10, )",
-        "resolved": "1.0.10",
-        "contentHash": "H8UwHU7cqjgnznAV0+As4lfEmsrzR/+FhQPMyHF7psCHyDz+osYE02mFgc4EPYv+aTHOShNH33RZ8pL/BPEOsA==",
+        "requested": "[1.0.11, )",
+        "resolved": "1.0.11",
+        "contentHash": "atFVssUezK4VXi6J/IHoUEQ55tGBivtvpMSDn3cGARheHQJ7Kjq4eejLeJ25N18rI5qCJ9gLI3Cy0ibqrFpouA==",
         "dependencies": {
           "LuminaSupplemental.Excel": "4.1.1"
         }

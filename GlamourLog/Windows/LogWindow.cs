@@ -724,7 +724,7 @@ internal unsafe class LogWindow : NativeAddon {
     private void OpenSetContextMenu(GlamourSet set) {
         _contextMenu.Clear();
         _contextMenu.AddItem($"{Addon.GetRow(2426).Text} ({Addon.GetRow(1043).Text})", () => {
-            MemoryHelper.WriteField(AgentTryon.Instance(), 0x366, true);
+            AgentTryon.Instance()->SaveDeleteOutfit = true;
             set.Items.ForEach(i => AgentTryon.TryOn(0, i));
         });
         _contextMenu.Open();

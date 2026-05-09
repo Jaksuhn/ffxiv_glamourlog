@@ -9,6 +9,12 @@ using System.Threading.Tasks;
 
 namespace GlamourLog;
 
+/*
+ * TODO
+ * Try On should clear the existing items
+ * add window to uibuilder
+ * disable other plugins from showing up in ctx menu
+ */
 public sealed class Plugin : IAsyncDalamudPlugin {
     [PluginService] private static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     private readonly string[] _commands = ["/glamourlog", "/gl"];

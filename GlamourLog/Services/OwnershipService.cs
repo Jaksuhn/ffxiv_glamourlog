@@ -1,6 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
-using InteropGenerator.Runtime;
 using System.Collections.Frozen;
 
 namespace GlamourLog.Services;
@@ -137,7 +136,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         var dresserItemIds = GetDresserStoredItemIds();
         if (forSet is not null && dresserItemIds.Contains(forSet.ItemId) && forSet.Items.Contains(itemId)) {
             var setRow = MirageStoreSetItem.GetRow(forSet.ItemId);
-            if (setRow.TryGetSetItemBitArray(out var bitArray) && IsPieceInMirageOutfitSlot(setRow, bitArray, itemId))
+            if (IsPieceInMirageOutfitSlot(setRow, itemId))
                 return ItemStorageState.DresserSet;
             return ItemStorageState.None;
         }
@@ -204,8 +203,6 @@ internal sealed unsafe class OwnershipService : IDisposable {
         var count = 0;
         var hasSetToken = GetDresserStoredItemIds().Contains(set.ItemId);
         var setRow = MirageStoreSetItem.GetRow(set.ItemId);
-        BitArray bitArray = default;
-        var haveSlotBits = hasSetToken && setRow.TryGetSetItemBitArray(out bitArray);
 
         foreach (var itemId in set.Items) {
             if (effectiveOwned.Contains(itemId)) {
@@ -213,10 +210,10 @@ internal sealed unsafe class OwnershipService : IDisposable {
                 continue;
             }
 
-            if (!haveSlotBits)
+            if (!hasSetToken)
                 continue;
 
-            if (IsPieceInMirageOutfitSlot(setRow, bitArray, itemId))
+            if (IsPieceInMirageOutfitSlot(setRow, itemId))
                 count++;
         }
 
@@ -255,34 +252,27 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return false;
     }
 
-    /// <summary> True when the sheet lists the same number of pieces as <paramref name="set"/> and each is registered on the mirage outfit (dresser slot bits). </summary>
+    /// <summary> True when the sheet lists the same number of pieces as <paramref name="set"/> and each slot is collected on the mirage outfit (see clib <c>IsFullSetCollected</c>). </summary>
     private static bool IsFullMirageOutfit(GlamourSet set) {
         var row = MirageStoreSetItem.GetRow(set.ItemId);
-        if (!row.TryGetSetItemBitArray(out var bitArray))
+        if (!row.IsFullSetCollected())
             return false;
 
         var defined = 0;
-        var itemIndex = 0;
         foreach (var itemRef in row.Items) {
-            if (itemRef.RowId != 0) {
-                if (!bitArray.TryGet(itemIndex, out var slotLocked) || slotLocked)
-                    return false;
+            if (itemRef.RowId != 0)
                 defined++;
-            }
-            itemIndex++;
         }
 
         return defined == set.Items.Count;
     }
 
-    /// <remarks> Matches <see href="https://github.com/Haselnussbomber/MogMogCheck/blob/main/MogMogCheck/Services/ItemQuantityService.cs">MogMogCheck</see> set-slot bit semantics. </remarks>
-    private static bool IsPieceInMirageOutfitSlot(MirageStoreSetItem row, BitArray bitArray, uint pieceItemId) {
+    /// <remarks> Uses <see href="https://github.com/Jaksuhn/clib/blob/369bb76683a7adec0db10b91d994c47d06e0e60b/Extensions/Lumina/MirageStoreSetItemExtensions.cs">MirageStoreSetItemExtensions.IsSetSlotCollected</see>. </remarks>
+    private static bool IsPieceInMirageOutfitSlot(MirageStoreSetItem row, uint pieceItemId) {
         var itemIndex = 0;
         foreach (var itemRef in row.Items) {
-            if (itemRef.RowId != 0 && itemRef.RowId == pieceItemId) {
-                if (bitArray.TryGet(itemIndex, out var slotLocked) && !slotLocked)
-                    return true;
-            }
+            if (itemRef.RowId != 0 && itemRef.RowId == pieceItemId && row.IsSetSlotCollected(itemIndex))
+                return true;
             itemIndex++;
         }
 
