@@ -1,7 +1,7 @@
-using System.Collections.Frozen;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using InteropGenerator.Runtime;
+using System.Collections.Frozen;
 
 namespace GlamourLog.Services;
 
@@ -79,8 +79,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return dresserItemIds;
     }
 
-    internal HashSet<uint> GetArmoireOwnedItemIds()
-    {
+    internal HashSet<uint> GetArmoireOwnedItemIds() {
         var owned = new HashSet<uint>();
         foreach (var rawId in _armoireService.GetArmoireItems()) {
             // Some sources emit item ids, others emit cabinet row ids.
@@ -156,7 +155,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         var uiState = FFXIVClientStructs.FFXIV.Client.Game.UI.UIState.Instance();
         var liveInCabinet = uiState->Cabinet.IsCabinetLoaded() && uiState->Cabinet.IsItemInCabinet(cabinetRowId);
 
-        var itemFinderModule = FFXIVClientStructs.FFXIV.Client.UI.Misc.ItemFinderModule.Instance();
+        var itemFinderModule = ItemFinderModule.Instance();
         var bitsetInCabinet = false;
         if (itemFinderModule is not null) {
             var (byteIndex, bitOffset) = Math.DivRem(cabinetRowId - 1048, 32u);

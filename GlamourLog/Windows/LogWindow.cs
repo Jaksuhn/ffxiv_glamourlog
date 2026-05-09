@@ -59,6 +59,8 @@ internal unsafe class LogWindow : NativeAddon {
         _selectedCategoryId = Svc.Catalog.UncategorizedTab.Name;
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
         _lastDataVersion = Svc.Catalog.DataVersion;
+        DisableClose = true;
+        DisableCloseTransition = true;
     }
 
     /// <summary> Filter window, inventory hooks, etc.: queue refresh from live game data; applied in OnUpdate. </summary>
@@ -689,7 +691,6 @@ internal unsafe class LogWindow : NativeAddon {
         _pendingPaintDetailsOnly = true;
     }
 
-
     private bool TryGetCostTotals(GlamourSet set, uint? pieceFilterPieceItemId, out Dictionary<uint, uint> totals) {
         totals = [];
         IEnumerable<uint> pieceIds = pieceFilterPieceItemId is { } only ? [only] : set.Items;
@@ -804,5 +805,4 @@ internal unsafe class LogWindow : NativeAddon {
             _ => ItemStorageState.None,
         };
     }
-
 }
