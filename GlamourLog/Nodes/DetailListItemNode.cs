@@ -168,7 +168,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         foreach (var icon in _sourceIcons)
             icon.IsVisible = false;
 
-        _inputCollision.ItemTooltip = 0;
+        //_inputCollision.ItemTooltip = 0;
 
         _primary.String = itemData.PrimaryText;
         _secondary.String = itemData.SecondaryText;
@@ -218,7 +218,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 var pieceTextRightReserve = (_storageBadge.IsVisible || _inventoryBadge.IsVisible) ? (_storageBadge.Size.X + 16f) : 8f;
                 _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 16f);
                 _inputCollision.ShowClickableCursor = true;
-                _inputCollision.ItemTooltip = itemData.ItemId;
+                //_inputCollision.ItemTooltip = itemData.ItemId;
                 break;
             case DetailRowKind.Cost:
                 var currencyRow = Item.GetRow(itemData.ItemId);
@@ -227,7 +227,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.TextColor = ColorHelper.GetColor(currencyRow.AtkUiRarityColorId);
                 _secondary.IsVisible = true;
                 _inputCollision.ShowClickableCursor = true;
-                _inputCollision.ItemTooltip = itemData.ItemId;
+                //_inputCollision.ItemTooltip = itemData.ItemId;
                 break;
             case DetailRowKind.SourceDuty:
                 _primary.String = string.Empty;

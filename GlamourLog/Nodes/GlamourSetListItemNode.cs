@@ -109,7 +109,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
 
     protected override void SetNodeData(SetListRowData itemData) {
         _iconNode.SetItemId(itemData.Set.ItemId);
-        _inputCollision.ItemTooltip = itemData.Set.ItemId;
+        //_inputCollision.ItemTooltip = itemData.Set.ItemId;
         _titleNode.String = itemData.Title;
         _subtitleNode.String = itemData.Subtitle;
         _checkBadge.IsVisible = itemData.IsOwned;
