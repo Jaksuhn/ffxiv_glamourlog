@@ -81,7 +81,7 @@ internal unsafe class FilterWindow : NativeAddon {
 
         AddCheckbox("Hide completed sets", c => c.HideCompleted, c => c.HideCompleted ^= true);
         AddCheckbox("Hide unstarted sets", c => c.HideNonPartials, c => c.HideNonPartials ^= true);
-        AddCheckbox("Hide sets not ready to be stored", c => c.HideUnready, c => c.HideUnready ^= true);
+        AddCheckbox("Hide sets with no pieces in inventory", c => c.HideUnready, c => c.HideUnready ^= true);
         AddCheckbox("Hide unaffordable sets", c => c.HideUnaffordable, c => c.HideUnaffordable ^= true);
         AddCheckbox("Hide sets not found on the marketboard", c => c.HideNoMarketboard, c => c.HideNoMarketboard ^= true);
 

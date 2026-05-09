@@ -12,8 +12,6 @@ namespace GlamourLog;
 /*
  * TODO
  * Try On should clear the existing items
- * add window to uibuilder
- * disable other plugins from showing up in ctx menu
  */
 public sealed class Plugin : IAsyncDalamudPlugin {
     [PluginService] private static IDalamudPluginInterface PluginInterface { get; set; } = null!;
@@ -34,10 +32,12 @@ public sealed class Plugin : IAsyncDalamudPlugin {
         }
 
         await Svc.Framework.RunOnFrameworkThread(() => Svc.Windows = new WindowsService());
+        Svc.PluginInterface.UiBuilder.OpenMainUi += Svc.Windows.ToggleMainWindow;
     }
 
     public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.CommandManager.RemoveHandler(c));
+        Svc.PluginInterface.UiBuilder.OpenMainUi -= Svc.Windows.ToggleMainWindow;
         await Svc.Framework.RunOnFrameworkThread(() => {
             Svc.Windows.Dispose();
             KamiToolKitLibrary.Dispose();

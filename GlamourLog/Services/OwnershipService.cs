@@ -59,12 +59,9 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return ownedCount > 0 && ownedCount < glamourSet.Items.Count;
     }
 
-    internal bool IsDoneButNotInDresser(GlamourSet glamourSet, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
-        if (ownedSets.Contains(glamourSet))
-            return false;
-        var ownedCount = GetOwnedPieceCountForSet(glamourSet, ownedItems);
-        return ownedCount == glamourSet.Items.Count;
-    }
+    /// <summary> True when at least one set piece is currently in the player's bags (not dresser/armoire alone). </summary>
+    internal static bool SetHasPieceInPlayerInventory(GlamourSet glamourSet, HashSet<uint> inventoryItemIds)
+        => glamourSet.Items.Any(inventoryItemIds.Contains);
 
     internal bool IsMarketboardPurchasable(GlamourSet glamourSet)
         => glamourSet.Items.Any(itemId => !Item.GetRow(itemId).IsUntradable);
