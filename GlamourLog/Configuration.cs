@@ -14,5 +14,7 @@ public class Configuration : IPluginConfiguration {
     public bool HideNoMarketboard { get; set; }
     public bool ShowOnlyMisplaced { get; set; }
 
-    public void Save() => Svc.PluginInterface.SavePluginConfig(this);
+    public GlamourSetSortMode SetListSortMode { get; set; } = GlamourSetSortMode.AlphabeticalAscending;
+
+    public void Save() => Svc.Interface.SavePluginConfig(this);
 }

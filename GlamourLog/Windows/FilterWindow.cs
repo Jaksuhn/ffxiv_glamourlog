@@ -52,8 +52,6 @@ internal unsafe class FilterWindow : NativeAddon {
         _okButton?.Dispose();
         _okButton = null;
 
-        var config = Svc.Config;
-
         var start = ContentStartPosition;
         var rowWidth = ContentSize.X - 16f;
         var x = start.X + 8f;
@@ -67,12 +65,12 @@ internal unsafe class FilterWindow : NativeAddon {
                 Size = new Vector2(rowWidth, rowHeight),
                 String = label,
                 TextTooltip = tooltip,
-                IsChecked = read(config),
+                IsChecked = read(C),
                 OnClick = _ => {
-                    flip(config);
-                    cb.IsChecked = read(config);
-                    config.Save();
-                    Svc.Catalog.MarkLogWindowDirty();
+                    flip(C);
+                    cb.IsChecked = read(C);
+                    C.Save();
+                    Svc.Get<CatalogService>().MarkLogWindowDirty();
                 },
             };
             y += rowHeight + 2f;
@@ -142,12 +140,12 @@ internal unsafe class FilterWindow : NativeAddon {
             return;
         }
 
-        _checkboxes[0].IsChecked = Svc.Config.HideCompleted;
-        _checkboxes[1].IsChecked = Svc.Config.HideUnready;
-        _checkboxes[2].IsChecked = Svc.Config.HideUnaffordable;
-        _checkboxes[3].IsChecked = Svc.Config.HideNoMarketboard;
-        _checkboxes[4].IsChecked = Svc.Config.HideNonPartials;
-        _checkboxes[5].IsChecked = Svc.Config.ShowOnlyMisplaced;
+        _checkboxes[0].IsChecked = C.HideCompleted;
+        _checkboxes[1].IsChecked = C.HideUnready;
+        _checkboxes[2].IsChecked = C.HideUnaffordable;
+        _checkboxes[3].IsChecked = C.HideNoMarketboard;
+        _checkboxes[4].IsChecked = C.HideNonPartials;
+        _checkboxes[5].IsChecked = C.ShowOnlyMisplaced;
 
         base.OnUpdate(addon);
     }

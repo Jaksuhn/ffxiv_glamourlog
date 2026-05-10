@@ -9,3 +9,4 @@ global using Sheets = Lumina.Excel.Sheets;
 global using clib.Extensions;
 global using clib.Services;
 global using clib.Utils;
+global using static GlamourLog.Plugin;

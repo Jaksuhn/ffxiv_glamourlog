@@ -22,7 +22,7 @@ internal static unsafe class SourceContextMenu {
             if (ContentFinderCondition.GetRowRef(contentFinderConditionId) is { IsValid: true, Value: var cfc })
                 cfc.QueueDuty(levelSync: false);
         });
-        if (Svc.PluginInterface.IsPluginLoaded("AutoDuty")) {
+        if (Svc.Interface.IsPluginLoaded("AutoDuty")) {
             menu.AddItem("AutoDuty", () => {
                 // TODO
             });

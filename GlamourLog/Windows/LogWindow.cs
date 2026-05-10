@@ -1,3 +1,4 @@
+using System.Globalization;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -52,9 +53,9 @@ internal unsafe class LogWindow : NativeAddon {
 
     public LogWindow(FilterWindow filterWindow) {
         _filterWindow = filterWindow;
-        _selectedCategoryId = Svc.Catalog.UncategorizedTab.Name;
+        _selectedCategoryId = Svc.Get<CatalogService>().UncategorizedTab.Name;
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
-        _lastDataVersion = Svc.Catalog.DataVersion;
+        _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
         DisableClose = true;
         DisableCloseTransition = true;
     }
@@ -74,7 +75,7 @@ internal unsafe class LogWindow : NativeAddon {
             PaintListsCore();
         }
         catch (Exception ex) {
-            Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshListsAndDetails)}");
+            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshListsAndDetails)}");
         }
     }
 
@@ -91,10 +92,10 @@ internal unsafe class LogWindow : NativeAddon {
         if (_isFinalizing || !IsOpen || !CanPaintLists())
             return;
         try {
-            RefreshDetails(Svc.Ownership.GetOwnedItems());
+            RefreshDetails(Svc.Get<OwnershipService>().GetOwnedItems());
         }
         catch (Exception ex) {
-            Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
+            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
         }
     }
 
@@ -102,7 +103,7 @@ internal unsafe class LogWindow : NativeAddon {
         // Set/detail columns reuse pooled rows; never ScrollingListNode.Clear() hot paths — that disposes natives
         // and races AtkComponentScrollBar (same pattern as NativeMeters breakdown pooling).
         RefreshRows();
-        RefreshDetails(Svc.Ownership.GetOwnedItems());
+        RefreshDetails(Svc.Get<OwnershipService>().GetOwnedItems());
     }
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {
@@ -159,6 +160,8 @@ internal unsafe class LogWindow : NativeAddon {
             Position = new Vector2(sortRelX, 0f),
         };
         _setListSortControl.AttachNode(_midListHeader);
+        _setListSortControl.SortDropDown.SelectedOption = C.SetListSortMode;
+        _setListSortControl.SortDropDown.OnOptionSelected = OnSetListSortModeSelected;
 
         _filterSettingsButton = new CircleButtonNode {
             Icon = ButtonIcon.GearCog,
@@ -253,7 +256,7 @@ internal unsafe class LogWindow : NativeAddon {
         // Mutate scroll lists before NativeAddon.Update runs. If we Clear/reparent after base.OnUpdate,
         // the game's scrollbar code can still be using freed textures/nodes from the prior frame input.
         try {
-            if (Svc.Catalog.TryConsumePendingListRefresh())
+            if (Svc.Get<CatalogService>().TryConsumePendingListRefresh())
                 _pendingRefreshListsAndDetails = true;
 
             if (_pendingResetSetScroll && _pendingRefreshListsAndDetails && _setListNode is not null) {
@@ -286,7 +289,7 @@ internal unsafe class LogWindow : NativeAddon {
             }
         }
         catch (Exception ex) {
-            Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] OnUpdate (pre-native)");
+            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] OnUpdate (pre-native)");
         }
 
         base.OnUpdate(addon);
@@ -307,7 +310,7 @@ internal unsafe class LogWindow : NativeAddon {
             _filterSettingsButton?.Icon = _filterWindow.IsOpen ? ButtonIcon.ActiveGearCog : ButtonIcon.GearCog;
         }
         catch (Exception ex) {
-            Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] OnUpdate");
+            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] OnUpdate");
         }
     }
 
@@ -338,15 +341,15 @@ internal unsafe class LogWindow : NativeAddon {
     private void SyncCategoryPaneToDataVersion() {
         if (_categoryListNode is null)
             return;
-        if (_lastDataVersion == Svc.Catalog.DataVersion)
+        if (_lastDataVersion == Svc.Get<CatalogService>().DataVersion)
             return;
 
         _categoryPaneOrder.Clear();
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
         RebuildCategoryButtonsFromPaneOrder();
         if (!_categoryPaneOrder.Contains(_selectedCategoryId))
-            _selectedCategoryId = Svc.Catalog.UncategorizedTab.Name;
-        _lastDataVersion = Svc.Catalog.DataVersion;
+            _selectedCategoryId = Svc.Get<CatalogService>().UncategorizedTab.Name;
+        _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
         ResetScrollToTop(_setListNode);
     }
 
@@ -362,6 +365,7 @@ internal unsafe class LogWindow : NativeAddon {
         }
         catch { }
 
+        _setListSortControl?.SortDropDown.OnOptionSelected = null;
         _midListHeader = null;
         _setListSortControl = null;
         _filterSettingsButton = null;
@@ -403,10 +407,10 @@ internal unsafe class LogWindow : NativeAddon {
     }
 
     private List<string> BuildOrderedCategoryPaneList() {
-        var r = new List<string> { Svc.Catalog.UncategorizedTab.Name };
-        foreach (var (category, _) in Svc.Catalog.OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
+        var r = new List<string> { Svc.Get<CatalogService>().UncategorizedTab.Name };
+        foreach (var (category, _) in Svc.Get<CatalogService>().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
             r.Add(category.Name);
-        r.Add(Svc.Catalog.UnobtainableTab.Name);
+        r.Add(Svc.Get<CatalogService>().UnobtainableTab.Name);
         return r;
     }
 
@@ -443,7 +447,7 @@ internal unsafe class LogWindow : NativeAddon {
             button.LabelNode.LineSpacing = 20;
             button.LabelNode.AlignmentType = AlignmentType.Left;
             button.LabelNode.TextColor = CategoryNameGold;
-            button.LabelNode.String = Svc.Catalog.DisplayLabelForCategory(captured);
+            button.LabelNode.String = Svc.Get<CatalogService>().DisplayLabelForCategory(captured);
             button.LabelNode.AddTextFlags(TextFlags.Emboss, TextFlags.Ellipsis);
 
             var countNode = new TextNode {
@@ -495,7 +499,7 @@ internal unsafe class LogWindow : NativeAddon {
     }
 
     private List<GlamourSet> CategoryRows(string categoryId)
-        => Svc.Catalog.GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
+        => Svc.Get<CatalogService>().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
 
     private void RefreshRows() {
         if (_setListNode is null || _statsSetsLine is null || _statsSpaceLine is null)
@@ -508,10 +512,10 @@ internal unsafe class LogWindow : NativeAddon {
             return;
         }
 
-        var ownedItems = Svc.Ownership.GetOwnedItems();
-        var ownedSets = Svc.Ownership.GetOwnedSets(ownedItems);
+        var ownedItems = Svc.Get<OwnershipService>().GetOwnedItems();
+        var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(ownedItems);
 
-        var totalObtainable = Svc.Catalog.GlamourSets.Count(x => !x.IsUnobtainable || ownedSets.Contains(x));
+        var totalObtainable = Svc.Get<CatalogService>().GlamourSets.Count(x => !x.IsUnobtainable || ownedSets.Contains(x));
         _statsSetsLine.String = $"{ownedSets.Count} / {totalObtainable}";
         _statsSpaceLine.String = $"{ownedSets.Sum(x => x.Items.Count - 1)}";
 
@@ -519,7 +523,7 @@ internal unsafe class LogWindow : NativeAddon {
             if (!_categoryButtonMap.TryGetValue(btn, out var categoryId))
                 continue;
 
-            btn.LabelNode.String = Svc.Catalog.DisplayLabelForCategory(categoryId);
+            btn.LabelNode.String = Svc.Get<CatalogService>().DisplayLabelForCategory(categoryId);
             btn.Selected = categoryId == _selectedCategoryId;
             if (_categoryCountByButton.TryGetValue(btn, out var countNode)) {
                 var cr = CategoryRows(categoryId);
@@ -528,9 +532,7 @@ internal unsafe class LogWindow : NativeAddon {
         }
         SyncCategoryCountLayouts();
 
-        var config = Svc.Config;
-
-        var rows = GetFilteredRows(config, ownedSets, ownedItems);
+        var rows = GetFilteredRows(ownedSets, ownedItems);
 
         if (_selectedSet != null && !rows.Contains(_selectedSet)) {
             _selectedSet = null;
@@ -540,9 +542,9 @@ internal unsafe class LogWindow : NativeAddon {
         _setListOptions.Clear();
         foreach (var set in rows) {
             try {
-                var setStorageState = Svc.Ownership.GetSetStorageState(set, ownedItems);
+                var setStorageState = Svc.Get<OwnershipService>().GetSetStorageState(set, ownedItems);
                 var showStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire;
-                var showArmoireWarning = Svc.Ownership.SetHasArmoireMisplacementWarning(set, ownedItems, Svc.Catalog.ArmoireItemIds);
+                var showArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, ownedItems, Svc.Get<CatalogService>().ArmoireItemIds);
                 _setListOptions.Add(new SetListRowData {
                     Set = set,
                     Title = set.Name,
@@ -556,7 +558,7 @@ internal unsafe class LogWindow : NativeAddon {
                 });
             }
             catch (Exception ex) {
-                Svc.PluginLog.Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
+                Svc.Log.Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
             }
         }
 
@@ -567,34 +569,50 @@ internal unsafe class LogWindow : NativeAddon {
         }
     }
 
-    private List<GlamourSet> GetFilteredRows(Configuration? config, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
+    private List<GlamourSet> GetFilteredRows(HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
         var searchRaw = _gatheringNoteSearch?.Input.String.ToString() ?? string.Empty;
         var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
-        var rows = searchTrimmed.Length > 0 ? [.. Svc.Catalog.GlamourSets] : CategoryRows(_selectedCategoryId);
+        var rows = searchTrimmed.Length > 0 ? [.. Svc.Get<CatalogService>().GlamourSets] : CategoryRows(_selectedCategoryId);
 
-        if (config != null) {
-            if (config.HideCompleted)
-                rows = [.. rows.Where(r => !ownedSets.Contains(r))];
+        if (C.HideCompleted)
+            rows = [.. rows.Where(r => !ownedSets.Contains(r))];
 
-            var hasPositiveFilters = config.HideNonPartials || config.HideUnaffordable || config.HideUnready || config.HideNoMarketboard;
-            if (hasPositiveFilters) {
-                var inventoryOnly = config.HideUnready ? Svc.Ownership.GetInventoryItemsOnly() : null;
-                rows = [.. rows.Where(r =>
-                    (!config.HideNonPartials || Svc.Ownership.IsPartiallyCompleted(r, ownedSets, ownedItems)) &&
-                    (!config.HideUnaffordable || Svc.Ownership.CanAffordAllMissingGearPieces(r, ownedItems)) &&
-                    (!config.HideUnready || (inventoryOnly is not null && OwnershipService.SetHasPieceInPlayerInventory(r, inventoryOnly))) &&
-                    (!config.HideNoMarketboard || Svc.Ownership.IsMarketboardPurchasable(r))
-                )];
-            }
-
-            if (config.ShowOnlyMisplaced)
-                rows = [.. rows.Where(r => Svc.Ownership.SetHasArmoireMisplacementWarning(r, ownedItems, Svc.Catalog.ArmoireItemIds))];
+        var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
+        if (hasPositiveFilters) {
+            var inventoryOnly = C.HideUnready ? Svc.Get<OwnershipService>().GetInventoryItemsOnly() : null;
+            rows = [.. rows.Where(r =>
+                (!C.HideNonPartials || Svc.Get<OwnershipService>().IsPartiallyCompleted(r, ownedSets, ownedItems)) &&
+                (!C.HideUnaffordable || Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(r, ownedItems)) &&
+                (!C.HideUnready || (inventoryOnly is not null && OwnershipService.SetHasPieceInPlayerInventory(r, inventoryOnly))) &&
+                (!C.HideNoMarketboard || Svc.Get<OwnershipService>().IsMarketboardPurchasable(r))
+            )];
         }
+
+        if (C.ShowOnlyMisplaced)
+            rows = [.. rows.Where(r => Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(r, ownedItems, Svc.Get<CatalogService>().ArmoireItemIds))];
 
         if (searchTrimmed.Length > 0)
             rows = [.. rows.Where(r => SetMatchesSearch(r, searchTrimmed))];
 
-        return rows;
+        return ApplySetListSort(rows);
+    }
+
+    private void OnSetListSortModeSelected(GlamourSetSortMode mode) {
+        if (C.SetListSortMode == mode)
+            return;
+        C.SetListSortMode = mode;
+        C.Save();
+        RefreshListsAndDetails();
+    }
+
+    private static List<GlamourSet> ApplySetListSort(List<GlamourSet> rows) {
+        var mode = C.SetListSortMode;
+        return mode switch {
+            GlamourSetSortMode.AlphabeticalAscending => [.. rows.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+            GlamourSetSortMode.ItemLevelDescending => [.. rows.OrderByDescending(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+            GlamourSetSortMode.PatchDescending => [.. rows.OrderByDescending(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+            _ => rows,
+        };
     }
 
     private static bool SetMatchesSearch(GlamourSet set, string query) {
@@ -611,7 +629,7 @@ internal unsafe class LogWindow : NativeAddon {
             _sourceFilterPieceItemId = null;
 
         _detailRowOptions.Clear();
-        var inventoryItems = Svc.Ownership.GetInventoryItemsOnly();
+        var inventoryItems = Svc.Get<OwnershipService>().GetInventoryItemsOnly();
 
         if (_selectedSet == null) {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
@@ -627,7 +645,7 @@ internal unsafe class LogWindow : NativeAddon {
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = setJournalLine });
 
         var items = _selectedSet.Items;
-        var selectedSetStorageState = Svc.Ownership.GetSetStorageState(_selectedSet, ownedItems);
+        var selectedSetStorageState = Svc.Get<OwnershipService>().GetSetStorageState(_selectedSet, ownedItems);
         foreach (var itemId in items) {
             var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState);
             var iconPart = StorageIconPartFor(storageState);
@@ -640,7 +658,7 @@ internal unsafe class LogWindow : NativeAddon {
                 ShowInventoryBadge = iconPart is null && inventoryItems.Contains(itemId),
                 ShowArmoireWarning =
                     storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose
-                    && Svc.Catalog.ArmoireItemIds.Contains(itemId),
+                    && Svc.Get<CatalogService>().ArmoireItemIds.Contains(itemId),
             });
         }
 
@@ -665,7 +683,7 @@ internal unsafe class LogWindow : NativeAddon {
         }
 
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources" });
-        var hierarchy = Svc.Catalog.GetDutyChestSourceHierarchy(_selectedSet, _sourceFilterPieceItemId);
+        var hierarchy = Svc.Get<CatalogService>().GetDutyChestSourceHierarchy(_selectedSet, _sourceFilterPieceItemId);
         if (hierarchy.Count == 0) {
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.EmptyHint,
@@ -710,7 +728,7 @@ internal unsafe class LogWindow : NativeAddon {
         totals = [];
         IEnumerable<uint> pieceIds = pieceFilterPieceItemId is { } only ? [only] : set.Items;
         foreach (var itemId in pieceIds) {
-            foreach (var (cid, amt) in Svc.Catalog.GetPrimaryItemCosts(itemId, Svc.Catalog.CategoryNameForPrimaryCostLookup(set))) {
+            foreach (var (cid, amt) in Svc.Get<CatalogService>().GetPrimaryItemCosts(itemId, Svc.Get<CatalogService>().CategoryNameForPrimaryCostLookup(set))) {
                 totals.TryGetValue(cid, out var t);
                 totals[cid] = t + amt;
             }
@@ -726,14 +744,21 @@ internal unsafe class LogWindow : NativeAddon {
 
     private string SetSublineText(GlamourSet set, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
         var n = set.Items.Count;
-        var c = Svc.Ownership.GetOwnedPieceCountForSet(set, ownedItems);
+        var c = Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, ownedItems);
+        string core;
         if (ownedSets.Contains(set))
-            return $"Obt. {n}/{n}";
-        if (n == 0)
-            return "Obt. 0/0";
-        if (c == n)
-            return "Completable";
-        return $"Obt. {c}/{n}";
+            core = $"Obt. {n}/{n}";
+        else if (n == 0)
+            core = "Obt. 0/0";
+        else if (c == n)
+            core = "Completable";
+        else
+            core = $"Obt. {c}/{n}";
+
+        var patchLabel = set.SortPatchNo == 0m
+            ? "Patch —"
+            : $"Patch {set.SortPatchNo.ToString(CultureInfo.InvariantCulture)}";
+        return $"{core} · {patchLabel}";
     }
 
     private static GlamourIconNode.IconPart? StorageIconPartFor(ItemStorageState storageState)
@@ -745,5 +770,5 @@ internal unsafe class LogWindow : NativeAddon {
         };
 
     private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState)
-        => Svc.Ownership.GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState);
+        => Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState);
 }

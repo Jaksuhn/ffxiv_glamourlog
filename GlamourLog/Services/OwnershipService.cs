@@ -24,8 +24,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     private void OnArmoireChanged() {
-        Svc.Catalog.OnArmoireChanged();
-        Svc.Catalog.NotifyDisplayedOwnershipMayHaveChanged();
+        Svc.Get<CatalogService>().OnArmoireChanged();
+        Svc.Get<CatalogService>().NotifyDisplayedOwnershipMayHaveChanged();
     }
 
     internal bool CanAffordAllMissingGearPieces(GlamourSet glamourSet, HashSet<uint> ownedItems) {
@@ -34,7 +34,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         foreach (var itemId in glamourSet.Items) {
             if (ownedItems.Contains(itemId))
                 continue;
-            var costs = Svc.Catalog.CostsLookup.GetItemCosts(itemId);
+            var costs = Svc.Get<CatalogService>().CostsLookup.GetItemCosts(itemId);
             if (costs.Count == 0)
                 return false;
             var cost = costs[0];
@@ -88,7 +88,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     internal HashSet<uint> GetOwnedItems() {
         var dresserItemIds = GetDresserStoredItemIds();
-        var setTokens = Svc.Catalog.GlamourSets.Select(s => s.ItemId).ToHashSet();
+        var setTokens = Svc.Get<CatalogService>().GlamourSets.Select(s => s.ItemId).ToHashSet();
         HashSet<uint> ownedItems = [.. dresserItemIds.Where(id => !setTokens.Contains(id))];
 
         var inventoryManager = InventoryManager.Instance();
@@ -116,7 +116,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
     internal HashSet<GlamourSet> GetOwnedSets(HashSet<uint> ownedItems) {
         var dresserItemIds = GetDresserStoredItemIds();
         var ownedSets = new HashSet<GlamourSet>();
-        foreach (var set in Svc.Catalog.GlamourSets) {
+        foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
             var fullByPieces = GetOwnedPieceCountForSet(set, ownedItems) == set.Items.Count;
             var fullByMirage = dresserItemIds.Contains(set.ItemId) && IsFullMirageOutfit(set);
             if (fullByPieces || fullByMirage)

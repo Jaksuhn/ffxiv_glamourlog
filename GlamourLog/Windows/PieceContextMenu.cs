@@ -15,7 +15,7 @@ internal static unsafe class PieceContextMenu {
         var itemName = item.Name.ToString();
         menu.Clear();
 
-        menu.AddItem(Addon.GetRow(4379).Text, () => Svc.CommandManager.ProcessCommand($"/isearch {EscapeText(itemName)}"));
+        menu.AddItem(Addon.GetRow(4379).Text, () => Svc.Chat.ExecuteCommand($"/isearch {EscapeText(itemName)}"));
         menu.AddItem("Link Item In Chat", () => {
             try { Svc.Chat.Print(SeString.CreateItemLink(itemId, false)); } catch { }
         });
@@ -27,11 +27,11 @@ internal static unsafe class PieceContextMenu {
         }
 
         if (!item.IsUntradable) {
-            if (Svc.PluginInterface.IsPluginLoaded("MarketBoardPlugin")) {
-                menu.AddItem("Open In MarketBoardPlugin", () => Svc.CommandManager.ProcessCommand($"/pmb {itemId}"));
+            if (Svc.Interface.IsPluginLoaded("MarketBoardPlugin")) {
+                menu.AddItem("Open In MarketBoardPlugin", () => Svc.Commands.ProcessCommand($"/pmb {itemId}"));
             }
-            if (Svc.PluginInterface.IsPluginLoaded("vmarket")) {
-                menu.AddItem("Open In vmarket", () => Svc.CommandManager.ProcessCommand($"/vmarket {itemId}"));
+            if (Svc.Interface.IsPluginLoaded("vmarket")) {
+                menu.AddItem("Open In vmarket", () => Svc.Commands.ProcessCommand($"/vmarket {itemId}"));
             }
         }
 

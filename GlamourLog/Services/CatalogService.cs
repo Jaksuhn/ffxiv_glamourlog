@@ -88,13 +88,13 @@ internal sealed unsafe class CatalogService : IDisposable {
                 _catalogBuilt = true;
             }
             Interlocked.Exchange(ref _pendingListRefresh, 1);
-            Svc.Windows.RefreshLogWindow();
+            Svc.Get<WindowsService>().RefreshLogWindow();
         }
         catch (OperationCanceledException) {
             // cancelled by logout / disable / superseded build
         }
         catch (Exception ex) {
-            Svc.PluginLog.Error(ex, $"{nameof(CatalogService)} catalog build");
+            Svc.Log.Error(ex, $"{nameof(CatalogService)} catalog build");
         }
     }
 
@@ -102,10 +102,10 @@ internal sealed unsafe class CatalogService : IDisposable {
 
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
 
-    internal void MarkLogWindowDirty() => Svc.Windows.RefreshLogWindow();
+    internal void MarkLogWindowDirty() => Svc.Get<WindowsService>().RefreshLogWindow();
 
     /// <summary> Inventory / dresser changes that affect ownership or counts shown in the main log window. </summary>
-    internal void NotifyDisplayedOwnershipMayHaveChanged() => Svc.Windows.RefreshLogWindow();
+    internal void NotifyDisplayedOwnershipMayHaveChanged() => Svc.Get<WindowsService>().RefreshLogWindow();
 
     /// <summary> Real outfit tabs (excludes synthetic uncategorized / unobtainable rows).</summary>
     internal IReadOnlyList<OutfitCategory> OutfitCategories => _catalog.ClassifiableCategories;
@@ -275,10 +275,10 @@ internal sealed unsafe class CatalogService : IDisposable {
             var missing = sourceRowIds.Where(id => !classifiedRowIds.Contains(id)).OrderBy(id => id).ToList();
             var preview = string.Join(", ", missing.Take(80));
             var suffix = missing.Count > 80 ? " ..." : string.Empty;
-            Svc.PluginLog.Warning($"[{nameof(CatalogService)}] Coverage gap: source={sourceRowIds.Count}, classified={classifiedRowIds.Count}, missing={missing.Count}. Missing MirageStoreSetItem rowIds: {preview}{suffix}");
+            Svc.Log.Warning($"[{nameof(CatalogService)}] Coverage gap: source={sourceRowIds.Count}, classified={classifiedRowIds.Count}, missing={missing.Count}. Missing MirageStoreSetItem rowIds: {preview}{suffix}");
         }
         catch (Exception ex) {
-            Svc.PluginLog.Error(ex, $"[{nameof(CatalogService)}] mirage coverage diagnostics");
+            Svc.Log.Error(ex, $"[{nameof(CatalogService)}] mirage coverage diagnostics");
         }
     }
 }
