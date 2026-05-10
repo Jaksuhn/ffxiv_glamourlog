@@ -19,7 +19,7 @@ internal sealed class GlamourSet {
     public required IReadOnlyList<uint> Items { get; init; }
     /// <summary> From <see cref="Sheets.Item.LevelItem"/> on the set token row; used for list sorting. </summary>
     public required uint SortItemLevel { get; init; }
-    /// <summary> From supplemental <see cref="LuminaSupplemental.Excel.Model.ItemPatch"/> for a <see cref="Items"/> piece (set token <see cref="ItemId"/> is not in patch ranges); used for list sorting. </summary>
+    /// <summary> From <see cref="AllaganLib.GameSheets.Sheets.ItemSheet.GetItemPatch"/> over set pieces (mirage token <see cref="ItemId"/> is not an item row); used for list sorting. </summary>
     public required decimal SortPatchNo { get; init; }
 }
 

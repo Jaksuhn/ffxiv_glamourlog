@@ -14,9 +14,10 @@ namespace GlamourLog;
  * Try On should clear the existing items
  */
 public sealed class Plugin : IAsyncDalamudPlugin {
+    public static Configuration C { get; set; } = null!;
+
     [PluginService] private static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     private readonly string[] _commands = ["/glamourlog", "/gl"];
-    public static Configuration C { get; set; } = null!;
 
     public async Task LoadAsync(CancellationToken cancellationToken) {
         PluginInterface.Create<Svc>();

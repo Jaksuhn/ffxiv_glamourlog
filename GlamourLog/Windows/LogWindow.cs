@@ -755,10 +755,16 @@ internal unsafe class LogWindow : NativeAddon {
         else
             core = $"Obt. {c}/{n}";
 
-        var patchLabel = set.SortPatchNo == 0m
-            ? "Patch —"
-            : $"Patch {set.SortPatchNo.ToString(CultureInfo.InvariantCulture)}";
-        return $"{core} · {patchLabel}";
+        string? sortHint = C.SetListSortMode switch {
+            GlamourSetSortMode.PatchDescending => set.SortPatchNo == 0m
+                ? "Patch —"
+                : $"Patch {set.SortPatchNo.ToString(CultureInfo.InvariantCulture)}",
+            GlamourSetSortMode.ItemLevelDescending => set.SortItemLevel == 0
+                ? "iLvl —"
+                : $"iLvl {set.SortItemLevel}",
+            _ => null,
+        };
+        return sortHint is null ? core : $"{core} · {sortHint}";
     }
 
     private static GlamourIconNode.IconPart? StorageIconPartFor(ItemStorageState storageState)
