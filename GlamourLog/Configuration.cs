@@ -12,6 +12,7 @@ public class Configuration : IPluginConfiguration {
     public bool HideUnaffordable { get; set; }
     public bool HideUnready { get; set; }
     public bool HideNoMarketboard { get; set; }
+    public bool ShowOnlyMisplaced { get; set; }
 
     public void Save() => Svc.PluginInterface.SavePluginConfig(this);
 }

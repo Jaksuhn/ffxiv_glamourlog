@@ -522,9 +522,7 @@ internal unsafe class LogWindow : NativeAddon {
             try {
                 var setStorageState = Svc.Ownership.GetSetStorageState(set, ownedItems);
                 var showStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire;
-                var showArmoireWarning =
-                    setStorageState is SetStorageState.Dresser &&
-                    set.Items.Any(Svc.Catalog.ArmoireItemIds.Contains);
+                var showArmoireWarning = Svc.Ownership.SetHasArmoireMisplacementWarning(set, ownedItems, Svc.Catalog.ArmoireItemIds);
                 _setListOptions.Add(new SetListRowData {
                     Set = set,
                     Title = set.Name,
@@ -568,6 +566,9 @@ internal unsafe class LogWindow : NativeAddon {
                     (!config.HideNoMarketboard || Svc.Ownership.IsMarketboardPurchasable(r))
                 )];
             }
+
+            if (config.ShowOnlyMisplaced)
+                rows = [.. rows.Where(r => Svc.Ownership.SetHasArmoireMisplacementWarning(r, ownedItems, Svc.Catalog.ArmoireItemIds))];
         }
 
         if (searchTrimmed.Length > 0)
@@ -595,7 +596,6 @@ internal unsafe class LogWindow : NativeAddon {
         if (_selectedSet == null) {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" });
-            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.EmptyHint, PrimaryText = "Select a set from the list to view pieces." });
             _detailRowsListNode.OptionsList = [.. _detailRowOptions];
             return;
         }
@@ -724,19 +724,6 @@ internal unsafe class LogWindow : NativeAddon {
             _ => null,
         };
 
-    private ItemStorageState ResolvePieceStorageState(
-        uint itemId,
-        SetStorageState setStorageState) {
-        var direct = Svc.Ownership.GetItemStorageState(itemId, _selectedSet);
-        if (direct is not ItemStorageState.None)
-            return direct;
-
-        return setStorageState switch {
-            SetStorageState.Armoire => ItemStorageState.Armoire,
-            SetStorageState.Dresser => ItemStorageState.DresserSet,
-            SetStorageState.Mixed when Svc.Ownership.GetItemStorageState(itemId, null) is ItemStorageState.Armoire => ItemStorageState.Armoire,
-            SetStorageState.Mixed => ItemStorageState.DresserSet,
-            _ => ItemStorageState.None,
-        };
-    }
+    private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState)
+        => Svc.Ownership.GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState);
 }

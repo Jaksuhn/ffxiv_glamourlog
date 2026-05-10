@@ -195,6 +195,35 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return SetStorageState.None;
     }
 
+    /// <summary> Piece storage as shown in set details (mirage slot, loose dresser, armoire, or none). </summary>
+    internal ItemStorageState GetPieceDisplayStorageState(uint itemId, GlamourSet set, SetStorageState setStorageState) {
+        var direct = GetItemStorageState(itemId, set);
+        if (direct is not ItemStorageState.None)
+            return direct;
+
+        return setStorageState switch {
+            SetStorageState.Armoire => ItemStorageState.Armoire,
+            SetStorageState.Dresser => ItemStorageState.DresserSet,
+            SetStorageState.Mixed when GetItemStorageState(itemId, null) is ItemStorageState.Armoire => ItemStorageState.Armoire,
+            SetStorageState.Mixed => ItemStorageState.DresserSet,
+            _ => ItemStorageState.None,
+        };
+    }
+
+    /// <summary> True when the set list or any piece row would show the armoire (dresser) misplacement badge. </summary>
+    internal bool SetHasArmoireMisplacementWarning(GlamourSet set, HashSet<uint> ownedItems, HashSet<uint> armoireItemIds) {
+        var setStorageState = GetSetStorageState(set, ownedItems);
+        if (setStorageState is SetStorageState.Dresser && set.Items.Any(armoireItemIds.Contains))
+            return true;
+        foreach (var itemId in set.Items) {
+            var pieceState = GetPieceDisplayStorageState(itemId, set, setStorageState);
+            if (pieceState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && armoireItemIds.Contains(itemId))
+                return true;
+        }
+
+        return false;
+    }
+
     internal int GetOwnedPieceCountForSet(GlamourSet set, HashSet<uint>? ownedItems = null) {
         var effectiveOwned = ownedItems ?? GetOwnedItems();
         var count = 0;

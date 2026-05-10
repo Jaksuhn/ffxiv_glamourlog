@@ -9,7 +9,7 @@ namespace GlamourLog;
 /// <summary> Filter window for set-list toggles (opened from the main log window cog). </summary>
 internal unsafe class FilterWindow : NativeAddon {
     public const float WindowWidth = 456f;
-    public const float WindowHeight = 276f;
+    public const float WindowHeight = 250f;
     private readonly List<CheckboxNode> _checkboxes = [];
     private TextButtonNode? _okButton;
     private bool _hasPendingScreenOrigin;
@@ -60,12 +60,13 @@ internal unsafe class FilterWindow : NativeAddon {
         var y = start.Y + 8f;
         const float rowHeight = 20f;
 
-        void AddCheckbox(string label, Func<Configuration, bool> read, Action<Configuration> flip) {
+        void AddCheckbox(string label, string tooltip, Func<Configuration, bool> read, Action<Configuration> flip) {
             CheckboxNode cb = null!;
             cb = new CheckboxNode {
                 Position = new Vector2(x, y),
                 Size = new Vector2(rowWidth, rowHeight),
                 String = label,
+                TextTooltip = tooltip,
                 IsChecked = read(config),
                 OnClick = _ => {
                     flip(config);
@@ -79,16 +80,42 @@ internal unsafe class FilterWindow : NativeAddon {
             cb.AttachNode(this);
         }
 
-        AddCheckbox("Hide completed sets", c => c.HideCompleted, c => c.HideCompleted ^= true);
-        AddCheckbox("Hide unstarted sets", c => c.HideNonPartials, c => c.HideNonPartials ^= true);
-        AddCheckbox("Hide sets with no pieces in inventory", c => c.HideUnready, c => c.HideUnready ^= true);
-        AddCheckbox("Hide unaffordable sets", c => c.HideUnaffordable, c => c.HideUnaffordable ^= true);
-        AddCheckbox("Hide sets not found on the marketboard", c => c.HideNoMarketboard, c => c.HideNoMarketboard ^= true);
+        AddCheckbox(
+            "Hide completed",
+            "Hide sets where every piece is owned",
+            c => c.HideCompleted,
+            c => c.HideCompleted ^= true);
+        AddCheckbox(
+            "Hide uncontributable",
+            "Hide sets where no piece is in your inventory to contribute to the set",
+            c => c.HideUnready,
+            c => c.HideUnready ^= true);
+        AddCheckbox(
+            "Show only affordable sets",
+            "Show only sets where you can afford the currency cost of all pieces",
+            c => c.HideUnaffordable,
+            c => c.HideUnaffordable ^= true);
+        AddCheckbox(
+            "Show only tradeable",
+            "Show only sets whose pieces can be bought on the marketboard or traded",
+            c => c.HideNoMarketboard,
+            c => c.HideNoMarketboard ^= true);
+        AddCheckbox(
+            "Show only started",
+            "Show only sets that are partially completed",
+            c => c.HideNonPartials,
+            c => c.HideNonPartials ^= true);
+        AddCheckbox(
+            "Show only misplaced",
+            "Show only sets that have pieces in the dresser that could be stored in the armoire",
+            c => c.ShowOnlyMisplaced,
+            c => c.ShowOnlyMisplaced ^= true);
 
         const float okWidth = 150f;
         const float okHeight = 28f;
         var bottomPad = 10f;
-        var checklistBottom = start.Y + 8f + 5f * (rowHeight + 2f);
+        var checkboxCount = 6;
+        var checklistBottom = start.Y + 8f + checkboxCount * (rowHeight + 2f);
         var okY = start.Y + ContentSize.Y - okHeight - bottomPad;
         var minOkY = checklistBottom + 8f;
         if (okY < minOkY)
@@ -110,16 +137,17 @@ internal unsafe class FilterWindow : NativeAddon {
     }
 
     protected override void OnUpdate(AtkUnitBase* addon) {
-        if (_checkboxes.Count < 5) {
+        if (_checkboxes.Count < 6) {
             base.OnUpdate(addon);
             return;
         }
 
         _checkboxes[0].IsChecked = Svc.Config.HideCompleted;
-        _checkboxes[1].IsChecked = Svc.Config.HideNonPartials;
-        _checkboxes[2].IsChecked = Svc.Config.HideUnready;
-        _checkboxes[3].IsChecked = Svc.Config.HideUnaffordable;
-        _checkboxes[4].IsChecked = Svc.Config.HideNoMarketboard;
+        _checkboxes[1].IsChecked = Svc.Config.HideUnready;
+        _checkboxes[2].IsChecked = Svc.Config.HideUnaffordable;
+        _checkboxes[3].IsChecked = Svc.Config.HideNoMarketboard;
+        _checkboxes[4].IsChecked = Svc.Config.HideNonPartials;
+        _checkboxes[5].IsChecked = Svc.Config.ShowOnlyMisplaced;
 
         base.OnUpdate(addon);
     }
