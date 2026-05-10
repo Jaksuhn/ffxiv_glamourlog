@@ -14,6 +14,8 @@ internal unsafe class LogWindow : NativeAddon {
     private readonly FilterWindow _filterWindow;
     private readonly List<string> _categoryPaneOrder = [];
 
+    private ResNode? _midListHeader;
+    private SetListSortControlNode? _setListSortControl;
     private CircleButtonNode? _filterSettingsButton;
     private GatheringNoteSearchNode? _gatheringNoteSearch;
     private TextNode? _categoryColumnHeading;
@@ -142,14 +144,30 @@ internal unsafe class LogWindow : NativeAddon {
         var midListTop = alignTop + FilterCogSize + 4f;
         var midListHeight = listBottom - midListTop;
 
+        var midHeaderWidth = middleWidth - 8f;
+        var midHeaderLeft = midColLeft + 4f;
+        var filterRelX = middleWidth - FilterCogSize - leftPad - 4f;
+        var sortRelX = filterRelX - 4f - FilterCogSize;
+
+        _midListHeader = new ResNode {
+            Position = new Vector2(midHeaderLeft, alignTop),
+            Size = new Vector2(midHeaderWidth, FilterCogSize),
+        };
+        _midListHeader.AttachNode(this);
+
+        _setListSortControl = new SetListSortControlNode {
+            Position = new Vector2(sortRelX, 0f),
+        };
+        _setListSortControl.AttachNode(_midListHeader);
+
         _filterSettingsButton = new CircleButtonNode {
             Icon = ButtonIcon.GearCog,
             TextTooltip = "Set list filters",
             Size = new Vector2(FilterCogSize, FilterCogSize),
-            Position = new Vector2(midColLeft + middleWidth - FilterCogSize - leftPad, alignTop),
+            Position = new Vector2(filterRelX, 0f),
             OnClick = () => { _filterWindow.OpenOrToggleNear(ComputeFilterWindowScreenOrigin()); },
         };
-        _filterSettingsButton.AttachNode(this);
+        _filterSettingsButton.AttachNode(_midListHeader);
 
         var statsWidth = 180f;
         var statsRightX = contentStart.X + contentSize.X - 4f;
@@ -344,6 +362,8 @@ internal unsafe class LogWindow : NativeAddon {
         }
         catch { }
 
+        _midListHeader = null;
+        _setListSortControl = null;
         _filterSettingsButton = null;
         _gatheringNoteSearch = null;
         _categoryColumnHeading = null;
