@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -37,6 +38,8 @@ internal unsafe class LogWindow : NativeAddon {
     private uint? _sourceFilterPieceItemId;
     private bool _isFinalizing;
     private bool _pendingRefreshListsAndDetails;
+    /// <summary> Re-sort and rebuild middle set list only (ownership unchanged); skips details column and category stats. </summary>
+    private bool _pendingRebuildSetListOrderOnly;
     private bool _pendingPaintDetailsOnly;
     private bool _pendingResetSetScroll;
     private bool _pendingResetDetailScroll;
@@ -102,8 +105,9 @@ internal unsafe class LogWindow : NativeAddon {
     private void PaintListsCore() {
         // Set/detail columns reuse pooled rows; never ScrollingListNode.Clear() hot paths — that disposes natives
         // and races AtkComponentScrollBar (same pattern as NativeMeters breakdown pooling).
-        RefreshRows();
-        RefreshDetails(Svc.Get<OwnershipService>().GetOwnedItems());
+        var ownedItems = Svc.Get<OwnershipService>().GetOwnedItems();
+        RefreshRows(ownedItems);
+        RefreshDetails(ownedItems);
     }
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {
@@ -148,7 +152,6 @@ internal unsafe class LogWindow : NativeAddon {
         var midHeaderWidth = middleWidth - 8f;
         var midHeaderLeft = midColLeft + 4f;
         var filterRelX = middleWidth - FilterCogSize - leftPad - 4f;
-        var sortRelX = filterRelX - 4f - FilterCogSize;
 
         _midListHeader = new ResNode {
             Position = new Vector2(midHeaderLeft, alignTop),
@@ -156,12 +159,14 @@ internal unsafe class LogWindow : NativeAddon {
         };
         _midListHeader.AttachNode(this);
 
-        _setListSortControl = new SetListSortControlNode {
-            Position = new Vector2(sortRelX, 0f),
+        _setListSortControl = new SetListSortControlNode(C.SetListSortDirection) {
+            Position = new Vector2(filterRelX - 4f - SetListSortControlNode.TotalWidth, 0f),
         };
         _setListSortControl.AttachNode(_midListHeader);
         _setListSortControl.SortDropDown.SelectedOption = C.SetListSortMode;
         _setListSortControl.SortDropDown.OnOptionSelected = OnSetListSortModeSelected;
+        _setListSortControl.SortDirectionButton.OnClick = OnSetListSortDirectionToggle;
+        SyncSortDirectionChrome();
 
         _filterSettingsButton = new CircleButtonNode {
             Icon = ButtonIcon.GearCog,
@@ -270,7 +275,12 @@ internal unsafe class LogWindow : NativeAddon {
             if (_pendingRefreshListsAndDetails) {
                 _pendingRefreshListsAndDetails = false;
                 _pendingPaintDetailsOnly = false;
+                _pendingRebuildSetListOrderOnly = false;
                 RefreshListsAndDetailsNow();
+            }
+            else if (_pendingRebuildSetListOrderOnly) {
+                _pendingRebuildSetListOrderOnly = false;
+                RebuildSetListOrderOnly();
             }
 
             if (_pendingPaintDetailsOnly) {
@@ -366,6 +376,7 @@ internal unsafe class LogWindow : NativeAddon {
         catch { }
 
         _setListSortControl?.SortDropDown.OnOptionSelected = null;
+        _setListSortControl?.SortDirectionButton.OnClick = null;
         _midListHeader = null;
         _setListSortControl = null;
         _filterSettingsButton = null;
@@ -501,7 +512,7 @@ internal unsafe class LogWindow : NativeAddon {
     private List<GlamourSet> CategoryRows(string categoryId)
         => Svc.Get<CatalogService>().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
 
-    private void RefreshRows() {
+    private void RefreshRows(HashSet<uint> ownedItems) {
         if (_setListNode is null || _statsSetsLine is null || _statsSpaceLine is null)
             return;
 
@@ -512,7 +523,6 @@ internal unsafe class LogWindow : NativeAddon {
             return;
         }
 
-        var ownedItems = Svc.Get<OwnershipService>().GetOwnedItems();
         var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(ownedItems);
 
         var totalObtainable = Svc.Get<CatalogService>().GlamourSets.Count(x => !x.IsUnobtainable || ownedSets.Contains(x));
@@ -531,6 +541,25 @@ internal unsafe class LogWindow : NativeAddon {
             }
         }
         SyncCategoryCountLayouts();
+
+        RepopulateSetListFromFilteredRows(ownedItems, ownedSets);
+    }
+
+    /// <summary> Middle column only: re-filter, re-sort, rebuild row models. Skips stats/category work (sort direction / order changes only). </summary>
+    private void RebuildSetListOrderOnly() {
+        if (_setListNode is null)
+            return;
+        if (ItemFinderModule.Instance() is null)
+            return;
+
+        var ownedItems = Svc.Get<OwnershipService>().GetOwnedItems();
+        var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(ownedItems);
+        RepopulateSetListFromFilteredRows(ownedItems, ownedSets);
+    }
+
+    private void RepopulateSetListFromFilteredRows(HashSet<uint> ownedItems, HashSet<GlamourSet> ownedSets) {
+        if (_setListNode is null)
+            return;
 
         var rows = GetFilteredRows(ownedSets, ownedItems);
 
@@ -601,16 +630,45 @@ internal unsafe class LogWindow : NativeAddon {
         if (C.SetListSortMode == mode)
             return;
         C.SetListSortMode = mode;
+        C.SetListSortDirection = mode.DefaultDirection();
         C.Save();
+        SyncSortDirectionChrome();
         RefreshListsAndDetails();
     }
 
+    private void OnSetListSortDirectionToggle() {
+        C.SetListSortDirection = C.SetListSortDirection == ListSortDirection.Ascending ? ListSortDirection.Descending : ListSortDirection.Ascending;
+        C.Save();
+        SyncSortDirectionChrome();
+        if (_isFinalizing || !IsOpen || !CanPaintLists())
+            return;
+        _pendingRebuildSetListOrderOnly = true;
+    }
+
+    private void SyncSortDirectionChrome() {
+        if (_setListSortControl is null)
+            return;
+        var btn = _setListSortControl.SortDirectionButton;
+        btn.Icon = SortDirectionButtonIcon(C.SetListSortDirection);
+        btn.TextTooltip = C.SetListSortDirection == ListSortDirection.Ascending ? Addon.GetRow(8043).Text : Addon.GetRow(8044).Text;
+    }
+
+    private static ButtonIcon SortDirectionButtonIcon(ListSortDirection direction)
+        => direction == ListSortDirection.Ascending ? ButtonIcon.UpArrow : ButtonIcon.ArrowDown;
+
     private static List<GlamourSet> ApplySetListSort(List<GlamourSet> rows) {
         var mode = C.SetListSortMode;
+        var asc = C.SetListSortDirection == ListSortDirection.Ascending;
         return mode switch {
-            GlamourSetSortMode.AlphabeticalAscending => [.. rows.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
-            GlamourSetSortMode.ItemLevelDescending => [.. rows.OrderByDescending(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
-            GlamourSetSortMode.PatchDescending => [.. rows.OrderByDescending(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+            GlamourSetSortMode.Alphabetical => asc
+                ? [.. rows.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
+                : [.. rows.OrderByDescending(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+            GlamourSetSortMode.ItemLevel => asc
+                ? [.. rows.OrderBy(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
+                : [.. rows.OrderByDescending(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+            GlamourSetSortMode.Patch => asc
+                ? [.. rows.OrderBy(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
+                : [.. rows.OrderByDescending(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
             _ => rows,
         };
     }
@@ -756,10 +814,10 @@ internal unsafe class LogWindow : NativeAddon {
             core = $"Obt. {c}/{n}";
 
         string? sortHint = C.SetListSortMode switch {
-            GlamourSetSortMode.PatchDescending => set.SortPatchNo == 0m
+            GlamourSetSortMode.Patch => set.SortPatchNo == 0m
                 ? "Patch —"
                 : $"Patch {set.SortPatchNo.ToString(CultureInfo.InvariantCulture)}",
-            GlamourSetSortMode.ItemLevelDescending => set.SortItemLevel == 0
+            GlamourSetSortMode.ItemLevel => set.SortItemLevel == 0
                 ? "iLvl —"
                 : $"iLvl {set.SortItemLevel}",
             _ => null,

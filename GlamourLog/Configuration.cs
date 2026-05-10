@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Dalamud.Configuration;
 using GlamourLog.Services;
 
@@ -14,7 +15,8 @@ public class Configuration : IPluginConfiguration {
     public bool HideNoMarketboard { get; set; }
     public bool ShowOnlyMisplaced { get; set; }
 
-    public GlamourSetSortMode SetListSortMode { get; set; } = GlamourSetSortMode.AlphabeticalAscending;
+    public GlamourSetSortMode SetListSortMode { get; set; } = GlamourSetSortMode.Alphabetical;
+    public ListSortDirection SetListSortDirection { get; set; } = ListSortDirection.Ascending;
 
     public void Save() => Svc.Interface.SavePluginConfig(this);
 }
