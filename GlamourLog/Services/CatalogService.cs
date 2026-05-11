@@ -1,3 +1,8 @@
+using AllaganLib.GameSheets.Caches;
+using AllaganLib.GameSheets.Extensions;
+using AllaganLib.GameSheets.ItemSources;
+using AllaganLib.GameSheets.Model;
+using AllaganLib.GameSheets.Sheets.Rows;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using System.Threading;
 using System.Threading.Tasks;
@@ -131,101 +136,235 @@ internal sealed unsafe class CatalogService : IDisposable {
         }
     }
 
-    /// <summary> Duty → chests → item ids for the Sources panel (gear in scope + <see cref="GetPrimaryItemCosts"/> currencies).</summary>
-    internal IReadOnlyList<DutyChestSourceGroup> GetDutyChestSourceHierarchy(GlamourSet set, uint? costScopePieceItemId) {
+    /// <summary> Source groups for the Sources panel (duty/fate/vendor) based on AllaganLib item sources for gear in scope + <see cref="GetPrimaryItemCosts"/> currencies.</summary>
+    internal IReadOnlyList<SourceGroup> GetSourceHierarchy(GlamourSet set, uint? costScopePieceItemId) {
         lock (_glamourDataLock) {
-            var prov = _catalog.ChestLootProvenanceByItemId;
-            var fateProv = _catalog.FateLootProvenanceByItemId;
-            if (prov.Count == 0 && fateProv.Count == 0)
+            var itemIds = BuildSourceScopeItemIds(set, costScopePieceItemId);
+            if (itemIds.Count == 0)
                 return [];
 
-            var cat = CategoryNameForPrimaryCostLookup(set);
-            var itemIds = new HashSet<uint>();
-            if (costScopePieceItemId is { } only) {
-                itemIds.Add(only);
-                foreach (var c in GetPrimaryItemCosts(only, cat))
-                    if (c.ItemId != 0)
-                        itemIds.Add(c.ItemId);
-            }
-            else {
-                foreach (var i in set.Items) {
-                    itemIds.Add(i);
-                    foreach (var c in GetPrimaryItemCosts(i, cat))
-                        if (c.ItemId != 0)
-                            itemIds.Add(c.ItemId);
-                }
-            }
+            var cache = Svc.SheetManager.ItemInfoCache;
+            var dutyItems = new Dictionary<uint, HashSet<uint>>();
+            var fateItems = new Dictionary<uint, HashSet<uint>>();
+            var npcVendors = new Dictionary<uint, NpcVendorAccumulator>();
+            var orphanShops = new Dictionary<(ItemInfoType Type, uint ShopId), OrphanShopAccumulator>();
 
-            var byDuty = new Dictionary<uint, Dictionary<byte, HashSet<uint>>>();
             foreach (var itemId in itemIds) {
-                if (!prov.TryGetValue(itemId, out var rows))
+                var sources = cache.GetItemSources(itemId);
+                if (sources is not { Count: > 0 })
                     continue;
-                foreach (var p in rows) {
-                    if (p.ContentFinderConditionId == 0)
-                        continue;
-                    if (!byDuty.TryGetValue(p.ContentFinderConditionId, out var chestMap)) {
-                        chestMap = [];
-                        byDuty[p.ContentFinderConditionId] = chestMap;
+                foreach (var source in sources) {
+                    switch (source) {
+                        case ItemDungeonSource duty when duty.ContentFinderCondition.RowId != 0:
+                            if (!dutyItems.TryGetValue(duty.ContentFinderCondition.RowId, out var dutySet)) {
+                                dutySet = [];
+                                dutyItems[duty.ContentFinderCondition.RowId] = dutySet;
+                            }
+                            dutySet.Add(itemId);
+                            break;
+                        case ItemFateSource fate when fate.Fate.RowId != 0:
+                            if (!fateItems.TryGetValue(fate.Fate.RowId, out var fateSet)) {
+                                fateSet = [];
+                                fateItems[fate.Fate.RowId] = fateSet;
+                            }
+                            fateSet.Add(itemId);
+                            break;
+                        case ItemShopSource shopSource when source.Type.IsShop():
+                            AddShopSourcesForItem(shopSource.Shop, source.Type, itemId, npcVendors, orphanShops);
+                            break;
+                        case ItemCashShopSource:
+                            var cKey = (ItemInfoType.CashShop, 0u);
+                            if (!orphanShops.TryGetValue(cKey, out var cashAcc)) {
+                                cashAcc = new OrphanShopAccumulator(
+                                    "Mog Station",
+                                    FormatShopTypeLabel(ItemInfoType.CashShop));
+                                orphanShops[cKey] = cashAcc;
+                            }
+                            cashAcc.ItemIds.Add(itemId);
+                            break;
                     }
-                    var key = p.ChestNo;
-                    if (!chestMap.TryGetValue(key, out var idSet)) {
-                        idSet = [];
-                        chestMap[key] = idSet;
-                    }
-                    idSet.Add(itemId);
                 }
             }
 
-            var byFate = new Dictionary<uint, HashSet<uint>>();
-            foreach (var itemId in itemIds) {
-                if (!fateProv.TryGetValue(itemId, out var fateRows))
+            var groups = new List<SourceGroup>();
+            foreach (var (cfcId, setItems) in dutyItems) {
+                if (ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true, Value.NameFormatted.Length: > 0, Value.NameFormatted: var dutyName })
                     continue;
-                foreach (var p in fateRows) {
-                    if (p.FateId == 0)
-                        continue;
-                    if (!byFate.TryGetValue(p.FateId, out var itemSet)) {
-                        itemSet = [];
-                        byFate[p.FateId] = itemSet;
-                    }
-                    itemSet.Add(itemId);
-                }
-            }
-
-            var groups = new List<DutyChestSourceGroup>();
-            foreach (var (cfcId, chestMap) in byDuty) {
-                if (ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true, Value.NameFormatted.Length: > 0, Value.NameFormatted: var dutyName } cfc)
-                    continue;
-
-                var chestRows = new List<ChestSourceRow>();
-                foreach (var kv in chestMap.OrderBy(x => x.Key)) {
-                    var chestNo = kv.Key;
-                    var sortedIds = kv.Value.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
-                    if (sortedIds.Count == 0)
-                        continue;
-                    chestRows.Add(new ChestSourceRow(chestNo, 0, sortedIds));
-                }
-
-                if (chestRows.Count == 0)
-                    continue;
-
-                groups.Add(new DutyChestSourceGroup(cfcId, dutyName, chestRows));
-            }
-
-            foreach (var (fateId, itemSet) in byFate) {
-                var fateRow = Fate.GetRow(fateId);
-                var fateName = fateRow.Name.ToString().Trim();
-                if (fateName.Length == 0)
-                    continue;
-                var sortedIds = itemSet.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
+                var sortedIds = setItems.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
                 if (sortedIds.Count == 0)
                     continue;
-                groups.Add(new DutyChestSourceGroup(1_000_000u + fateId, fateName, [new ChestSourceRow(0, uint.MaxValue, sortedIds)]));
+                groups.Add(new SourceGroup(
+                    SourceGroupKind.Duty,
+                    cfcId,
+                    dutyName,
+                    [new SourceRow("Duty Loot", string.Empty, sortedIds)]));
             }
 
-            groups.Sort((a, b) => string.Compare(a.DutyName, b.DutyName, StringComparison.Ordinal));
+            foreach (var (fateId, setItems) in fateItems) {
+                var fateName = Fate.GetRow(fateId).Name.ToString().Trim();
+                if (fateName.Length == 0)
+                    continue;
+                var sortedIds = setItems.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
+                if (sortedIds.Count == 0)
+                    continue;
+                groups.Add(new SourceGroup(
+                    SourceGroupKind.Fate,
+                    0,
+                    fateName,
+                    [new SourceRow("FATE Reward", string.Empty, sortedIds)]));
+            }
+
+            foreach (var acc in npcVendors.Values.OrderBy(a => a.Name, StringComparer.Ordinal)) {
+                var rows = new List<SourceRow>();
+                foreach (var kv in acc.Shops.OrderBy(e => e.Value.ShopName, StringComparer.Ordinal)) {
+                    var entry = kv.Value;
+                    var sortedIds = entry.ItemIds.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
+                    if (sortedIds.Count == 0)
+                        continue;
+                    rows.Add(new SourceRow(entry.ShopName, acc.NavigationText, sortedIds));
+                }
+                if (rows.Count == 0)
+                    continue;
+                groups.Add(new SourceGroup(SourceGroupKind.Vendor, 0, acc.Name, rows));
+            }
+
+            foreach (var acc in orphanShops.Values.OrderBy(a => a.HeaderName, StringComparer.Ordinal)) {
+                var sortedIds = acc.ItemIds.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
+                if (sortedIds.Count == 0)
+                    continue;
+                groups.Add(new SourceGroup(
+                    SourceGroupKind.Vendor,
+                    0,
+                    acc.HeaderName,
+                    [new SourceRow(acc.ShopLineLabel, acc.NavigationHint, sortedIds)]));
+            }
+
+            groups.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.Ordinal));
             return groups;
         }
     }
+
+    private static void AddShopSourcesForItem(
+        IShop shop,
+        ItemInfoType shopType,
+        uint itemId,
+        Dictionary<uint, NpcVendorAccumulator> npcVendors,
+        Dictionary<(ItemInfoType Type, uint ShopId), OrphanShopAccumulator> orphanShops) {
+        var shopKey = (shopType, shop.RowId);
+        var shopDisplayName = shop.Name.Trim();
+        if (string.IsNullOrEmpty(shopDisplayName))
+            shopDisplayName = FormatShopTypeLabel(shopType);
+
+        var npcList = shop.ENpcs.OfType<ENpcBaseRow>().Where(n => n.RowId != 0).ToList();
+        if (npcList.Count == 0) {
+            if (!orphanShops.TryGetValue(shopKey, out var orphan)) {
+                orphan = new OrphanShopAccumulator(shopDisplayName, shopDisplayName);
+                orphanShops[shopKey] = orphan;
+            }
+            orphan.ItemIds.Add(itemId);
+            return;
+        }
+
+        foreach (var npc in npcList) {
+            if (!npcVendors.TryGetValue(npc.RowId, out var acc))
+                acc = npcVendors[npc.RowId] = new NpcVendorAccumulator(npc);
+            if (!acc.Shops.TryGetValue(shopKey, out var entry)) {
+                entry = new ShopEntry(shopDisplayName);
+                acc.Shops[shopKey] = entry;
+            }
+            entry.ItemIds.Add(itemId);
+        }
+    }
+
+    private static string FormatNpcNavigation(ENpcBaseRow npc) {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var parts = new List<string>();
+        foreach (var loc in npc.Locations) {
+            if (loc is not NpcLocation n)
+                continue;
+            var mx = (int)Math.Round(n.MapX);
+            var my = (int)Math.Round(n.MapY);
+            var line = $"{n.TerritoryType.Value.PlaceName.Value.Name} ({mx}, {my})";
+            if (seen.Add(line))
+                parts.Add(line);
+        }
+        return parts.Count == 0 ? "Location unknown" : string.Join("; ", parts);
+    }
+
+    private sealed class NpcVendorAccumulator {
+        internal NpcVendorAccumulator(ENpcBaseRow npc) {
+            Npc = npc;
+            Name = npc.Name.Trim();
+            if (Name.Length == 0)
+                Name = $"NPC #{npc.RowId}";
+        }
+
+        internal ENpcBaseRow Npc { get; }
+        internal string Name { get; }
+        internal Dictionary<(ItemInfoType Type, uint ShopId), ShopEntry> Shops { get; } = [];
+        private string? _navigationText;
+        internal string NavigationText => _navigationText ??= FormatNpcNavigation(Npc);
+    }
+
+    private sealed class ShopEntry(string shopName) {
+        internal string ShopName { get; } = shopName;
+        internal HashSet<uint> ItemIds { get; } = [];
+    }
+
+    private sealed class OrphanShopAccumulator {
+        internal OrphanShopAccumulator(string headerName, string shopRowLabel) {
+            HeaderName = headerName;
+            ShopLineLabel = shopRowLabel;
+        }
+
+        internal string HeaderName { get; }
+        /// <summary>Shown on the row with item icons (typically the shop name).</summary>
+        internal string ShopLineLabel { get; }
+        internal string NavigationHint => "Location unknown";
+        internal HashSet<uint> ItemIds { get; } = [];
+    }
+
+    internal IReadOnlyList<ItemInfoType> GetSourceTypesForSet(GlamourSet set, uint? costScopePieceItemId) {
+        lock (_glamourDataLock) {
+            var itemIds = BuildSourceScopeItemIds(set, costScopePieceItemId);
+            if (itemIds.Count == 0)
+                return [];
+
+            var cache = Svc.SheetManager.ItemInfoCache;
+            var typeSet = new HashSet<ItemInfoType>();
+            foreach (var itemId in itemIds) {
+                var sources = cache.GetItemSources(itemId);
+                if (sources is not { Count: > 0 })
+                    continue;
+                foreach (var source in sources)
+                    typeSet.Add(source.Type);
+            }
+            return [.. typeSet.OrderBy(t => t.ToString(), StringComparer.Ordinal)];
+        }
+    }
+
+    private HashSet<uint> BuildSourceScopeItemIds(GlamourSet set, uint? costScopePieceItemId) {
+        var cat = CategoryNameForPrimaryCostLookup(set);
+        var itemIds = new HashSet<uint>();
+        if (costScopePieceItemId is { } only) {
+            itemIds.Add(only);
+            foreach (var c in GetPrimaryItemCosts(only, cat))
+                if (c.ItemId != 0)
+                    itemIds.Add(c.ItemId);
+        }
+        else {
+            foreach (var i in set.Items) {
+                itemIds.Add(i);
+                foreach (var c in GetPrimaryItemCosts(i, cat))
+                    if (c.ItemId != 0)
+                        itemIds.Add(c.ItemId);
+            }
+        }
+        return itemIds;
+    }
+
+    private static string FormatShopTypeLabel(ItemInfoType type)
+        => type.ToString().Replace("Shop", " Shop", StringComparison.Ordinal);
 
     internal List<(uint ItemId, uint Amount)> GetPrimaryItemCosts(uint itemId, string? categoryNameForDiscriminator) {
         var costs = CostsLookup.GetItemCosts(itemId);

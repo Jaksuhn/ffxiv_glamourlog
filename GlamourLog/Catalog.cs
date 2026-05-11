@@ -16,26 +16,19 @@ internal sealed class Catalog {
     public OutfitCategory UncategorizedBucket { get; }
     public OutfitCategory UnobtainableBucket { get; }
 
-    public IReadOnlyDictionary<uint, IReadOnlyList<DungeonChestItemProvenance>> ChestLootProvenanceByItemId { get; }
-    public IReadOnlyDictionary<uint, IReadOnlyList<FateItemProvenance>> FateLootProvenanceByItemId { get; }
-
     private Catalog(
         IReadOnlyList<OutfitCategory> uiTabsInOrder,
         IReadOnlyList<OutfitCategory> classifiableCategories,
         OutfitCategory pvpSeriesAttire,
         OutfitCategory dungeonChest,
         OutfitCategory uncategorizedBucket,
-        OutfitCategory unobtainableBucket,
-        IReadOnlyDictionary<uint, IReadOnlyList<DungeonChestItemProvenance>> chestLootProvenanceByItemId,
-        IReadOnlyDictionary<uint, IReadOnlyList<FateItemProvenance>> fateLootProvenanceByItemId) {
+        OutfitCategory unobtainableBucket) {
         UITabsInOrder = uiTabsInOrder;
         ClassifiableCategories = classifiableCategories;
         PvpSeriesAttire = pvpSeriesAttire;
         DungeonChest = dungeonChest;
         UncategorizedBucket = uncategorizedBucket;
         UnobtainableBucket = unobtainableBucket;
-        ChestLootProvenanceByItemId = chestLootProvenanceByItemId;
-        FateLootProvenanceByItemId = fateLootProvenanceByItemId;
     }
 
     internal static bool IsContentFinderType(ContentFinderCondition row, params uint[] contentTypeRowIds)
@@ -48,47 +41,21 @@ internal sealed class Catalog {
             && allowedContentTypes.Contains(cfc.Value.ContentType.RowId)).Select(r => itemIdSelector(r))];
 
     /// <summary> Supplemental chest loot: <see cref="DungeonChestItem.ChestId"/> is the FK to <see cref="DungeonChest.RowId"/> (same value; do not match on <see cref="DungeonChest.ChestId"/>). Classifies under Dungeons; Raids uses <see cref="DungeonBossDrop"/> currencies only.</summary>
-    internal static (HashSet<uint> DungeonChestPieceIds, IReadOnlyDictionary<uint, IReadOnlyList<DungeonChestItemProvenance>> Provenance) BuildChestLootFromSupplemental() {
+    internal static HashSet<uint> BuildDungeonChestPieceIdsFromSupplemental() {
         var chestByRowId = new Dictionary<uint, DungeonChest>();
         foreach (var chest in Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName))
             chestByRowId[chest.RowId] = chest;
 
         var dungeonPieces = new HashSet<uint>();
-        var provenanceLists = new Dictionary<uint, List<DungeonChestItemProvenance>>();
 
         foreach (var itemRow in Svc.Data.GetSupplemental<DungeonChestItem>(CsvLoader.DungeonChestItemResourceName)) {
             if (itemRow.ItemId == 0) continue;
             if (!chestByRowId.TryGetValue(itemRow.ChestId, out var chest))
                 continue;
 
-            var prov = new DungeonChestItemProvenance(chest.ContentFinderConditionId, chest.ChestNo, chest.TerritoryTypeId);
-            if (!provenanceLists.TryGetValue(itemRow.ItemId, out var list)) {
-                list = [];
-                provenanceLists[itemRow.ItemId] = list;
-            }
-            list.Add(prov);
             dungeonPieces.Add(itemRow.ItemId);
         }
-
-        IReadOnlyDictionary<uint, IReadOnlyList<DungeonChestItemProvenance>> provReadonly =
-            provenanceLists.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<DungeonChestItemProvenance>)[.. kv.Value]);
-
-        return (dungeonPieces, provReadonly);
-    }
-
-    internal static IReadOnlyDictionary<uint, IReadOnlyList<FateItemProvenance>> BuildFateLootFromSupplemental() {
-        var byItem = new Dictionary<uint, List<FateItemProvenance>>();
-        foreach (var row in Svc.Data.GetSupplemental<FateItem>(CsvLoader.FateItemResourceName)) {
-            if (row.ItemId == 0 || row.FateId == 0)
-                continue;
-            if (!byItem.TryGetValue(row.ItemId, out var list)) {
-                list = [];
-                byItem[row.ItemId] = list;
-            }
-            list.Add(new FateItemProvenance(row.FateId));
-        }
-
-        return byItem.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<FateItemProvenance>)[.. kv.Value.DistinctBy(x => x.FateId).OrderBy(x => x.FateId)]);
+        return dungeonPieces;
     }
 
     private string? ClassifyFromRules(ClassifyContext ctx) {
@@ -157,16 +124,13 @@ internal sealed class Catalog {
         var dungeons = new OutfitCategory("Dungeons", 8);
         OutfitCategory[] classifiable = [];
         var uiTabs = new List<OutfitCategory> { uncategorized, unobtainableBucket };
-        IReadOnlyDictionary<uint, IReadOnlyList<DungeonChestItemProvenance>> emptyChest = new Dictionary<uint, IReadOnlyList<DungeonChestItemProvenance>>();
-        IReadOnlyDictionary<uint, IReadOnlyList<FateItemProvenance>> emptyFate = new Dictionary<uint, IReadOnlyList<FateItemProvenance>>();
-        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, unobtainableBucket, emptyChest, emptyFate);
+        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, unobtainableBucket);
     }
 
     /// <summary> Builds catalog topology. <paramref name="tradecraftCurrencyItemIds"/> must be resolved via <see cref="CurrencyManager"/> after login.</summary>
     public static Catalog Build(ItemCostLookup costs, IReadOnlyList<uint> tradecraftCurrencyItemIds) {
         _ = costs;
-        var (dungeonChestPieces, chestLootProv) = BuildChestLootFromSupplemental();
-        var fateLootProv = BuildFateLootFromSupplemental();
+        var dungeonChestPieces = BuildDungeonChestPieceIdsFromSupplemental();
 
         static OutfitCategory Cat(string name, int uiP) => new(name, uiP);
 
@@ -276,7 +240,7 @@ internal sealed class Catalog {
         uiTabs.AddRange(classifiable);
         uiTabs.Add(unobtainableBucket);
 
-        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, unobtainableBucket, chestLootProv, fateLootProv);
+        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, unobtainableBucket);
     }
 
     public static Dictionary<uint, SpecialShop> BuildSpecialShopByReceiveItemId()

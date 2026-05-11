@@ -12,6 +12,7 @@ namespace GlamourLog;
 /*
  * TODO
  * Try On should clear the existing items
+ * rename glam plates tweak
  */
 public sealed class Plugin : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;

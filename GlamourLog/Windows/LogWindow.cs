@@ -741,7 +741,7 @@ internal unsafe class LogWindow : NativeAddon {
         }
 
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources" });
-        var hierarchy = Svc.Get<CatalogService>().GetDutyChestSourceHierarchy(_selectedSet, _sourceFilterPieceItemId);
+        var hierarchy = Svc.Get<CatalogService>().GetSourceHierarchy(_selectedSet, _sourceFilterPieceItemId);
         if (hierarchy.Count == 0) {
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.EmptyHint,
@@ -750,30 +750,67 @@ internal unsafe class LogWindow : NativeAddon {
         }
         else {
             foreach (var g in hierarchy) {
-                var nonEmptyChests = g.ChestRows.Where(x => x.ItemIds.Count > 0).ToList();
-                if (nonEmptyChests.Count == 0)
+                var nonEmptyRows = g.Rows.Where(x => x.ItemIds.Count > 0).ToList();
+                if (nonEmptyRows.Count == 0)
                     continue;
 
                 _detailRowOptions.Add(new DetailListRowData {
                     Kind = DetailRowKind.SourceDuty,
-                    PrimaryText = g.DutyName,
+                    PrimaryText = g.Name,
                     ContentFinderConditionId = g.ContentFinderConditionId,
                 });
 
-                foreach (var chest in nonEmptyChests) {
+                foreach (var row in nonEmptyRows) {
                     _detailRowOptions.Add(new DetailListRowData {
                         Kind = DetailRowKind.SourceChest,
-                        PrimaryText = FormatChestSourceLabel(chest),
-                        SourceItemIds = chest.ItemIds,
+                        PrimaryText = row.Label,
+                        SecondaryText = row.SecondaryText,
+                        SourceItemIds = row.ItemIds,
                     });
                 }
+            }
+        }
+
+        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Source Kinds" });
+        var sourceTypes = Svc.Get<CatalogService>().GetSourceTypesForSet(_selectedSet, _sourceFilterPieceItemId);
+        if (sourceTypes.Count == 0) {
+            _detailRowOptions.Add(new DetailListRowData {
+                Kind = DetailRowKind.EmptyHint,
+                PrimaryText = "No source kinds found for current scope."
+            });
+        }
+        else {
+            foreach (var line in BuildSourceTypeLines(sourceTypes)) {
+                _detailRowOptions.Add(new DetailListRowData {
+                    Kind = DetailRowKind.EmptyHint,
+                    PrimaryText = line,
+                });
             }
         }
         _detailRowsListNode.OptionsList = [.. _detailRowOptions];
     }
 
-    private static string FormatChestSourceLabel(ChestSourceRow chest)
-        => chest.TerritoryTypeId == uint.MaxValue ? "FATE" : (chest.ChestNo != 0 ? $"Chest {chest.ChestNo}" : "Chest");
+    private static IReadOnlyList<string> BuildSourceTypeLines(IReadOnlyList<AllaganLib.GameSheets.Caches.ItemInfoType> sourceTypes) {
+        const int maxCharsPerLine = 40;
+        var lines = new List<string>();
+        var current = string.Empty;
+        foreach (var type in sourceTypes) {
+            var name = type.ToString();
+            if (current.Length == 0) {
+                current = name;
+                continue;
+            }
+            if (current.Length + 2 + name.Length > maxCharsPerLine) {
+                lines.Add(current);
+                current = name;
+                continue;
+            }
+            current = $"{current}, {name}";
+        }
+        if (current.Length > 0)
+            lines.Add(current);
+        return lines;
+    }
 
     private void OnDetailPieceItemLeftClick(uint itemId) {
         if (_isFinalizing)

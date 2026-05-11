@@ -1,14 +1,16 @@
 namespace GlamourLog;
 
-/// <summary> Resolved <see cref="DungeonChestItem"/> → <see cref="DungeonChest"/>: supplemental <see cref="DungeonChestItem.ChestId"/> equals that chest row’s <see cref="DungeonChest.RowId"/> (not <see cref="DungeonChest.ChestId"/>).</summary>
-internal readonly record struct DungeonChestItemProvenance(uint ContentFinderConditionId, byte ChestNo, uint TerritoryTypeId);
-internal readonly record struct FateItemProvenance(uint FateId); // TODO: better names for these
+internal enum SourceGroupKind {
+    Duty,
+    Fate,
+    Vendor,
+}
 
-/// <summary> One duty (CFC) with chest rows for the Sources panel.</summary>
-internal sealed record DutyChestSourceGroup(uint ContentFinderConditionId, string DutyName, IReadOnlyList<ChestSourceRow> ChestRows);
+/// <summary> One source group in the set details Sources panel (duty/fate/vendor).</summary>
+internal sealed record SourceGroup(SourceGroupKind Kind, uint ContentFinderConditionId, string Name, IReadOnlyList<SourceRow> Rows);
 
-/// <summary> One chest bucket under a duty with item/currency icons to show.</summary>
-internal sealed record ChestSourceRow(byte ChestNo, uint TerritoryTypeId, IReadOnlyList<uint> ItemIds);
+/// <summary> One row under a source group, with optional secondary text and item/currency icons.</summary>
+internal sealed record SourceRow(string Label, string SecondaryText, IReadOnlyList<uint> ItemIds);
 
 internal sealed class GlamourSet {
     public required uint ItemId { get; init; }

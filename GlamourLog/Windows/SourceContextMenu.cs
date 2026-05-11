@@ -1,7 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using GlamourLog.Services;
 using KamiToolKit;
-using KamiToolKit.ContextMenu;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
 namespace GlamourLog;
