@@ -1,12 +1,13 @@
-using clib.Services;
+using clib.TaskSystem;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using KamiToolKit;
+using System.Threading.Tasks;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
-namespace GlamourLog;
+namespace GlamourLog.Windows.ContextMenus;
 
-internal static unsafe class SourceContextMenu {
-    public static void Open(NativeAddon owner, uint contentFinderConditionId, SourceNavigateTarget? navigateTarget, ContextMenu menu) {
+internal static class SourceContextMenu {
+    public static unsafe void Open(NativeAddon owner, uint contentFinderConditionId, SourceNavigateTarget? navigateTarget, ContextMenu menu) {
         if (contentFinderConditionId == 0 && navigateTarget is null)
             return;
 
@@ -15,7 +16,7 @@ internal static unsafe class SourceContextMenu {
 
         if (navigateTarget is { TerritoryTypeId: var territoryId, WorldPosition: var pos } && territoryId != 0) {
             menu.AddItem("Navigate to location", () => {
-                Svc.Automation.Start(new NavigateToTerritoryPositionTask(territoryId, pos));
+                Svc.Automation.Start(new NavTo(territoryId, pos));
             });
         }
 
@@ -37,5 +38,10 @@ internal static unsafe class SourceContextMenu {
         }
 
         menu.Open();
+    }
+
+    private sealed class NavTo(uint territoryTypeId, Vector3 worldPosition) : TaskBase {
+        protected override async Task Execute()
+            => await MoveTo(territoryTypeId, worldPosition, MovementConfig.Everything);
     }
 }

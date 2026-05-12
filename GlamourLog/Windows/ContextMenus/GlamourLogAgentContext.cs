@@ -1,7 +1,7 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using KamiToolKit;
 
-namespace GlamourLog;
+namespace GlamourLog.Windows.ContextMenus;
 
 /// <summary>
 /// Native <see cref="AgentContext"/> must have <see cref="AgentContext.OwnerAddon"/> set for the addon that

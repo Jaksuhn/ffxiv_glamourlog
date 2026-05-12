@@ -1,20 +1,15 @@
-using System.ComponentModel;
-using System.Globalization;
-using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using GlamourLog.Windows;
+using GlamourLog.Windows.ContextMenus;
 using KamiToolKit;
-using KamiToolKit.Extensions;
 using KamiToolKit.Nodes;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
 namespace GlamourLog;
 
-internal unsafe class LogWindow : NativeAddon {
+internal unsafe partial class LogWindow : NativeAddon {
     private readonly FilterWindow _filterWindow;
     private readonly List<string> _categoryPaneOrder = [];
 
@@ -67,7 +62,6 @@ internal unsafe class LogWindow : NativeAddon {
         DisableCloseTransition = true;
     }
 
-    /// <summary> Filter window, inventory hooks, etc.: queue refresh from live game data; applied in OnUpdate. </summary>
     internal void RefreshListsAndDetails() {
         if (_isFinalizing || !IsOpen || !CanPaintLists())
             return;
@@ -86,25 +80,7 @@ internal unsafe class LogWindow : NativeAddon {
         }
     }
 
-    /// <summary> After <see cref="GlamourLog"/> rebuilds catalog rows / grouping (<see cref="GlamourLog.DataVersion"/>). </summary>
-    internal void OnBackingDataChanged() => RefreshListsAndDetails();
-
-    private void PaintDetailsOnly() {
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
-            return;
-        _pendingPaintDetailsOnly = true;
-    }
-
-    private void PaintDetailsOnlyNow() {
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
-            return;
-        try {
-            RefreshDetails(Svc.Get<OwnershipService>().GetOwnedItems());
-        }
-        catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
-        }
-    }
+    //internal void OnBackingDataChanged() => RefreshListsAndDetails();
 
     private void PaintListsCore() {
         // Set/detail columns reuse pooled rows; never ScrollingListNode.Clear() hot paths — that disposes natives
@@ -248,7 +224,7 @@ internal unsafe class LogWindow : NativeAddon {
 
         base.OnSetup(addon, atkValueSpan);
 
-        // Avoid list teardown/rebuild work during Setup. Perform first sync/paint in OnUpdate pre-native.
+        // don't rebuild at all during Setup, just let OnUpdate handle it
         if (!_isFinalizing && CanPaintLists())
             _pendingRefreshListsAndDetails = true;
     }
@@ -264,8 +240,7 @@ internal unsafe class LogWindow : NativeAddon {
             return;
         }
 
-        // Mutate scroll lists before NativeAddon.Update runs. If we Clear/reparent after base.OnUpdate,
-        // the game's scrollbar code can still be using freed textures/nodes from the prior frame input.
+        // only modify scroll lists before base.OnUpdate. Any modification after might use freed nodes from the prior frame
         try {
             if (Svc.Get<CatalogService>().TryConsumePendingListRefresh())
                 _pendingRefreshListsAndDetails = true;
@@ -338,7 +313,6 @@ internal unsafe class LogWindow : NativeAddon {
     private bool CanPaintLists()
         => _setListNode is not null && _statsSetsLine is not null && _statsSpaceLine is not null && _categoryListNode is not null && _detailRowsListNode is not null;
 
-    /// <summary> After content height collapses or rows are recreated, clamp native scrollbar offset. </summary>
     private static void ResetScrollToTop(ScrollingListNode? list) {
         if (list is null)
             return;
@@ -356,24 +330,8 @@ internal unsafe class LogWindow : NativeAddon {
     private static void ResetScrollToTop(ListNode<DetailListRowData, DetailListItemNode>? list) {
         if (list is null)
             return;
-        // Do not call FullRebuild here: RefreshDetails already FullRebuilds when OptionsList changes.
-        // A second FullRebuild in the same frame (paint details + reset scroll) disposes pooled rows twice and crashes ATK.
+        // do not call FullRebuild here, RefreshDetails already does. A second will double dispose and cause a crash
         list.ScrollBarNode.ScrollPosition = 0;
-    }
-
-    private void SyncCategoryPaneToDataVersion() {
-        if (_categoryListNode is null)
-            return;
-        if (_lastDataVersion == Svc.Get<CatalogService>().DataVersion)
-            return;
-
-        _categoryPaneOrder.Clear();
-        _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
-        _pendingCategoryPaneRebuild = true;
-        if (!_categoryPaneOrder.Contains(_selectedCategoryId))
-            _selectedCategoryId = Svc.Get<CatalogService>().UncategorizedTab.Name;
-        _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
-        ResetScrollToTop(_setListNode);
     }
 
     protected override void OnFinalize(AtkUnitBase* addon) {
@@ -381,7 +339,7 @@ internal unsafe class LogWindow : NativeAddon {
         _pendingCategoryPaneRebuild = false;
 
         try {
-            // Do not Dispose() another NativeAddon from here: Close is safer during AtkUnitBase finalization.
+            // do not dispose of another NativeAddon here
             _filterWindow.CloseIfOpen();
             _gatheringNoteSearch?.Input.ClearFocus();
             _contextMenu.Close();
@@ -432,410 +390,4 @@ internal unsafe class LogWindow : NativeAddon {
         var topLeft = new Vector2(mainCenterX - fw * 0.5f, mainCenterY - fh * 0.5f);
         return FilterWindow.ClampFilterWindowTopLeft(topLeft);
     }
-
-    private List<string> BuildOrderedCategoryPaneList() {
-        var r = new List<string> { Svc.Get<CatalogService>().UncategorizedTab.Name };
-        foreach (var (category, _) in Svc.Get<CatalogService>().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
-            r.Add(category.Name);
-        r.Add(Svc.Get<CatalogService>().UnobtainableTab.Name);
-        return r;
-    }
-
-    private void BuildCategoryButtons() {
-        if (_categoryListNode is null)
-            return;
-        if (_categoryButtons.Count > 0)
-            return;
-        RebuildCategoryButtonsFromPaneOrder();
-    }
-
-    /// <summary> Rebuilds the category column from <see cref="_categoryPaneOrder"/> (used on first setup and when catalog <see cref="CatalogService.DataVersion"/> changes). </summary>
-    private void RebuildCategoryButtonsFromPaneOrder() {
-        if (_categoryListNode is null)
-            return;
-
-        // Category list is small and only rebuilt when catalog topology changes — full clear is OK (unlike set/detail hot paths).
-        _categoryListNode.Clear();
-        _categoryButtons.Clear();
-        _categoryButtonMap.Clear();
-        _categoryCountByButton.Clear();
-
-        foreach (var categoryId in _categoryPaneOrder) {
-            var captured = categoryId;
-            var button = new ListButtonNode {
-                Height = 24f,
-                String = string.Empty,
-                Selected = captured == _selectedCategoryId,
-            };
-            button.LabelNode.Position = new Vector2(4f, 1f);
-            button.LabelNode.Size = new Vector2(button.Width - 52f, button.Height - 2f);
-            button.LabelNode.FontType = FontType.Jupiter;
-            button.LabelNode.FontSize = 20;
-            button.LabelNode.LineSpacing = 20;
-            button.LabelNode.AlignmentType = AlignmentType.Left;
-            button.LabelNode.TextColor = CategoryNameGold;
-            button.LabelNode.String = Svc.Get<CatalogService>().DisplayLabelForCategory(captured);
-            button.LabelNode.AddTextFlags(TextFlags.Emboss, TextFlags.Ellipsis);
-
-            var countNode = new TextNode {
-                Position = new Vector2(button.Width - 48f, 1f),
-                Size = new Vector2(44f, button.Height - 2f),
-                FontType = FontType.Axis,
-                FontSize = 11,
-                LineSpacing = 11,
-                AlignmentType = AlignmentType.BottomRight,
-                TextColor = GatheringHeadingGrey,
-            };
-            countNode.AttachNode(button);
-
-            button.AddEvent(AtkEventType.MouseClick, (_, _, _, _, atkEventData) => {
-                if (atkEventData == null)
-                    return;
-                ref var eventData = ref *atkEventData;
-                if (!eventData.IsLeftClick)
-                    return;
-                if (_selectedCategoryId == captured)
-                    return;
-                _selectedCategoryId = captured;
-                _selectedSet = null;
-                _sourceFilterPieceItemId = null;
-                _pendingClearSetSelection = true;
-                _pendingRefreshListsAndDetails = true;
-                _pendingResetSetScroll = true;
-                _pendingResetDetailScroll = true;
-            });
-            _categoryButtons.Add(button);
-            _categoryButtonMap[button] = categoryId;
-            _categoryCountByButton[button] = countNode;
-            _categoryListNode.AddNode(button);
-        }
-
-        _categoryListNode.RecalculateLayout();
-        SyncCategoryCountLayouts();
-        ResetScrollToTop(_categoryListNode);
-    }
-
-    private void SyncCategoryCountLayouts() {
-        foreach (var btn in _categoryButtons) {
-            if (_categoryCountByButton.TryGetValue(btn, out var count)) {
-                count.Position = new Vector2(btn.Width - 48f, 1f);
-                count.Size = new Vector2(44f, btn.Height - 2f);
-                count.AlignmentType = AlignmentType.BottomRight;
-            }
-        }
-    }
-
-    private List<GlamourSet> CategoryRows(string categoryId)
-        => Svc.Get<CatalogService>().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
-
-    private void RefreshRows(HashSet<uint> ownedItems) {
-        if (_setListNode is null || _statsSetsLine is null || _statsSpaceLine is null)
-            return;
-
-        var agent = ItemFinderModule.Instance();
-        if (agent is null) {
-            _statsSetsLine.String = "\u2014 / \u2014";
-            _statsSpaceLine.String = string.Empty;
-            return;
-        }
-
-        var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(ownedItems);
-
-        var totalObtainable = Svc.Get<CatalogService>().GlamourSets.Count(x => !x.IsUnobtainable || ownedSets.Contains(x));
-        _statsSetsLine.String = $"{ownedSets.Count} / {totalObtainable}";
-        _statsSpaceLine.String = $"{ownedSets.Sum(x => x.Items.Count - 1)}";
-
-        foreach (var btn in _categoryButtons) {
-            if (!_categoryButtonMap.TryGetValue(btn, out var categoryId))
-                continue;
-
-            btn.LabelNode.String = Svc.Get<CatalogService>().DisplayLabelForCategory(categoryId);
-            btn.Selected = categoryId == _selectedCategoryId;
-            if (_categoryCountByButton.TryGetValue(btn, out var countNode)) {
-                var cr = CategoryRows(categoryId);
-                countNode.String = $"{cr.Count(ownedSets.Contains)}/{cr.Count}";
-            }
-        }
-        SyncCategoryCountLayouts();
-
-        RepopulateSetListFromFilteredRows(ownedItems, ownedSets);
-    }
-
-    /// <summary> Middle column only: re-filter, re-sort, rebuild row models. Skips stats/category work (sort direction / order changes only). </summary>
-    private void RebuildSetListOrderOnly() {
-        if (_setListNode is null)
-            return;
-        if (ItemFinderModule.Instance() is null)
-            return;
-
-        var ownedItems = Svc.Get<OwnershipService>().GetOwnedItems();
-        var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(ownedItems);
-        RepopulateSetListFromFilteredRows(ownedItems, ownedSets);
-    }
-
-    private void RepopulateSetListFromFilteredRows(HashSet<uint> ownedItems, HashSet<GlamourSet> ownedSets) {
-        if (_setListNode is null)
-            return;
-
-        var rows = GetFilteredRows(ownedSets, ownedItems);
-
-        if (_selectedSet != null && !rows.Contains(_selectedSet)) {
-            _selectedSet = null;
-            _pendingClearSetSelection = true;
-        }
-
-        _setListOptions.Clear();
-        foreach (var set in rows) {
-            try {
-                var setStorageState = Svc.Get<OwnershipService>().GetSetStorageState(set, ownedItems);
-                var showStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire;
-                var showArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, ownedItems, Svc.Get<CatalogService>().ArmoireItemIds);
-                _setListOptions.Add(new SetListRowData {
-                    Set = set,
-                    Title = set.Name,
-                    Subtitle = SetSublineText(set, ownedSets, ownedItems),
-                    IsOwned = ownedSets.Contains(set),
-                    ShowStorage = showStorage,
-                    ShowArmoireWarning = showArmoireWarning,
-                    StorageIconPart = setStorageState == SetStorageState.Armoire
-                        ? GlamourIconNode.IconPart.Armoire
-                        : GlamourIconNode.IconPart.Dresser,
-                });
-            }
-            catch (Exception ex) {
-                Svc.Log.Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
-            }
-        }
-
-        _setListNode.OptionsList = [.. _setListOptions];
-        if (_pendingClearSetSelection) {
-            _pendingClearSetSelection = false;
-            _setListNode.FullRebuild();
-        }
-    }
-
-    private List<GlamourSet> GetFilteredRows(HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
-        var searchRaw = _gatheringNoteSearch?.Input.String.ToString() ?? string.Empty;
-        var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
-        var rows = searchTrimmed.Length > 0 ? [.. Svc.Get<CatalogService>().GlamourSets] : CategoryRows(_selectedCategoryId);
-
-        if (C.HideCompleted)
-            rows = [.. rows.Where(r => !ownedSets.Contains(r))];
-
-        var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
-        if (hasPositiveFilters) {
-            var inventoryOnly = C.HideUnready ? Svc.Get<OwnershipService>().GetInventoryItemsOnly() : null;
-            rows = [.. rows.Where(r =>
-                (!C.HideNonPartials || Svc.Get<OwnershipService>().IsPartiallyCompleted(r, ownedSets, ownedItems)) &&
-                (!C.HideUnaffordable || Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(r, ownedItems)) &&
-                (!C.HideUnready || (inventoryOnly is not null && OwnershipService.SetHasPieceInPlayerInventory(r, inventoryOnly))) &&
-                (!C.HideNoMarketboard || Svc.Get<OwnershipService>().IsMarketboardPurchasable(r))
-            )];
-        }
-
-        if (C.ShowOnlyMisplaced)
-            rows = [.. rows.Where(r => Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(r, ownedItems, Svc.Get<CatalogService>().ArmoireItemIds))];
-
-        if (searchTrimmed.Length > 0)
-            rows = [.. rows.Where(r => SetMatchesSearch(r, searchTrimmed))];
-
-        return ApplySetListSort(rows);
-    }
-
-    private void OnSetListSortModeSelected(GlamourSetSortMode mode) {
-        if (C.SetListSortMode == mode)
-            return;
-        C.SetListSortMode = mode;
-        C.SetListSortDirection = mode.DefaultDirection();
-        C.Save();
-        SyncSortDirectionChrome();
-        RefreshListsAndDetails();
-    }
-
-    private void OnSetListSortDirectionToggle() {
-        C.SetListSortDirection = C.SetListSortDirection == ListSortDirection.Ascending ? ListSortDirection.Descending : ListSortDirection.Ascending;
-        C.Save();
-        SyncSortDirectionChrome();
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
-            return;
-        _pendingRebuildSetListOrderOnly = true;
-    }
-
-    private void SyncSortDirectionChrome() {
-        if (_setListSortControl is null)
-            return;
-        var btn = _setListSortControl.SortDirectionButton;
-        btn.Icon = SortDirectionButtonIcon(C.SetListSortDirection);
-        btn.TextTooltip = C.SetListSortDirection == ListSortDirection.Ascending ? Addon.GetRow(8043).Text : Addon.GetRow(8044).Text;
-    }
-
-    private static ButtonIcon SortDirectionButtonIcon(ListSortDirection direction)
-        => direction == ListSortDirection.Ascending ? ButtonIcon.UpArrow : ButtonIcon.ArrowDown;
-
-    private static List<GlamourSet> ApplySetListSort(List<GlamourSet> rows) {
-        var mode = C.SetListSortMode;
-        var asc = C.SetListSortDirection == ListSortDirection.Ascending;
-        return mode switch {
-            GlamourSetSortMode.Alphabetical => asc
-                ? [.. rows.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
-                : [.. rows.OrderByDescending(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
-            GlamourSetSortMode.ItemLevel => asc
-                ? [.. rows.OrderBy(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
-                : [.. rows.OrderByDescending(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
-            GlamourSetSortMode.Patch => asc
-                ? [.. rows.OrderBy(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
-                : [.. rows.OrderByDescending(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
-            _ => rows,
-        };
-    }
-
-    private static bool SetMatchesSearch(GlamourSet set, string query) {
-        var t = query.Trim();
-        return set.Name.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase)
-            || set.Items.Any(id => Item.GetRowRef(id) is { IsValid: true, Value.Name: var name } && name.ToString().Contains(t, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private void RefreshDetails(HashSet<uint> ownedItems) {
-        if (_detailRowsListNode is null)
-            return;
-
-        if (_selectedSet == null)
-            _sourceFilterPieceItemId = null;
-
-        _detailRowOptions.Clear();
-        var inventoryItems = Svc.Get<OwnershipService>().GetInventoryItemsOnly();
-
-        if (_selectedSet == null) {
-            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
-            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" });
-            _detailRowsListNode.OptionsList = [.. _detailRowOptions];
-            _detailRowsListNode.Update();
-            return;
-        }
-
-        var setJournalLine = string.IsNullOrWhiteSpace(_selectedSet.Name)
-            ? Item.GetRow(_selectedSet.ItemId).Name.ToString()
-            : _selectedSet.Name;
-        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
-        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = setJournalLine });
-
-        var items = _selectedSet.Items;
-        var selectedSetStorageState = Svc.Get<OwnershipService>().GetSetStorageState(_selectedSet, ownedItems);
-        foreach (var itemId in items) {
-            var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState);
-            var iconPart = StorageIconPartFor(storageState);
-            _detailRowOptions.Add(new DetailListRowData {
-                Kind = DetailRowKind.Piece,
-                ItemId = itemId,
-                PrimaryText = Item.GetRow(itemId).Name.ToString(),
-                IsSelected = _sourceFilterPieceItemId == itemId,
-                StorageIconPart = iconPart,
-                ShowInventoryBadge = iconPart is null && inventoryItems.Contains(itemId),
-                ShowArmoireWarning =
-                    storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose
-                    && Svc.Get<CatalogService>().ArmoireItemIds.Contains(itemId),
-            });
-        }
-
-        if (items.Count > 0 && TryGetCostTotals(_selectedSet, _sourceFilterPieceItemId, out var costTotals)) {
-            _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Costs" });
-            _detailRowOptions.Add(new DetailListRowData {
-                Kind = DetailRowKind.JournalHeader,
-                PrimaryText = _sourceFilterPieceItemId is not null
-                    ? "Currencies Required (Single Item)"
-                    : "Currencies Required (Full Set)"
-            });
-            var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
-            foreach (var kv in ordered) {
-                var owned = GetOwnedCurrencyCount(kv.Key);
-                var (costNav, costTip, npcName, shopName) = SourcesPanelBuilder.GetShopVendorHintForCostCurrency(
-                    Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, kv.Key);
-                var currencyName = Item.GetRow(kv.Key).Name.ToString().Trim();
-                var mapFlagLabel = costNav is not null && npcName.Length > 0 && shopName.Length > 0
-                    ? $"{currencyName} - {npcName} - {shopName}"
-                    : string.Empty;
-                _detailRowOptions.Add(new DetailListRowData {
-                    Kind = DetailRowKind.Cost,
-                    ItemId = kv.Key,
-                    PrimaryText = Item.GetRow(kv.Key).Name.ToString(),
-                    SecondaryText = $"Obt. {owned}/{kv.Value}",
-                    NavigateTarget = costNav,
-                    CostVendorTextTooltip = costTip,
-                    CostMapFlagLabel = mapFlagLabel,
-                });
-            }
-        }
-
-        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources" });
-        SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions);
-        _detailRowsListNode.OptionsList = [.. _detailRowOptions];
-        _detailRowsListNode.Update();
-    }
-
-    private static void OnCraftRecipeJournalLeftClick(uint recipeRowId) {
-        if (recipeRowId == 0)
-            return;
-        AgentRecipeNote.Instance()->OpenRecipeByRecipeId(recipeRowId);
-    }
-
-    private void OnDetailPieceItemLeftClick(uint itemId) {
-        if (_isFinalizing)
-            return;
-        _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
-        _pendingPaintDetailsOnly = true;
-    }
-
-    private bool TryGetCostTotals(GlamourSet set, uint? pieceFilterPieceItemId, out Dictionary<uint, uint> totals) {
-        totals = [];
-        IEnumerable<uint> pieceIds = pieceFilterPieceItemId is { } only ? [only] : set.Items;
-        foreach (var itemId in pieceIds) {
-            foreach (var (cid, amt) in Svc.Get<CatalogService>().GetPrimaryItemCosts(itemId, Svc.Get<CatalogService>().CategoryNameForPrimaryCostLookup(set))) {
-                totals.TryGetValue(cid, out var t);
-                totals[cid] = t + amt;
-            }
-        }
-        return totals.Count > 0;
-    }
-
-    private static int GetOwnedCurrencyCount(uint costItemId) {
-        return CurrencyManager.Instance()->SpecialItemBucket.TryGetValue(costItemId, out var value, true)
-            ? (int)value.Count
-            : InventoryManager.Instance()->GetInventoryItemCount(costItemId);
-    }
-
-    private string SetSublineText(GlamourSet set, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
-        var n = set.Items.Count;
-        var c = Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, ownedItems);
-        string core;
-        if (ownedSets.Contains(set))
-            core = $"Obt. {n}/{n}";
-        else if (n == 0)
-            core = "Obt. 0/0";
-        else if (c == n)
-            core = "Completable";
-        else
-            core = $"Obt. {c}/{n}";
-
-        string? sortHint = C.SetListSortMode switch {
-            GlamourSetSortMode.Patch => set.SortPatchNo == 0m
-                ? "Patch —"
-                : $"Patch {set.SortPatchNo.ToString(CultureInfo.InvariantCulture)}",
-            GlamourSetSortMode.ItemLevel => set.SortItemLevel == 0
-                ? "iLvl —"
-                : $"iLvl {set.SortItemLevel}",
-            _ => null,
-        };
-        return sortHint is null ? core : $"{core} · {sortHint}";
-    }
-
-    private static GlamourIconNode.IconPart? StorageIconPartFor(ItemStorageState storageState)
-        => storageState switch {
-            ItemStorageState.Armoire => GlamourIconNode.IconPart.Armoire,
-            ItemStorageState.DresserLoose => GlamourIconNode.IconPart.DresserFaded,
-            ItemStorageState.DresserSet => GlamourIconNode.IconPart.Dresser,
-            _ => null,
-        };
-
-    private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState)
-        => Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState);
 }

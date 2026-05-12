@@ -1,12 +1,10 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using GlamourLog.Services;
 using KamiToolKit;
-using KamiToolKit.ContextMenu;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
-namespace GlamourLog;
+namespace GlamourLog.Windows.ContextMenus;
 
 internal static unsafe class PieceContextMenu {
     public static void Open(NativeAddon owner, uint itemId, ContextMenu menu) {

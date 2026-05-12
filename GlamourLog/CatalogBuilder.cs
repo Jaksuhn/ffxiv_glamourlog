@@ -1,6 +1,5 @@
 using AllaganLib.GameSheets.Sheets;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using GlamourLog.Services;
 
 namespace GlamourLog;
 

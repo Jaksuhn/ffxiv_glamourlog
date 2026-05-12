@@ -54,7 +54,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
     public static Action<uint>? OnPieceLeftClick { get; set; }
     public static Action<uint>? OnItemRightClick { get; set; }
-    /// <summary> Right-click on duty / shop / quest source headers (CFC id + optional navigation).</summary>
     public static Action<uint, SourceNavigateTarget?>? OnSourceHeaderRightClick { get; set; }
     public static Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
     public static Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
@@ -288,7 +287,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 break;
             case DetailRowKind.SourceChest:
                 var iconOnlyChest = itemData.SourceIconsOnly;
-                var iconOriginX = 4f;
+                float iconOriginX;
                 if (iconOnlyChest) {
                     _primary.String = string.Empty;
                     _primary.IsVisible = false;
@@ -395,7 +394,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             return;
         }
 
-        if ((ItemData.Kind is DetailRowKind.Piece or DetailRowKind.Cost) && ItemData.ItemId != 0) {
+        if (ItemData.Kind is DetailRowKind.Piece or DetailRowKind.Cost && ItemData.ItemId != 0) {
             OnItemRightClick?.Invoke(ItemData.ItemId);
             return;
         }

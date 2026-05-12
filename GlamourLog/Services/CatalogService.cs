@@ -1,15 +1,9 @@
-using AllaganLib.GameSheets.Caches;
-using AllaganLib.GameSheets.Extensions;
-using AllaganLib.GameSheets.ItemSources;
-using AllaganLib.GameSheets.Model;
-using AllaganLib.GameSheets.Sheets.Rows;
-using FFXIVClientStructs.FFXIV.Client.Game;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace GlamourLog.Services;
 
-internal sealed unsafe class CatalogService : IDisposable {
+internal sealed class CatalogService : IDisposable {
     private bool _disposed;
 
     internal ReadOnlyCollection<GlamourSet> GlamourSets { get; private set; } = Array.Empty<GlamourSet>().ToList().AsReadOnly();
@@ -128,13 +122,13 @@ internal sealed unsafe class CatalogService : IDisposable {
     }
 
     /// <summary> Category for <see cref="GetPrimaryItemCosts"/> when browsing a bucket tab (not a <see cref="GlamourSet"/>).</summary>
-    internal string? CategoryNameForCostDiscriminatorBucket(string categoryName) {
-        lock (_glamourDataLock) {
-            if (categoryName == _catalog.UncategorizedBucket.Name || categoryName == _catalog.UnobtainableBucket.Name)
-                return null;
-            return categoryName;
-        }
-    }
+    //internal string? CategoryNameForCostDiscriminatorBucket(string categoryName) {
+    //    lock (_glamourDataLock) {
+    //        if (categoryName == _catalog.UncategorizedBucket.Name || categoryName == _catalog.UnobtainableBucket.Name)
+    //            return null;
+    //        return categoryName;
+    //    }
+    //}
 
     /// <summary> Item ids whose sources/costs should be shown for the Sources panel (set pieces + primary currencies for the current scope).</summary>
     internal IReadOnlyCollection<uint> GetSourceScopeItemIds(GlamourSet set, uint? costScopePieceItemId) {

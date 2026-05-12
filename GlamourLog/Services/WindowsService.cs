@@ -19,7 +19,6 @@ internal sealed class WindowsService : IDisposable {
     }
 
     internal void ToggleMainWindow() => LogWindow.Toggle();
-
     internal void RefreshLogWindow() => LogWindow.RefreshListsAndDetails();
 
     public void Dispose() {

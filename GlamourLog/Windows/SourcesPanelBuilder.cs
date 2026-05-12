@@ -7,7 +7,6 @@ using AllaganLib.GameSheets.Sheets.Rows;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using Lumina.Excel;
-using Lumina.Excel.Sheets;
 
 namespace GlamourLog.Windows;
 
@@ -107,7 +106,7 @@ internal static class SourcesPanelBuilder {
 
         var result = new Dictionary<uint, List<uint>>();
         foreach (var (cfc, keys) in byCfc)
-            result[cfc] = keys.OrderBy(x => x).ToList();
+            result[cfc] = [.. keys.OrderBy(x => x)];
         return result;
     }
 
@@ -478,18 +477,12 @@ internal static class SourcesPanelBuilder {
         return enpcRow is null ? null : TryNavigateTargetFromNpc(enpcRow);
     }
 
-    private static void AppendIconStripRow(
-        List<DetailListRowData> rows,
-        string label,
-        IEnumerable<uint> itemIds,
-        HashSet<uint> scope,
-        bool iconOnly = false,
-        SourceIconPresentation presentation = SourceIconPresentation.Normal) {
+    private static void AppendIconStripRow(List<DetailListRowData> rows, string label, IEnumerable<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal) {
         var ordered = itemIds.Where(id => id != 0).Distinct().OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
         if (ordered.Count == 0)
             return;
         var overflow = Math.Max(0, ordered.Count - MaxSourceIconsVisible);
-        var visible = ordered.Count <= MaxSourceIconsVisible ? ordered : ordered.Take(MaxSourceIconsVisible).ToList();
+        var visible = ordered.Count <= MaxSourceIconsVisible ? ordered : [.. ordered.Take(MaxSourceIconsVisible)];
 
         rows.Add(new DetailListRowData {
             Kind = DetailRowKind.SourceChest,

@@ -2,7 +2,6 @@ using KamiToolKit.Premade.Node.Simple;
 
 namespace GlamourLog.Nodes;
 
-/// <summary>Corner badge for dresser / armoire icons; same pattern as <see cref="CheckMarkBadgeNode" /> (single part, UV crop).</summary>
 public sealed class GlamourIconNode : SimpleImageNode {
     public GlamourIconNode(IconPart part) {
         TexturePath = "ui/uld/ItemDetailPutIn.tex";

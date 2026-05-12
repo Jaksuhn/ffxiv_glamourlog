@@ -1,5 +1,4 @@
 using Dalamud.Game;
-using GlamourLog.Services;
 using LuminaSupplemental.Excel.Model;
 using LuminaSupplemental.Excel.Services;
 using System.Collections.Immutable;
@@ -50,7 +49,7 @@ internal sealed class Catalog {
 
         foreach (var itemRow in Svc.Data.GetSupplemental<DungeonChestItem>(CsvLoader.DungeonChestItemResourceName)) {
             if (itemRow.ItemId == 0) continue;
-            if (!chestByRowId.TryGetValue(itemRow.ChestId, out var chest))
+            if (!chestByRowId.TryGetValue(itemRow.ChestId, out _))
                 continue;
 
             dungeonPieces.Add(itemRow.ItemId);

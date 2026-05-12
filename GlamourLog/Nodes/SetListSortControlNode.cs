@@ -8,7 +8,6 @@ public sealed class SetListSortControlNode : ResNode {
     private const float ButtonSize = 28f;
     private const float ButtonGap = 4f;
 
-    /// <summary> Width of [dropdown][direction][open picker] for header layout. </summary>
     public static float TotalWidth => DropdownWidth + ButtonGap + ButtonSize + ButtonGap + ButtonSize;
 
     public readonly EnumDropDownNode<GlamourSetSortMode> SortDropDown;

@@ -1,9 +1,8 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using KamiToolKit;
-using KamiToolKit.ContextMenu;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
-namespace GlamourLog;
+namespace GlamourLog.Windows.ContextMenus;
 
 internal static unsafe class SetContextMenu {
     public static void Open(NativeAddon owner, GlamourSet set, ContextMenu menu) {

@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using Dalamud.Configuration;
-using GlamourLog.Services;
 
 namespace GlamourLog;
 

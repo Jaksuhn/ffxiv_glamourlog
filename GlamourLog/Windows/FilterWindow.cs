@@ -6,7 +6,6 @@ using KamiToolKit.Nodes;
 
 namespace GlamourLog;
 
-/// <summary> Filter window for set-list toggles (opened from the main log window cog). </summary>
 internal unsafe class FilterWindow : NativeAddon {
     public const float WindowWidth = 456f;
     public const float WindowHeight = 250f;
@@ -15,7 +14,6 @@ internal unsafe class FilterWindow : NativeAddon {
     private bool _hasPendingScreenOrigin;
     private Vector2 _pendingScreenOrigin;
 
-    /// <summary> Opens at <paramref name="screenTopLeft"/> (top-left of this window), or closes if already open. </summary>
     public void OpenOrToggleNear(Vector2 screenTopLeft) {
         if (IsOpen) {
             Close();
@@ -151,8 +149,7 @@ internal unsafe class FilterWindow : NativeAddon {
     }
 
     protected override void OnFinalize(AtkUnitBase* addon) {
-        // Same rule as AetherBags InventoryAddonBase / main GlamourLog window: nodes under this
-        // NativeAddon are destroyed with the native AtkUnitBase; do not Dispose() them here.
+        // don't dispose nodes here
         _checkboxes.Clear();
         _okButton = null;
         base.OnFinalize(addon);

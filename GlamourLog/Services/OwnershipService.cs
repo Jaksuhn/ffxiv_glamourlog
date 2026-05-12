@@ -7,7 +7,7 @@ namespace GlamourLog.Services;
 internal sealed unsafe class OwnershipService : IDisposable {
     private readonly ArmoireService _armoireService;
     private static readonly Lazy<FrozenDictionary<uint, uint>> CabinetLookup = new(()
-        => Cabinet.Where(row => row.RowId >= 1048 && row.Item.RowId != 0)
+        => Cabinet.Where(row => row.Item.RowId != 0)
             .ToFrozenDictionary(row => row.Item.RowId, row => row.RowId));
     private static readonly Lazy<FrozenDictionary<uint, uint>> CabinetByRowLookup = new(()
         => Cabinet.Where(row => row.RowId > 0 && row.Item.RowId != 0)

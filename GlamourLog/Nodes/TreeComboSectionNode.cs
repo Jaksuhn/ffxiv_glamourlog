@@ -34,8 +34,8 @@ public sealed class TreeComboSectionNode : TreeListCategoryNode {
         }
     }
 
-    /// <summary> Sets <see cref="JournalHeader"/> when present; when <paramref name="subsectionCount"/> > 0 and <paramref name="countUnitPlural"/> is non-empty, appends <c> (count unit)</c>.</summary>
-    public void SetJournal(string baseJournalLine, int subsectionCount = 0, string countUnitPlural = "") {
-        JournalHeader?.String = subsectionCount > 0 && countUnitPlural.Length > 0 ? $"{baseJournalLine} ({subsectionCount} {countUnitPlural})" : baseJournalLine;
-    }
+    ///// <summary> Sets <see cref="JournalHeader"/> when present; when <paramref name="subsectionCount"/> > 0 and <paramref name="countUnitPlural"/> is non-empty, appends <c> (count unit)</c>.</summary>
+    //public void SetJournal(string baseJournalLine, int subsectionCount = 0, string countUnitPlural = "") {
+    //    JournalHeader?.String = subsectionCount > 0 && countUnitPlural.Length > 0 ? $"{baseJournalLine} ({subsectionCount} {countUnitPlural})" : baseJournalLine;
+    //}
 }
