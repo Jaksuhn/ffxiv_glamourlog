@@ -1,5 +1,4 @@
 using clib;
-using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using GlamourLog.Services;
@@ -40,7 +39,7 @@ public sealed class Plugin : IAsyncDalamudPlugin {
     public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.Commands.RemoveHandler(c));
         Svc.Interface.UiBuilder.OpenMainUi -= Svc.Get<WindowsService>().ToggleMainWindow;
-        Svc.Dispose();
+        CLibMain.Dispose();
         await Svc.Framework.RunOnFrameworkThread(KamiToolKitLibrary.Dispose);
     }
 

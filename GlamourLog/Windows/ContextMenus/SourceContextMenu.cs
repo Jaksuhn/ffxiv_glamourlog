@@ -7,8 +7,8 @@ using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 namespace GlamourLog.Windows.ContextMenus;
 
 internal static class SourceContextMenu {
-    public static unsafe void Open(NativeAddon owner, uint contentFinderConditionId, SourceNavigateTarget? navigateTarget, ContextMenu menu) {
-        if (contentFinderConditionId == 0 && navigateTarget is null)
+    public static unsafe void Open(NativeAddon owner, uint cfcId, SourceNavigateTarget? navigateTarget, ContextMenu menu) {
+        if (cfcId == 0 && navigateTarget is null)
             return;
 
         GlamourLogAgentContext.AttachContextMenuTo(owner);
@@ -20,14 +20,14 @@ internal static class SourceContextMenu {
             });
         }
 
-        if (contentFinderConditionId != 0) {
-            menu.AddItem(Addon.GetRow(15890).Text, () => AgentContentsFinder.Instance()->OpenRegularDuty(contentFinderConditionId));
-            menu.AddItem($"{Addon.GetRow(9663).Text} ({Addon.GetRow(1145).Text})", () => {
-                if (ContentFinderCondition.GetRowRef(contentFinderConditionId) is { IsValid: true, Value: var cfc })
+        if (cfcId != 0) {
+            menu.AddItem(Addon.GetRow(15890).Text, () => AgentContentsFinder.Instance()->OpenRegularDuty(cfcId));
+            menu.AddItem($"{Addon.GetRow(9663).Text} ({Addon.GetRow(1145).Text})", () => { // Queue (Level Sync)
+                if (ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true, Value: var cfc })
                     cfc.QueueDuty(levelSync: true);
             });
-            menu.AddItem($"{Addon.GetRow(9663).Text} ({Addon.GetRow(10008).Text})", () => {
-                if (ContentFinderCondition.GetRowRef(contentFinderConditionId) is { IsValid: true, Value: var cfc })
+            menu.AddItem($"{Addon.GetRow(9663).Text} ({Addon.GetRow(10008).Text})", () => { // Queue (Unrestricted Party)
+                if (ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true, Value: var cfc })
                     cfc.QueueDuty(levelSync: false);
             });
             if (Svc.Interface.IsPluginLoaded("AutoDuty")) {

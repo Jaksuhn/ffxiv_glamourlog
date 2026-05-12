@@ -5,7 +5,6 @@ global using System.Linq;
 global using System.Numerics;
 global using Dalamud.Utility;
 global using Lumina.Excel.Sheets;
-global using Sheets = Lumina.Excel.Sheets;
 global using clib.Extensions;
 global using clib.Services;
 global using clib.Utils;

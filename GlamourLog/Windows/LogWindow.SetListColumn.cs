@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Globalization;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
