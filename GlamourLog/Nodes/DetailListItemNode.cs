@@ -20,6 +20,8 @@ internal enum DetailRowKind {
     Cost,
     SourceDuty,
     SourceChest,
+    /// <summary> Inline source → arrow → product strip rendered by <see cref="SourceFlowNode"/> (desynth, lootbox catalysts). </summary>
+    SourceArrowFlow,
 }
 
 internal sealed class DetailListRowData {
@@ -47,6 +49,8 @@ internal sealed class DetailListRowData {
     public bool SourceIconsOnly { get; init; }
     /// <summary> Number of icons not shown when <see cref="SourceItemIds"/> exceeds the visible cap (shown as "+N").</summary>
     public int SourceIconOverflow { get; init; }
+    /// <summary> Left-strip ids for <see cref="DetailRowKind.SourceArrowFlow"/> (typically the catalyst / cost item); <see cref="SourceItemIds"/> is the right strip.</summary>
+    public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; }
 }
 
 internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
@@ -69,6 +73,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private readonly ArmoireWarningBadgeNode _armoireWarningBadge;
     private readonly List<FramedItemIconNode> _sourceIcons = [];
     private readonly TextNode _sourceOverflow;
+    private readonly SourceFlowNode _arrowFlow;
     private GlamourIconNode.IconPart _lastStoragePart = GlamourIconNode.IconPart.Dresser;
 
     public DetailListItemNode() {
@@ -167,6 +172,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         };
         _sourceOverflow.RemoveTextFlags(TextFlags.Emboss);
         _sourceOverflow.AttachNode(this);
+
+        _arrowFlow = new SourceFlowNode { IsVisible = false };
+        _arrowFlow.AttachNode(this);
     }
 
     protected override void OnSizeChanged() {
@@ -201,6 +209,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         foreach (var icon in _sourceIcons)
             icon.IsVisible = false;
         _sourceOverflow.IsVisible = false;
+        _arrowFlow.IsVisible = false;
+        _arrowFlow.Hide();
 
         _inputCollision.ItemTooltip = 0;
         _inputCollision.TextTooltip = string.Empty;
@@ -323,7 +333,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
                 if (itemData.SourceItemIds is { Count: > 0 } sourceItems) {
                     var large = itemData.SourcePresentation == SourceIconPresentation.Large;
-                    var iconSize = large ? 22f : 20f;
+                    var iconSize = large ? 26f : 24f;
                     var iconGap = large ? 5f : 4f;
                     var iconY = (ItemHeight - iconSize) * 0.5f;
                     var maxFit = (int)Math.Max(1, Math.Floor((Width - iconOriginX - 40f) / (iconSize + iconGap)));
@@ -345,6 +355,17 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
                 if (!iconOnlyChest)
                     _primary.IsVisible = true;
+                _inputCollision.IsVisible = false;
+                break;
+            case DetailRowKind.SourceArrowFlow:
+                _primary.IsVisible = false;
+                _secondary.IsVisible = false;
+                _arrowFlow.Position = new Vector2(4f, 0f);
+                _arrowFlow.Size = new Vector2(Math.Max(0f, Width - 8f), ItemHeight);
+                var leftIds = itemData.SourceFlowLeftIds ?? (IReadOnlyList<uint>)[];
+                var rightIds = itemData.SourceItemIds ?? (IReadOnlyList<uint>)[];
+                _arrowFlow.SetFlow(leftIds, rightIds, itemData.SourceIconOverflow);
+                _arrowFlow.IsVisible = true;
                 _inputCollision.IsVisible = false;
                 break;
         }

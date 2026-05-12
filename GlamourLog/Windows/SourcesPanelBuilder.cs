@@ -286,16 +286,19 @@ internal static class SourcesPanelBuilder {
     }
 
     private static bool AppendSupplemental(List<DetailListRowData> rows, Dictionary<uint, List<ItemSource>> sourcesByPiece, HashSet<uint> scope) {
-        var supplement = new Dictionary<(ItemInfoType Type, uint CostItemId), HashSet<uint>>();
+        var supplement = new Dictionary<ItemInfoType, Dictionary<uint, HashSet<uint>>>();
         var fieldOps = new Dictionary<(ItemInfoType Type, uint CofferKind), HashSet<uint>>();
         foreach (var (pieceId, list) in sourcesByPiece) {
             foreach (var src in list) {
                 switch (src) {
                     case ItemSupplementSource sup when SupplementalCofferTypes.Contains(sup.Type) && sup.CostItem is not null && sup.CostItem.RowId != 0: {
-                            var key = (sup.Type, sup.CostItem.RowId);
-                            if (!supplement.TryGetValue(key, out var set)) {
+                            if (!supplement.TryGetValue(sup.Type, out var byCost)) {
+                                byCost = [];
+                                supplement[sup.Type] = byCost;
+                            }
+                            if (!byCost.TryGetValue(sup.CostItem.RowId, out var set)) {
                                 set = [];
-                                supplement[key] = set;
+                                byCost[sup.CostItem.RowId] = set;
                             }
 
                             set.Add(pieceId);
@@ -318,18 +321,15 @@ internal static class SourcesPanelBuilder {
         if (supplement.Count == 0 && fieldOps.Count == 0)
             return false;
 
-        rows.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Coffers & supplemental loot" });
-        foreach (var (key, pieceSet) in supplement.OrderBy(e => HumanizeInfoType(e.Key.Type)).ThenBy(e => e.Key.CostItemId)) {
-            var costName = Item.GetRow(key.CostItemId).Name.ToString().Trim();
-            var line = costName.Length > 0
-                ? $"{HumanizeInfoType(key.Type)} — {costName}"
-                : HumanizeInfoType(key.Type);
+        rows.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Lootboxes" });
+        foreach (var (type, byCost) in supplement.OrderBy(e => HumanizeInfoType(e.Key), StringComparer.Ordinal)) {
             rows.Add(new DetailListRowData {
                 Kind = DetailRowKind.JournalHeader,
-                PrimaryText = line,
+                PrimaryText = HumanizeInfoType(type),
             });
-            AppendIconStripRow(rows, string.Empty, new[] { key.CostItemId }, scope, iconOnly: true);
-            AppendIconStripRow(rows, string.Empty, pieceSet, scope, iconOnly: true);
+            foreach (var (costId, pieceSet) in byCost.OrderBy(e => Item.GetRow(e.Key).Name.ToString(), StringComparer.Ordinal)) {
+                AppendArrowFlowRow(rows, [costId], pieceSet);
+            }
         }
 
         foreach (var (key, pieceSet) in fieldOps.OrderBy(e => HumanizeInfoType(e.Key.Type)).ThenBy(e => e.Key.CofferKind)) {
@@ -413,8 +413,7 @@ internal static class SourcesPanelBuilder {
                 Kind = DetailRowKind.JournalHeader,
                 PrimaryText = Item.GetRow(costId).Name.ToString(),
             });
-            AppendIconStripRow(rows, string.Empty, new[] { costId }, scope, iconOnly: true);
-            AppendIconStripRow(rows, string.Empty, pieces, scope, iconOnly: true);
+            AppendArrowFlowRow(rows, [costId], pieces);
         }
 
         return true;
@@ -497,6 +496,22 @@ internal static class SourcesPanelBuilder {
 
     private static void AppendIconStripRow(List<DetailListRowData> rows, string label, HashSet<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal)
         => AppendIconStripRow(rows, label, (IEnumerable<uint>)itemIds, scope, iconOnly, presentation);
+
+    /// <summary> One-line "left → arrow → right" row for catalyst-style sources (desynth / lootbox key + contents). </summary>
+    private static void AppendArrowFlowRow(List<DetailListRowData> rows, IReadOnlyList<uint> leftIds, IEnumerable<uint> rightIds) {
+        var leftOrdered = leftIds.Where(id => id != 0).Distinct().OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
+        var rightOrdered = rightIds.Where(id => id != 0).Distinct().OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
+        if (leftOrdered.Count == 0 && rightOrdered.Count == 0)
+            return;
+        var overflow = Math.Max(0, rightOrdered.Count - MaxSourceIconsVisible);
+        var rightVisible = rightOrdered.Count <= MaxSourceIconsVisible ? rightOrdered : [.. rightOrdered.Take(MaxSourceIconsVisible)];
+        rows.Add(new DetailListRowData {
+            Kind = DetailRowKind.SourceArrowFlow,
+            SourceFlowLeftIds = leftOrdered,
+            SourceItemIds = rightVisible,
+            SourceIconOverflow = overflow,
+        });
+    }
 
     private static string HumanizeInfoType(ItemInfoType t)
         => t.ToString().Replace("Shop", " Shop", StringComparison.Ordinal);
