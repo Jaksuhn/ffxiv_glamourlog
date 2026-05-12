@@ -1,6 +1,7 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using System.Collections.Frozen;
+using System.Globalization;
 
 namespace GlamourLog.Services;
 
@@ -303,5 +304,45 @@ internal sealed unsafe class OwnershipService : IDisposable {
         }
 
         return false;
+    }
+
+    internal void GetLalaAchievementsExportBuckets(out Dictionary<string, uint[]> outfitsBySetId, out uint[] armoires) {
+        var dresserIds = GetDresserStoredItemIds();
+        var outfitsBuilder = new Dictionary<string, HashSet<uint>>();
+
+        foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
+            if (set.ItemId == 0 || !dresserIds.Contains(set.ItemId))
+                continue;
+            var setRow = MirageStoreSetItem.GetRow(set.ItemId);
+            var pieces = new HashSet<uint>();
+            foreach (var pieceId in set.Items) {
+                if (pieceId == 0)
+                    continue;
+                if (IsPieceInMirageOutfitSlot(setRow, pieceId))
+                    pieces.Add(pieceId);
+            }
+
+            if (pieces.Count > 0)
+                outfitsBuilder[set.ItemId.ToString()] = pieces;
+        }
+
+        outfitsBySetId = [];
+        foreach (var key in outfitsBuilder.Keys.OrderBy(k => uint.Parse(k, CultureInfo.InvariantCulture)))
+            outfitsBySetId[key] = [.. outfitsBuilder[key].OrderBy(x => x)];
+
+        var armoireSet = new HashSet<uint>();
+        foreach (var id in GetArmoireOwnedItemIds()) {
+            if (id != 0)
+                armoireSet.Add(id);
+        }
+
+        foreach (var itemId in CabinetLookup.Value.Keys) {
+            if (itemId == 0)
+                continue;
+            if (IsInCabinet(itemId))
+                armoireSet.Add(itemId);
+        }
+
+        armoires = [.. armoireSet.OrderBy(x => x)];
     }
 }

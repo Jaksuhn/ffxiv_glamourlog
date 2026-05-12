@@ -4,22 +4,24 @@ using KamiToolKit.Nodes;
 namespace GlamourLog.Nodes;
 
 public sealed class SetListSortControlNode : ResNode {
-    private const float DropdownWidth = 150f;
     private const float ButtonSize = 28f;
-    private const float ButtonGap = 4f;
+    private const float ButtonGap = 2f;
 
-    public static float TotalWidth => DropdownWidth + ButtonGap + ButtonSize + ButtonGap + ButtonSize;
+    public const float LayoutWidth = ButtonSize + ButtonGap + ButtonSize; // H-space in header (dir + sort; dropdown extends left)
 
     public readonly EnumDropDownNode<GlamourSetSortMode> SortDropDown;
     public readonly CircleButtonNode SortDirectionButton;
     public readonly CircleButtonNode SortButton;
 
     public SetListSortControlNode(ListSortDirection sortDirection) {
-        Size = new Vector2(TotalWidth, ButtonSize);
+        var listOuterWidth = DropDownListOption.OuterWidthForListLabels(DropDownListOption.EnumDescriptions<GlamourSetSortMode>());
+        Size = new Vector2(LayoutWidth, ButtonSize);
+
+        var sortBlockEndX = LayoutWidth + ButtonGap;
 
         SortDropDown = new EnumDropDownNode<GlamourSetSortMode> {
-            Position = Vector2.Zero,
-            Size = new Vector2(DropdownWidth, ButtonSize),
+            Position = new Vector2(sortBlockEndX - listOuterWidth, 0f),
+            Size = new Vector2(listOuterWidth, ButtonSize),
             Options =
             [
                 GlamourSetSortMode.Alphabetical,
@@ -33,9 +35,8 @@ public sealed class SetListSortControlNode : ResNode {
         SortDropDown.DisableCollisionNode = true;
         SortDropDown.AttachNode(this);
 
-        var dirX = DropdownWidth + ButtonGap;
         SortDirectionButton = new CircleButtonNode {
-            Position = new Vector2(dirX, 0f),
+            Position = new Vector2(0f, 0f),
             Size = new Vector2(ButtonSize, ButtonSize),
             Icon = sortDirection == ListSortDirection.Ascending ? ButtonIcon.UpArrow : ButtonIcon.ArrowDown,
             TextTooltip = sortDirection == ListSortDirection.Ascending ? Addon.GetRow(8043).Text : Addon.GetRow(8044).Text,
@@ -43,7 +44,7 @@ public sealed class SetListSortControlNode : ResNode {
         SortDirectionButton.AttachNode(this);
 
         SortButton = new CircleButtonNode {
-            Position = new Vector2(dirX + ButtonSize + ButtonGap, 0f),
+            Position = new Vector2(ButtonSize + ButtonGap, 0f),
             Size = new Vector2(ButtonSize, ButtonSize),
             Icon = ButtonIcon.Sort,
             TextTooltip = Addon.GetRow(1389).Text, // Sort

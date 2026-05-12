@@ -14,6 +14,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private readonly List<string> _categoryPaneOrder = [];
 
     private ResNode? _midListHeader;
+    private SetListExportControlNode? _setListExportControl;
     private SetListSortControlNode? _setListSortControl;
     private CircleButtonNode? _filterSettingsButton;
     private GatheringNoteSearchNode? _gatheringNoteSearch;
@@ -35,8 +36,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private uint? _sourceFilterPieceItemId;
     private bool _isFinalizing;
     private bool _pendingRefreshListsAndDetails;
-    /// <summary> Re-sort and rebuild middle set list only (ownership unchanged); skips details column and category stats. </summary>
-    private bool _pendingRebuildSetListOrderOnly;
+    private bool _pendingRebuildSetListOrderOnly; // skips left/right columns
     private bool _pendingPaintDetailsOnly;
     private bool _pendingResetSetScroll;
     private bool _pendingResetDetailScroll;
@@ -140,8 +140,16 @@ internal unsafe partial class LogWindow : NativeAddon {
         };
         _midListHeader.AttachNode(this);
 
+        var sortRelX = filterRelX - 2f - SetListSortControlNode.LayoutWidth;
+        _setListExportControl = new SetListExportControlNode {
+            Position = new Vector2(sortRelX - 2f - SetListExportControlNode.LayoutWidth, 0f),
+        };
+        _setListExportControl.AttachNode(_midListHeader);
+        _setListExportControl.ExportDropDown.SelectedOption = GlamourDataExportFormat.LalaAchievements;
+        _setListExportControl.ExportDropDown.OnOptionSelected = OnDataExportFormatSelected;
+
         _setListSortControl = new SetListSortControlNode(C.SetListSortDirection) {
-            Position = new Vector2(filterRelX - 4f - SetListSortControlNode.TotalWidth, 0f),
+            Position = new Vector2(sortRelX, 0f),
         };
         _setListSortControl.AttachNode(_midListHeader);
         _setListSortControl.SortDropDown.SelectedOption = C.SetListSortMode;
@@ -353,9 +361,11 @@ internal unsafe partial class LogWindow : NativeAddon {
         }
         catch { }
 
+        _setListExportControl?.ExportDropDown.OnOptionSelected = null;
         _setListSortControl?.SortDropDown.OnOptionSelected = null;
         _setListSortControl?.SortDirectionButton.OnClick = null;
         _midListHeader = null;
+        _setListExportControl = null;
         _setListSortControl = null;
         _filterSettingsButton = null;
         _gatheringNoteSearch = null;
