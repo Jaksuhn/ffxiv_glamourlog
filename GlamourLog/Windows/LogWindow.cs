@@ -292,6 +292,9 @@ internal unsafe partial class LogWindow : NativeAddon {
             if (_pendingCategoryPaneRebuild) {
                 _pendingCategoryPaneRebuild = false;
                 RebuildCategoryButtonsFromPaneOrder();
+                // RefreshRows ran before this deferred rebuild (same frame), on the old buttons. New count nodes need a paint pass.
+                if (!_isFinalizing && IsOpen && CanPaintLists())
+                    _pendingRefreshListsAndDetails = true;
             }
 
             _setListNode?.Update();
