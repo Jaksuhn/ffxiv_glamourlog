@@ -24,15 +24,6 @@ internal static unsafe class PieceContextMenu {
             menu.AddItem("Open Recipe", () => AgentRecipeNote.Instance()->OpenRecipeByRecipeId(id));
         }
 
-        if (!item.IsUntradable) {
-            if (Svc.Interface.IsPluginLoaded("MarketBoardPlugin")) {
-                menu.AddItem("Open In MarketBoardPlugin", () => Svc.Commands.ProcessCommand($"/pmb {itemId}"));
-            }
-            if (Svc.Interface.IsPluginLoaded("vmarket")) {
-                menu.AddItem("Open In vmarket", () => Svc.Commands.ProcessCommand($"/vmarket {itemId}"));
-            }
-        }
-
         menu.Open();
     }
 
