@@ -45,6 +45,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private bool _pendingCategoryPaneRebuild;
     private int _lastDataVersion = -1;
     private readonly List<DetailListRowData> _detailRowOptions = [];
+    private readonly HashSet<string> _collapsedDetailSections = [];
     private readonly ContextMenu _contextMenu = new();
 
     private const float BottomStatsBlockHeight = 34f;
@@ -202,6 +203,8 @@ internal unsafe partial class LogWindow : NativeAddon {
         DetailListItemNode.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
         DetailListItemNode.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
         DetailListItemNode.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
+        DetailListItemNode.OnDetailSectionToggle = OnDetailSectionToggle;
+        DetailListItemNode.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
         _detailRowsListNode.AttachNode(this);
         _detailRowsListNode.Size = new Vector2(detailW, listBottom - alignTop);
 
@@ -361,12 +364,15 @@ internal unsafe partial class LogWindow : NativeAddon {
         _setListNode = null;
         _setListOptions.Clear();
         _detailRowOptions.Clear();
+        _collapsedDetailSections.Clear();
         GlamourSetListItemNode.OnRowRightClick = null;
         DetailListItemNode.OnPieceLeftClick = null;
         DetailListItemNode.OnItemRightClick = null;
         DetailListItemNode.OnSourceHeaderRightClick = null;
         DetailListItemNode.OnSourceMapFlagLeftClick = null;
         DetailListItemNode.OnCraftRecipeJournalLeftClick = null;
+        DetailListItemNode.OnDetailSectionToggle = null;
+        DetailListItemNode.IsDetailSectionCollapsed = null;
         _detailRowsListNode = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;

@@ -20,7 +20,6 @@ internal enum DetailRowKind {
     Cost,
     SourceDuty,
     SourceChest,
-    /// <summary> Inline source → arrow → product strip rendered by <see cref="SourceFlowNode"/> (desynth, lootbox catalysts). </summary>
     SourceArrowFlow,
 }
 
@@ -35,22 +34,14 @@ internal sealed class DetailListRowData {
     public bool ShowArmoireWarning { get; init; }
     public uint ContentFinderConditionId { get; init; }
     public IReadOnlyList<uint>? SourceItemIds { get; init; }
-    /// <summary> Slightly larger icons for dense strips (e.g. crafting ingredients) within <see cref="DetailListItemNode.ItemHeight"/>.</summary>
-    public SourceIconPresentation SourcePresentation { get; init; }
-    /// <summary> When set, left-click on <see cref="DetailRowKind.JournalHeader"/> opens the crafting log for this recipe.</summary>
-    public uint CraftRecipeRowId { get; init; }
-    /// <summary> Optional world navigation for shop / quest headers (right-click), or <see cref="DetailRowKind.Cost"/> vendor rows.</summary>
+    public SourceIconPresentation SourcePresentation { get; init; } // icon size
+    public uint CraftRecipeRowId { get; init; } // creates an open-recipe click when set
     public SourceNavigateTarget? NavigateTarget { get; init; }
-    /// <summary> Extra text tooltip for <see cref="DetailRowKind.Cost"/> (e.g. NPC and shop name).</summary>
     public string CostVendorTextTooltip { get; init; } = string.Empty;
-    /// <summary> Map flag title when placing a pin from a <see cref="DetailRowKind.Cost"/> row (currency - NPC - shop).</summary>
     public string CostMapFlagLabel { get; init; } = string.Empty;
-    /// <summary> When true, source row hides title text and shows only the icon strip (shops, chest contents, etc.).</summary>
     public bool SourceIconsOnly { get; init; }
-    /// <summary> Number of icons not shown when <see cref="SourceItemIds"/> exceeds the visible cap (shown as "+N").</summary>
-    public int SourceIconOverflow { get; init; }
-    /// <summary> Left-strip ids for <see cref="DetailRowKind.SourceArrowFlow"/> (typically the catalyst / cost item); <see cref="SourceItemIds"/> is the right strip.</summary>
-    public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; }
+    public int SourceIconOverflow { get; init; } // # icons not shown when SourceItemIds exceeds space
+    public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; } // left strip ids for SourceArrowFlow, right is SourceItemIds
 }
 
 internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
@@ -61,6 +52,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     public static Action<uint, SourceNavigateTarget?>? OnSourceHeaderRightClick { get; set; }
     public static Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
     public static Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
+    public static Action<string, bool>? OnDetailSectionToggle { get; set; } // fired when SectionHeader is toggled
+    public static Func<string, bool>? IsDetailSectionCollapsed { get; set; } // restore collapsed state for headers are rebuild if true
 
     private readonly CollisionNode _inputCollision;
     private readonly TextNode _primary;
@@ -91,6 +84,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             IsVisible = false,
             Height = 24f,
         };
+        // TLCN collision being a sibling of the list row root doesn't receive hits, so use _inputCollsision + HandleClick instead
+        _sectionChrome.CollisionNode.NodeFlags = 0;
         _sectionChrome.AttachNode(this);
 
         _journalChrome = new TreeListHeaderNode {
@@ -232,8 +227,13 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.String = string.Empty;
                 _sectionChrome.IsVisible = true;
                 _sectionChrome.String = itemData.PrimaryText;
-                _inputCollision.IsVisible = false;
-                _inputCollision.ShowClickableCursor = false;
+                if (IsDetailSectionCollapsed is { } collapsedFn) {
+                    var wantCollapsed = collapsedFn(itemData.PrimaryText);
+                    if (_sectionChrome.IsCollapsed != wantCollapsed)
+                        _sectionChrome.IsCollapsed = wantCollapsed;
+                }
+                _inputCollision.IsVisible = true;
+                _inputCollision.ShowClickableCursor = true;
                 break;
             case DetailRowKind.JournalHeader:
                 _primary.String = string.Empty;
@@ -362,8 +362,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _secondary.IsVisible = false;
                 _arrowFlow.Position = new Vector2(4f, 0f);
                 _arrowFlow.Size = new Vector2(Math.Max(0f, Width - 8f), ItemHeight);
-                var leftIds = itemData.SourceFlowLeftIds ?? (IReadOnlyList<uint>)[];
-                var rightIds = itemData.SourceItemIds ?? (IReadOnlyList<uint>)[];
+                var leftIds = itemData.SourceFlowLeftIds ?? [];
+                var rightIds = itemData.SourceItemIds ?? [];
                 _arrowFlow.SetFlow(leftIds, rightIds, itemData.SourceIconOverflow);
                 _arrowFlow.IsVisible = true;
                 _inputCollision.IsVisible = false;
@@ -376,6 +376,15 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             return;
 
         if (eventData->IsLeftClick) {
+            if (ItemData.Kind is DetailRowKind.SectionHeader && ItemData.PrimaryText.Length > 0 && OnDetailSectionToggle is not null && IsDetailSectionCollapsed is not null) {
+                var title = ItemData.PrimaryText;
+                // Second argument: true = expand (remove from collapsed set); matches IsDetailSectionCollapsed true when currently collapsed.
+                var collapsedBefore = IsDetailSectionCollapsed(title);
+                OnDetailSectionToggle(title, collapsedBefore);
+                _sectionChrome.IsCollapsed = IsDetailSectionCollapsed(title);
+                return;
+            }
+
             if (ItemData.Kind is DetailRowKind.Piece && ItemData.ItemId != 0) {
                 OnPieceLeftClick?.Invoke(ItemData.ItemId);
                 return;

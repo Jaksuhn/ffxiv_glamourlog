@@ -37,6 +37,7 @@ internal unsafe partial class LogWindow {
         if (_selectedSet == null) {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" });
+            ApplyCollapsedDetailSections(_detailRowOptions);
             _detailRowsListNode.OptionsList = [.. _detailRowOptions];
             _detailRowsListNode.Update();
             return;
@@ -87,8 +88,43 @@ internal unsafe partial class LogWindow {
 
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources" });
         SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions);
+        ApplyCollapsedDetailSections(_detailRowOptions);
         _detailRowsListNode.OptionsList = [.. _detailRowOptions];
         _detailRowsListNode.Update();
+    }
+
+    private void OnDetailSectionToggle(string sectionTitle, bool expandSection) {
+        if (_isFinalizing || !IsOpen)
+            return;
+        if (expandSection)
+            _collapsedDetailSections.Remove(sectionTitle);
+        else
+            _collapsedDetailSections.Add(sectionTitle);
+        // Defer list rebuild so we never replace OptionsList during this click stack (same as row hit path).
+        PaintDetailsOnly();
+    }
+
+    /// <summary> Keeps <see cref="DetailRowKind.SectionHeader"/> rows; drops following rows until the next section when that title is collapsed. </summary>
+    private void ApplyCollapsedDetailSections(List<DetailListRowData> rows) {
+        if (_collapsedDetailSections.Count == 0)
+            return;
+
+        string? currentSection = null;
+        var write = 0;
+        for (var read = 0; read < rows.Count; read++) {
+            var row = rows[read];
+            if (row.Kind == DetailRowKind.SectionHeader) {
+                currentSection = row.PrimaryText;
+                rows[write++] = row;
+                continue;
+            }
+
+            if (currentSection is null || !_collapsedDetailSections.Contains(currentSection))
+                rows[write++] = row;
+        }
+
+        if (write < rows.Count)
+            rows.RemoveRange(write, rows.Count - write);
     }
 
     private bool TryGetCostTotals(GlamourSet set, uint? pieceFilterPieceItemId, out Dictionary<uint, uint> totals) {
