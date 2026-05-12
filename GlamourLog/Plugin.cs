@@ -30,6 +30,7 @@ public sealed class Plugin : IAsyncDalamudPlugin {
         C = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Svc.Register<CatalogService>();
         Svc.Register<OwnershipService>();
+        Svc.Register<IpcProvider>();
 
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
         await Svc.Framework.RunOnFrameworkThread(Svc.Register<WindowsService>);
