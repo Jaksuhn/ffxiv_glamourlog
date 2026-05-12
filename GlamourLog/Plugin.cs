@@ -32,12 +32,7 @@ public sealed class Plugin : IAsyncDalamudPlugin {
         Svc.Register<CatalogService>();
         Svc.Register<OwnershipService>();
 
-        foreach (var c in _commands) {
-            Svc.Commands.AddHandler(c, new CommandInfo(OnCommand) {
-                HelpMessage = "Toggle the Glamour Log window.",
-            });
-        }
-
+        _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
         await Svc.Framework.RunOnFrameworkThread(Svc.Register<WindowsService>);
         Svc.Interface.UiBuilder.OpenMainUi += Svc.Get<WindowsService>().ToggleMainWindow;
     }
