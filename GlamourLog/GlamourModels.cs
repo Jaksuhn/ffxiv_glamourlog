@@ -1,16 +1,7 @@
 namespace GlamourLog;
 
-internal enum SourceGroupKind {
-    Duty,
-    Fate,
-    Vendor,
-}
-
-/// <summary> One source group in the set details Sources panel (duty/fate/vendor).</summary>
-internal sealed record SourceGroup(SourceGroupKind Kind, uint ContentFinderConditionId, string Name, IReadOnlyList<SourceRow> Rows);
-
-/// <summary> One row under a source group, with optional secondary text and item/currency icons.</summary>
-internal sealed record SourceRow(string Label, string SecondaryText, IReadOnlyList<uint> ItemIds);
+/// <summary> World navigation target for vendor / quest headers (territory type row id + world XZ from Lumina / Allagan NPC locations).</summary>
+internal readonly record struct SourceNavigateTarget(uint TerritoryTypeId, Vector3 WorldPosition);
 
 internal sealed class GlamourSet {
     public required uint ItemId { get; init; }

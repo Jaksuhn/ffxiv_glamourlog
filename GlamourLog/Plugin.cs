@@ -13,6 +13,9 @@ namespace GlamourLog;
  * TODO
  * Try On should clear the existing items
  * rename glam plates tweak
+ * loot window alert for missing pieces (and/or just general inventory change alert)
+ * armoire store hide gearset pieces
+ * xivcollect export
  */
 public sealed class Plugin : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;

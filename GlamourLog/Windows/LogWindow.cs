@@ -1,10 +1,12 @@
 using System.ComponentModel;
 using System.Globalization;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
+using GlamourLog.Windows;
 using KamiToolKit;
 using KamiToolKit.Extensions;
 using KamiToolKit.Nodes;
@@ -44,6 +46,8 @@ internal unsafe class LogWindow : NativeAddon {
     private bool _pendingResetSetScroll;
     private bool _pendingResetDetailScroll;
     private bool _pendingClearSetSelection;
+    /// <summary> Category scroll list <see cref="ScrollingListNode.Clear"/> must not run until after <see cref="NativeAddon.OnUpdate"/> — native UldManager can still be traversing nodes on the first frame after setup. </summary>
+    private bool _pendingCategoryPaneRebuild;
     private int _lastDataVersion = -1;
     private readonly List<DetailListRowData> _detailRowOptions = [];
     private readonly ContextMenu _contextMenu = new();
@@ -219,7 +223,9 @@ internal unsafe class LogWindow : NativeAddon {
         };
         DetailListItemNode.OnPieceLeftClick = OnDetailPieceItemLeftClick;
         DetailListItemNode.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
-        DetailListItemNode.OnDutyRightClick = id => SourceContextMenu.Open(this, id, _contextMenu);
+        DetailListItemNode.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
+        DetailListItemNode.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
+        DetailListItemNode.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
         _detailRowsListNode.AttachNode(this);
         _detailRowsListNode.Size = new Vector2(detailW, listBottom - alignTop);
 
@@ -305,6 +311,11 @@ internal unsafe class LogWindow : NativeAddon {
         base.OnUpdate(addon);
 
         try {
+            if (_pendingCategoryPaneRebuild) {
+                _pendingCategoryPaneRebuild = false;
+                RebuildCategoryButtonsFromPaneOrder();
+            }
+
             _setListNode?.Update();
             _detailRowsListNode?.Update();
 
@@ -345,6 +356,8 @@ internal unsafe class LogWindow : NativeAddon {
     private static void ResetScrollToTop(ListNode<DetailListRowData, DetailListItemNode>? list) {
         if (list is null)
             return;
+        // Do not call FullRebuild here: RefreshDetails already FullRebuilds when OptionsList changes.
+        // A second FullRebuild in the same frame (paint details + reset scroll) disposes pooled rows twice and crashes ATK.
         list.ScrollBarNode.ScrollPosition = 0;
     }
 
@@ -356,7 +369,7 @@ internal unsafe class LogWindow : NativeAddon {
 
         _categoryPaneOrder.Clear();
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
-        RebuildCategoryButtonsFromPaneOrder();
+        _pendingCategoryPaneRebuild = true;
         if (!_categoryPaneOrder.Contains(_selectedCategoryId))
             _selectedCategoryId = Svc.Get<CatalogService>().UncategorizedTab.Name;
         _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
@@ -365,6 +378,7 @@ internal unsafe class LogWindow : NativeAddon {
 
     protected override void OnFinalize(AtkUnitBase* addon) {
         _isFinalizing = true;
+        _pendingCategoryPaneRebuild = false;
 
         try {
             // Do not Dispose() another NativeAddon from here: Close is safer during AtkUnitBase finalization.
@@ -392,7 +406,9 @@ internal unsafe class LogWindow : NativeAddon {
         GlamourSetListItemNode.OnRowRightClick = null;
         DetailListItemNode.OnPieceLeftClick = null;
         DetailListItemNode.OnItemRightClick = null;
-        DetailListItemNode.OnDutyRightClick = null;
+        DetailListItemNode.OnSourceHeaderRightClick = null;
+        DetailListItemNode.OnSourceMapFlagLeftClick = null;
+        DetailListItemNode.OnCraftRecipeJournalLeftClick = null;
         _detailRowsListNode = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;
@@ -693,6 +709,7 @@ internal unsafe class LogWindow : NativeAddon {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details" });
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" });
             _detailRowsListNode.OptionsList = [.. _detailRowOptions];
+            _detailRowsListNode.Update();
             return;
         }
 
@@ -731,85 +748,34 @@ internal unsafe class LogWindow : NativeAddon {
             var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
             foreach (var kv in ordered) {
                 var owned = GetOwnedCurrencyCount(kv.Key);
+                var (costNav, costTip, npcName, shopName) = SourcesPanelBuilder.GetShopVendorHintForCostCurrency(
+                    Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, kv.Key);
+                var currencyName = Item.GetRow(kv.Key).Name.ToString().Trim();
+                var mapFlagLabel = costNav is not null && npcName.Length > 0 && shopName.Length > 0
+                    ? $"{currencyName} - {npcName} - {shopName}"
+                    : string.Empty;
                 _detailRowOptions.Add(new DetailListRowData {
                     Kind = DetailRowKind.Cost,
                     ItemId = kv.Key,
                     PrimaryText = Item.GetRow(kv.Key).Name.ToString(),
                     SecondaryText = $"Obt. {owned}/{kv.Value}",
+                    NavigateTarget = costNav,
+                    CostVendorTextTooltip = costTip,
+                    CostMapFlagLabel = mapFlagLabel,
                 });
             }
         }
 
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources" });
-        var hierarchy = Svc.Get<CatalogService>().GetSourceHierarchy(_selectedSet, _sourceFilterPieceItemId);
-        if (hierarchy.Count == 0) {
-            _detailRowOptions.Add(new DetailListRowData {
-                Kind = DetailRowKind.EmptyHint,
-                PrimaryText = Addon.GetRow(5494).Text.ToString()
-            });
-        }
-        else {
-            foreach (var g in hierarchy) {
-                var nonEmptyRows = g.Rows.Where(x => x.ItemIds.Count > 0).ToList();
-                if (nonEmptyRows.Count == 0)
-                    continue;
-
-                _detailRowOptions.Add(new DetailListRowData {
-                    Kind = DetailRowKind.SourceDuty,
-                    PrimaryText = g.Name,
-                    ContentFinderConditionId = g.ContentFinderConditionId,
-                });
-
-                foreach (var row in nonEmptyRows) {
-                    _detailRowOptions.Add(new DetailListRowData {
-                        Kind = DetailRowKind.SourceChest,
-                        PrimaryText = row.Label,
-                        SecondaryText = row.SecondaryText,
-                        SourceItemIds = row.ItemIds,
-                    });
-                }
-            }
-        }
-
-        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Source Kinds" });
-        var sourceTypes = Svc.Get<CatalogService>().GetSourceTypesForSet(_selectedSet, _sourceFilterPieceItemId);
-        if (sourceTypes.Count == 0) {
-            _detailRowOptions.Add(new DetailListRowData {
-                Kind = DetailRowKind.EmptyHint,
-                PrimaryText = "No source kinds found for current scope."
-            });
-        }
-        else {
-            foreach (var line in BuildSourceTypeLines(sourceTypes)) {
-                _detailRowOptions.Add(new DetailListRowData {
-                    Kind = DetailRowKind.EmptyHint,
-                    PrimaryText = line,
-                });
-            }
-        }
+        SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions);
         _detailRowsListNode.OptionsList = [.. _detailRowOptions];
+        _detailRowsListNode.Update();
     }
 
-    private static IReadOnlyList<string> BuildSourceTypeLines(IReadOnlyList<AllaganLib.GameSheets.Caches.ItemInfoType> sourceTypes) {
-        const int maxCharsPerLine = 40;
-        var lines = new List<string>();
-        var current = string.Empty;
-        foreach (var type in sourceTypes) {
-            var name = type.ToString();
-            if (current.Length == 0) {
-                current = name;
-                continue;
-            }
-            if (current.Length + 2 + name.Length > maxCharsPerLine) {
-                lines.Add(current);
-                current = name;
-                continue;
-            }
-            current = $"{current}, {name}";
-        }
-        if (current.Length > 0)
-            lines.Add(current);
-        return lines;
+    private static void OnCraftRecipeJournalLeftClick(uint recipeRowId) {
+        if (recipeRowId == 0)
+            return;
+        AgentRecipeNote.Instance()->OpenRecipeByRecipeId(recipeRowId);
     }
 
     private void OnDetailPieceItemLeftClick(uint itemId) {
