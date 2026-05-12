@@ -1,4 +1,5 @@
-﻿using GlamourLog.Services;
+﻿using AllaganLib.GameSheets.ItemSources;
+using GlamourLog.Services;
 
 namespace GlamourLog;
 
@@ -13,6 +14,7 @@ internal sealed class IpcProvider : IDisposable {
         RegisterFunc("IsItemInArmoire", (uint itemId) => IsItemInArmoire(itemId));
         RegisterFunc("IsItemInDresser", (uint itemId) => IsItemInDresser(itemId));
         RegisterFunc("IsSetComplete", (uint setItemId) => IsSetComplete(setItemId));
+        RegisterFunc("GetItemsFromContent", (uint cfcId) => GetItemsFromContent(cfcId));
     }
 
     public void Dispose() {
@@ -68,5 +70,24 @@ internal sealed class IpcProvider : IDisposable {
         var ownership = Svc.Get<OwnershipService>();
         var items = ownership.GetOwnedItems();
         return ownership.GetOwnedPieceCountForSet(set, items) == set.Items.Count;
+    }
+
+    private static List<uint> GetItemsFromContent(uint cfcId) {
+        if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })
+            return [];
+        var cache = Svc.SheetManager.ItemInfoCache;
+        var result = new HashSet<uint>();
+        foreach (var row in Item.Where(i => i.RowId > 0)) {
+            if (cache.GetItemSources(row.RowId) is not { Count: > 0 } list)
+                continue;
+            foreach (var src in list) {
+                if (src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId) {
+                    result.Add(row.RowId);
+                    break;
+                }
+            }
+        }
+
+        return [.. result.OrderBy(x => x)];
     }
 }
