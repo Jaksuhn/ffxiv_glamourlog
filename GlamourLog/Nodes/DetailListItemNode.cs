@@ -42,6 +42,7 @@ internal sealed class DetailListRowData {
     public bool SourceIconsOnly { get; init; }
     public int SourceIconOverflow { get; init; } // # icons not shown when SourceItemIds exceeds space
     public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; } // left strip ids for SourceArrowFlow, right is SourceItemIds
+    public bool IsTopLevelSection { get; init; }
 }
 
 internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
