@@ -14,7 +14,7 @@ internal static class SourceContextMenu {
         GlamourLogAgentContext.AttachContextMenuTo(owner);
         menu.Clear();
 
-        if (navigateTarget is { TerritoryTypeId: var territoryId, WorldPosition: var pos } && territoryId != 0) {
+        if (navigateTarget is { TerritoryTypeId: not 0 and var territoryId, WorldPosition: var pos } && Svc.Interface.IsPluginLoaded("vnavmesh")) {
             menu.AddItem("Navigate to location", () => {
                 Svc.Automation.Start(new NavTo(territoryId, pos));
             });
