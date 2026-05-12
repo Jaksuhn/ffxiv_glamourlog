@@ -192,6 +192,87 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
         _inputCollision.Position = Vector2.Zero;
         _inputCollision.Size = Size;
+
+        // reapply widths after resize
+        if (ItemData is not null)
+            ApplyDynamicWidth(ItemData);
+    }
+
+    private void ApplyDynamicWidth(DetailListRowData data) {
+        switch (data.Kind) {
+            case DetailRowKind.EmptyHint:
+                _primary.Size = new Vector2(Math.Max(20f, Width - 8f), 14f);
+                break;
+            case DetailRowKind.Piece:
+                var pieceTextRightReserve = 8f;
+                if (_storageBadge.IsVisible)
+                    pieceTextRightReserve = _storageBadge.Size.X + 16f;
+                else if (_inventoryBadge.IsVisible)
+                    pieceTextRightReserve = _inventoryBadge.Size.X + 16f;
+                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 16f);
+                break;
+            case DetailRowKind.Cost:
+                _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+                _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+                break;
+            case DetailRowKind.SourceChest:
+                float iconOriginX;
+                if (data.SourceIconsOnly)
+                    iconOriginX = 4f;
+                else if (data.PrimaryText.Length > 0 && data.SecondaryText.Length == 0) {
+                    const float dutyChestLabelWidth = 56f;
+                    _primary.Size = new Vector2(Math.Min(dutyChestLabelWidth, Math.Max(36f, Width - 72f)), 14f);
+                    iconOriginX = 6f + dutyChestLabelWidth;
+                }
+                else {
+                    var hasSourceSecondary = data.SecondaryText.Length > 0;
+                    _primary.Size = new Vector2(Math.Max(20f, Width - 180f), hasSourceSecondary ? 12f : 14f);
+                    if (hasSourceSecondary)
+                        _secondary.Size = new Vector2(Math.Max(20f, Width - 180f), 14f);
+                    iconOriginX = 4f;
+                }
+
+                if (data.SourceItemIds is { Count: > 0 } sourceItems) {
+                    var large = data.SourcePresentation == SourceIconPresentation.Large;
+                    var iconSize = large ? 26f : 24f;
+                    var iconGap = large ? 5f : 4f;
+                    var iconY = (ItemHeight - iconSize) * 0.5f;
+                    var maxFit = (int)Math.Max(1, Math.Floor((Width - iconOriginX - 40f) / (iconSize + iconGap)));
+                    var show = Math.Min(Math.Min(sourceItems.Count, _sourceIcons.Count), maxFit);
+                    for (var i = 0; i < _sourceIcons.Count; i++) {
+                        var icon = _sourceIcons[i];
+                        if (i < show) {
+                            icon.SetItemId(sourceItems[i]);
+                            icon.Size = new Vector2(iconSize, iconSize);
+                            icon.Position = new Vector2(iconOriginX + i * (iconSize + iconGap), iconY);
+                            icon.IsVisible = true;
+                        }
+                        else {
+                            icon.IsVisible = false;
+                        }
+                    }
+
+                    if (data.SourceIconOverflow > 0) {
+                        _sourceOverflow.String = $"+{data.SourceIconOverflow}";
+                        _sourceOverflow.Position = new Vector2(iconOriginX + show * (iconSize + iconGap) + 2f, iconY + 3f);
+                        _sourceOverflow.IsVisible = true;
+                    }
+                    else {
+                        _sourceOverflow.IsVisible = false;
+                    }
+                }
+                else {
+                    foreach (var icon in _sourceIcons)
+                        icon.IsVisible = false;
+                    _sourceOverflow.IsVisible = false;
+                }
+
+                break;
+            case DetailRowKind.SourceArrowFlow:
+                _arrowFlow.Size = new Vector2(Math.Max(0f, Width - 8f), ItemHeight);
+                _arrowFlow.SetFlow(data.SourceFlowLeftIds ?? [], data.SourceItemIds ?? [], data.SourceIconOverflow);
+                break;
+        }
     }
 
     protected override void SetNodeData(DetailListRowData itemData) {
@@ -246,7 +327,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 break;
             case DetailRowKind.EmptyHint:
                 _primary.Position = new Vector2(4f, 7f);
-                _primary.Size = new Vector2(Math.Max(20f, Width - 8f), 14f);
                 _primary.TextColor = new Vector4(0.65f, 0.65f, 0.65f, 1f);
                 break;
             case DetailRowKind.Piece:
@@ -269,8 +349,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 else if (itemData.ShowInventoryBadge) {
                     _inventoryBadge.IsVisible = true;
                 }
-                var pieceTextRightReserve = (_storageBadge.IsVisible || _inventoryBadge.IsVisible) ? (_storageBadge.Size.X + 16f) : 8f;
-                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 16f);
                 _inputCollision.ShowClickableCursor = true;
                 _inputCollision.ItemTooltip = itemData.ItemId;
                 break;
@@ -279,11 +357,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _icon.SetItemId(itemData.ItemId);
                 _icon.IsVisible = true;
                 _primary.Position = new Vector2(30f, 1f);
-                _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
                 _primary.TextColor = ColorHelper.GetColor(currencyRow.AtkUiRarityColorId);
                 _secondary.IsVisible = true;
                 _secondary.Position = new Vector2(30f, 14f);
-                _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
                 _inputCollision.ShowClickableCursor = true;
                 _inputCollision.ItemTooltip = itemData.ItemId;
                 if (itemData.CostVendorTextTooltip.Length > 0)
@@ -298,59 +374,28 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 break;
             case DetailRowKind.SourceChest:
                 var iconOnlyChest = itemData.SourceIconsOnly;
-                float iconOriginX;
                 if (iconOnlyChest) {
                     _primary.String = string.Empty;
                     _primary.IsVisible = false;
                     _secondary.IsVisible = false;
-                    iconOriginX = 4f;
                 }
                 else if (itemData.PrimaryText.Length > 0 && itemData.SecondaryText.Length == 0) {
-                    const float dutyChestLabelWidth = 56f;
                     _primary.String = itemData.PrimaryText;
                     _primary.IsVisible = true;
                     _primary.Position = new Vector2(6f, (ItemHeight - 12f) * 0.5f);
-                    _primary.Size = new Vector2(Math.Min(dutyChestLabelWidth, Math.Max(36f, Width - 72f)), 14f);
                     _primary.FontSize = 12;
                     _primary.LineSpacing = 12;
                     _primary.TextColor = ImGuiColors.DalamudWhite;
                     _secondary.IsVisible = false;
-                    iconOriginX = 6f + dutyChestLabelWidth;
                 }
                 else {
                     var hasSourceSecondary = itemData.SecondaryText.Length > 0;
                     _primary.IsVisible = true;
                     _primary.Position = hasSourceSecondary ? new Vector2(4f, 2f) : new Vector2(4f, 10f);
-                    _primary.Size = new Vector2(Math.Max(20f, Width - 180f), hasSourceSecondary ? 12f : 14f);
                     if (hasSourceSecondary) {
                         _secondary.IsVisible = true;
                         _secondary.Position = new Vector2(4f, 16f);
-                        _secondary.Size = new Vector2(Math.Max(20f, Width - 180f), 14f);
                         _secondary.TextColor = new Vector4(0.65f, 0.65f, 0.65f, 1f);
-                    }
-
-                    iconOriginX = 4f;
-                }
-
-                if (itemData.SourceItemIds is { Count: > 0 } sourceItems) {
-                    var large = itemData.SourcePresentation == SourceIconPresentation.Large;
-                    var iconSize = large ? 26f : 24f;
-                    var iconGap = large ? 5f : 4f;
-                    var iconY = (ItemHeight - iconSize) * 0.5f;
-                    var maxFit = (int)Math.Max(1, Math.Floor((Width - iconOriginX - 40f) / (iconSize + iconGap)));
-                    var show = Math.Min(Math.Min(sourceItems.Count, _sourceIcons.Count), maxFit);
-                    for (var i = 0; i < show; i++) {
-                        var icon = _sourceIcons[i];
-                        icon.SetItemId(sourceItems[i]);
-                        icon.Size = new Vector2(iconSize, iconSize);
-                        icon.Position = new Vector2(iconOriginX + i * (iconSize + iconGap), iconY);
-                        icon.IsVisible = true;
-                    }
-
-                    if (itemData.SourceIconOverflow > 0) {
-                        _sourceOverflow.String = $"+{itemData.SourceIconOverflow}";
-                        _sourceOverflow.Position = new Vector2(iconOriginX + show * (iconSize + iconGap) + 2f, iconY + 3f);
-                        _sourceOverflow.IsVisible = true;
                     }
                 }
 
@@ -362,14 +407,12 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.IsVisible = false;
                 _secondary.IsVisible = false;
                 _arrowFlow.Position = new Vector2(4f, 0f);
-                _arrowFlow.Size = new Vector2(Math.Max(0f, Width - 8f), ItemHeight);
-                var leftIds = itemData.SourceFlowLeftIds ?? [];
-                var rightIds = itemData.SourceItemIds ?? [];
-                _arrowFlow.SetFlow(leftIds, rightIds, itemData.SourceIconOverflow);
                 _arrowFlow.IsVisible = true;
                 _inputCollision.IsVisible = false;
                 break;
         }
+
+        ApplyDynamicWidth(itemData);
     }
 
     private void HandleClick(AtkEventData* eventData) {

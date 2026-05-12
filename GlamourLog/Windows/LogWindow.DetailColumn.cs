@@ -100,7 +100,7 @@ internal unsafe partial class LogWindow {
             _collapsedDetailSections.Remove(sectionTitle);
         else
             _collapsedDetailSections.Add(sectionTitle);
-        // Defer list rebuild so we never replace OptionsList during this click stack (same as row hit path).
+        // defer list rebuild so OptionsList is never replaced during this click stack (same as row hit path)
         PaintDetailsOnly();
     }
 
