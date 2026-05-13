@@ -80,9 +80,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return ownedCount > 0 && ownedCount < glamourSet.Items.Count;
     }
 
-    /// <summary> True when at least one set piece is currently in the player's bags (not dresser/armoire alone). </summary>
-    internal static bool SetHasPieceInPlayerInventory(GlamourSet glamourSet, HashSet<uint> inventoryItemIds)
-        => glamourSet.Items.Any(inventoryItemIds.Contains);
+    internal bool HasContributablePieceInInventory(GlamourSet glamourSet, HashSet<uint> inventoryItemIds)
+        => glamourSet.Items.Any(itemId => inventoryItemIds.Contains(itemId) && GetItemStorageState(itemId, glamourSet) is not (ItemStorageState.Armoire or ItemStorageState.DresserSet));
 
     internal bool IsMarketboardPurchasable(GlamourSet glamourSet)
         => glamourSet.Items.Any(itemId => !Item.GetRow(itemId).IsUntradable);
@@ -154,15 +153,10 @@ internal sealed unsafe class OwnershipService : IDisposable {
         var dresserItemIds = GetDresserStoredItemIds();
         if (forSet is not null && dresserItemIds.Contains(forSet.ItemId) && forSet.Items.Contains(itemId)) {
             var setRow = MirageStoreSetItem.GetRow(forSet.ItemId);
-            if (IsPieceInMirageOutfitSlot(setRow, itemId))
-                return ItemStorageState.DresserSet;
-            return ItemStorageState.None;
+            return IsPieceInMirageOutfitSlot(setRow, itemId) ? ItemStorageState.DresserSet : ItemStorageState.None;
         }
 
-        if (dresserItemIds.Contains(itemId))
-            return ItemStorageState.DresserLoose;
-
-        return ItemStorageState.None;
+        return dresserItemIds.Contains(itemId) ? ItemStorageState.DresserLoose : ItemStorageState.None;
     }
 
     private static bool IsInCabinet(uint itemId) {

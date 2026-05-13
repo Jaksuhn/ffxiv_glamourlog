@@ -59,7 +59,6 @@ internal unsafe partial class LogWindow : NativeAddon {
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
         _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
         DisableClose = true;
-        DisableCloseTransition = true;
     }
 
     internal void RefreshListsAndDetails() {

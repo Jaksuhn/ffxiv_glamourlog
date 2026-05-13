@@ -17,7 +17,7 @@ internal static class SetListFilterSort {
             rows = [.. rows.Where(r =>
                 (!C.HideNonPartials || Svc.Get<OwnershipService>().IsPartiallyCompleted(r, ownedSets, ownedItems)) &&
                 (!C.HideUnaffordable || Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(r, ownedItems)) &&
-                (!C.HideUnready || (inventoryOnly is not null && OwnershipService.SetHasPieceInPlayerInventory(r, inventoryOnly))) &&
+                (!C.HideUnready || (inventoryOnly is not null && Svc.Get<OwnershipService>().HasContributablePieceInInventory(r, inventoryOnly))) &&
                 (!C.HideNoMarketboard || Svc.Get<OwnershipService>().IsMarketboardPurchasable(r))
             )];
         }
