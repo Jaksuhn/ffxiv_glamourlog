@@ -1,3 +1,4 @@
+using Dalamud.Game.Inventory.InventoryEventArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using System.Collections.Frozen;
@@ -17,9 +18,11 @@ internal sealed unsafe class OwnershipService : IDisposable {
     public OwnershipService() {
         _armoireService = new ArmoireService();
         _armoireService.ArmoireChanged += OnArmoireChanged;
+        Svc.GameInventory.InventoryChanged += OnInventoryChanged;
     }
 
     public void Dispose() {
+        Svc.GameInventory.InventoryChanged -= OnInventoryChanged;
         _armoireService.ArmoireChanged -= OnArmoireChanged;
         _armoireService.Dispose();
     }
@@ -27,6 +30,23 @@ internal sealed unsafe class OwnershipService : IDisposable {
     private void OnArmoireChanged() {
         Svc.Get<CatalogService>().OnArmoireChanged();
         Svc.Get<CatalogService>().NotifyDisplayedOwnershipMayHaveChanged();
+    }
+
+    private void OnInventoryChanged(IReadOnlyCollection<InventoryEventArgs> events) {
+        if (!Svc.ClientState.IsLoggedIn)
+            return;
+
+        foreach (var eventData in events) {
+            if (!InventoryType.AllPlayer.Contains((InventoryType)eventData.Item.ContainerType))
+                continue;
+            if (eventData is not InventoryItemAddedArgs)
+                continue;
+
+            if (Svc.Get<CatalogService>().GlamourSets.Any(set => set.Items.Contains(eventData.Item.BaseItemId))) {
+                Svc.Get<CatalogService>().NotifyDisplayedOwnershipMayHaveChanged();
+                return;
+            }
+        }
     }
 
     internal bool CanAffordAllMissingGearPieces(GlamourSet glamourSet, HashSet<uint> ownedItems) {
@@ -279,7 +299,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return false;
     }
 
-    /// <summary> True when the sheet lists the same number of pieces as <paramref name="set"/> and each slot is collected on the mirage outfit (see clib <c>IsFullSetCollected</c>). </summary>
+    /// <summary> True when the sheet lists the same number of pieces as <paramref name="set"/> and each slot is collected on the mirage outfit (see <see cref="MirageStoreSetItemExtensions.IsFullSetCollected(MirageStoreSetItem, bool)"/>). </summary>
     private static bool IsFullMirageOutfit(GlamourSet set) {
         var row = MirageStoreSetItem.GetRow(set.ItemId);
         if (!row.IsFullSetCollected())
@@ -294,7 +314,6 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return defined == set.Items.Count;
     }
 
-    /// <remarks> Uses <see href="https://github.com/Jaksuhn/clib/blob/369bb76683a7adec0db10b91d994c47d06e0e60b/Extensions/Lumina/MirageStoreSetItemExtensions.cs">MirageStoreSetItemExtensions.IsSetSlotCollected</see>. </remarks>
     private static bool IsPieceInMirageOutfitSlot(MirageStoreSetItem row, uint pieceItemId) {
         var itemIndex = 0;
         foreach (var itemRef in row.Items) {
