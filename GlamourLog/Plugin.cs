@@ -13,7 +13,6 @@ namespace GlamourLog;
  * Try On should clear the existing items
  * setting: ignore armoire warning if item in dresser is dyed
  * rename glam plates tweak
- * AT ipc for obtained count (specifically currencies?)
  * loot window alert for missing pieces (and/or just general inventory change alert)
  * armoire store hide gearset pieces
  * xivcollect export
@@ -32,6 +31,7 @@ public sealed class Plugin : IAsyncDalamudPlugin {
         C = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Svc.Register<CatalogService>();
         Svc.Register<OwnershipService>();
+        Svc.Register<AllaganToolsIpc>();
         Svc.Register<IpcProvider>();
 
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));

@@ -152,8 +152,13 @@ internal unsafe partial class LogWindow {
         return totals.Count > 0;
     }
 
-    private static int GetOwnedCurrencyCount(uint costItemId)
-        => CurrencyManager.Instance()->SpecialItemBucket.TryGetValue(costItemId, out var value, true) ? (int)value.Count : InventoryManager.Instance()->GetInventoryItemCount(costItemId);
+    private static int GetOwnedCurrencyCount(uint costItemId) {
+        if (Svc.Get<AllaganToolsIpc>().TryGetOwnedCount(costItemId, out var allaganCount))
+            return allaganCount;
+        return CurrencyManager.Instance()->SpecialItemBucket.TryGetValue(costItemId, out var value, true)
+            ? (int)value.Count
+            : InventoryManager.Instance()->GetInventoryItemCount(costItemId);
+    }
 
     private static GlamourIconNode.IconPart? StorageIconPartFor(ItemStorageState storageState)
         => storageState switch {
