@@ -20,6 +20,7 @@ public sealed class GatheringNoteItemNode : ListButtonNode {
     public GatheringNoteItemNode(float rowHeight, float iconSize, Vector4 titleColor) {
         _iconSize = iconSize;
         String = string.Empty;
+        // ListButtonNode label unused — custom icon + title/subtitle instead
         LabelNode.IsVisible = false;
 
         IconNode = new FramedItemIconNode(iconSize);

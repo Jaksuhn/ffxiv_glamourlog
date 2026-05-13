@@ -11,7 +11,9 @@ namespace GlamourLog;
 /*
  * TODO
  * Try On should clear the existing items
+ * setting: ignore armoire warning if item in dresser is dyed
  * rename glam plates tweak
+ * AT ipc for obtained count (specifically currencies?)
  * loot window alert for missing pieces (and/or just general inventory change alert)
  * armoire store hide gearset pieces
  * xivcollect export

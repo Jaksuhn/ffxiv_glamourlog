@@ -18,6 +18,7 @@ public sealed class FramedItemIconNode : SimpleComponentNode {
     }
 
     public FramedItemIconNode(float iconSize = 22f, uint itemId = 0) {
+        // simplecomponent defaults can leave nested icon+frame invisible in some atk trees until explicitly flagged
         NodeFlags = FFXIVClientStructs.FFXIV.Component.GUI.NodeFlags.Visible;
 
         IconNode = new IconImageNode {

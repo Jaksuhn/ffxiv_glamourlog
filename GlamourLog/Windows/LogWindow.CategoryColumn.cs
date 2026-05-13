@@ -22,12 +22,12 @@ internal unsafe partial class LogWindow {
         RebuildCategoryButtonsFromPaneOrder();
     }
 
-    /// <summary> Rebuilds the category column from <see cref="_categoryPaneOrder"/> (used on first setup and when catalog <see cref="CatalogService.DataVersion"/> changes). </summary>
+    // rebuilds left pane from _categoryPaneOrder (first setup + when CatalogService.DataVersion bumps)
     private void RebuildCategoryButtonsFromPaneOrder() {
         if (_categoryListNode is null)
             return;
 
-        // full clear is fine here since category list is small but don't this for large sets
+        // full clear is ok here (small list); hot-path set/detail lists avoid ktk Clear for dispose/scrollbar races
         _categoryListNode.Clear();
         _categoryButtons.Clear();
         _categoryButtonMap.Clear();
@@ -61,6 +61,7 @@ internal unsafe partial class LogWindow {
             };
             countNode.AttachNode(button);
 
+            // native atk click path (not imgui); keeps category switch inside ktk addon event flow
             button.AddEvent(AtkEventType.MouseClick, (_, _, _, _, atkEventData) => {
                 if (atkEventData == null)
                     return;

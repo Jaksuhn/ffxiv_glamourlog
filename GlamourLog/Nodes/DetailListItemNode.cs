@@ -71,6 +71,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private GlamourIconNode.IconPart _lastStoragePart = GlamourIconNode.IconPart.Dresser;
 
     public DetailListItemNode() {
+        // custom collision + HandleClick; SelectableNode row chrome would duplicate/conflict with hit targets below
         EnableSelection = false;
         EnableHighlight = false;
 
@@ -85,7 +86,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             IsVisible = false,
             Height = 24f,
         };
-        // TLCN collision being a sibling of the list row root doesn't receive hits, so use _inputCollsision + HandleClick instead
+        // tree combo collision doesn't register on this row as a sibling; clicks go through _inputCollision + HandleClick
         _sectionChrome.CollisionNode.NodeFlags = 0;
         _sectionChrome.AttachNode(this);
 
@@ -146,8 +147,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             ShowClickableCursor = true
         };
         _inputCollision.AddDrawFlags(DrawFlags.ClickableCursor);
+        // ktk: native click on this CollisionNode (SelectableNode row hit is unused while EnableSelection is off)
         _inputCollision.AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => HandleClick(eventData));
-        // Below source icons so per-icon hit boxes (and item tooltips) work on source rows; piece/cost rows set ItemTooltip on this node.
+        // after source icons so each icon keeps hits + item tooltip
         _inputCollision.AttachNode(this);
 
         for (var i = 0; i < 12; i++) {
@@ -193,7 +195,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _inputCollision.Position = Vector2.Zero;
         _inputCollision.Size = Size;
 
-        // reapply widths after resize
+        // row width from parent updated; pooled ItemData may not re-run SetNodeData same frame
         if (ItemData is not null)
             ApplyDynamicWidth(ItemData);
     }
@@ -209,7 +211,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                     pieceTextRightReserve = _storageBadge.Size.X + 16f;
                 else if (_inventoryBadge.IsVisible)
                     pieceTextRightReserve = _inventoryBadge.Size.X + 16f;
-                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 16f);
+                // atk text + ellipsis needs extra height vs line size; too short ellipsizes with horizontal room left
+                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 19f);
                 break;
             case DetailRowKind.Cost:
                 _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
@@ -304,6 +307,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _inputCollision.CollisionType = CollisionType.Hit;
         _inputCollision.ShowClickableCursor = false;
 
+        // piece branch strips this; atk ellipsis on names was wrong more often than clip
+        _primary.AddTextFlags(TextFlags.Ellipsis);
+
         switch (itemData.Kind) {
             case DetailRowKind.SectionHeader:
                 _primary.String = string.Empty;
@@ -333,7 +339,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 var itemRow = Item.GetRow(itemData.ItemId);
                 _icon.SetItemId(itemData.ItemId);
                 _icon.IsVisible = true;
-                // Piece rows are single-line; keep item names vertically centered.
                 _primary.Position = new Vector2(30f, 8f);
                 _primary.FontSize = 14;
                 _primary.LineSpacing = 14;
@@ -351,6 +356,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 }
                 _inputCollision.ShowClickableCursor = true;
                 _inputCollision.ItemTooltip = itemData.ItemId;
+                _primary.RemoveTextFlags(TextFlags.Ellipsis);
                 break;
             case DetailRowKind.Cost:
                 var currencyRow = Item.GetRow(itemData.ItemId);
@@ -401,6 +407,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
                 if (!iconOnlyChest)
                     _primary.IsVisible = true;
+                // full-row hitbox would steal clicks from per-icon tooltips / item hits
                 _inputCollision.IsVisible = false;
                 break;
             case DetailRowKind.SourceArrowFlow:
@@ -408,6 +415,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _secondary.IsVisible = false;
                 _arrowFlow.Position = new Vector2(4f, 0f);
                 _arrowFlow.IsVisible = true;
+                // same as SourceChest: row collision would eat icon hits
                 _inputCollision.IsVisible = false;
                 break;
         }

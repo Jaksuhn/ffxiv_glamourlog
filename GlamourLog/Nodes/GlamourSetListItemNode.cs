@@ -35,6 +35,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
     private GlamourIconNode.IconPart _lastStorageIconPart = GlamourIconNode.IconPart.Dresser;
 
     public GlamourSetListItemNode() {
+        // left click uses OnClick for list selection; right uses static handler — disable stock row highlight/selection
         EnableSelection = false;
         EnableHighlight = false;
 
@@ -78,6 +79,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         };
         _inputCollision.AddDrawFlags(KamiToolKit.Enums.DrawFlags.ClickableCursor);
         _inputCollision.AttachNode(this);
+        // full-row hitbox: forwards left to OnClick (ListNode selection), right to context menu
         _inputCollision.AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => {
             if (eventData is null || ItemData is null)
                 return;

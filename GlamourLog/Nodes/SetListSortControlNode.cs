@@ -29,6 +29,7 @@ public sealed class SetListSortControlNode : ResNode {
                 GlamourSetSortMode.Patch,
             ],
         };
+        // same as export dropdown: circle toggles list; hide stock row chrome + hitbox
         SortDropDown.BackgroundNode.IsVisible = false;
         SortDropDown.LabelNode.IsVisible = false;
         SortDropDown.CollapseArrowNode.IsVisible = false;

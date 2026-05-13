@@ -65,8 +65,10 @@ public sealed class GatheringNoteSearchNode : ResNode {
             OnInputReceived = onInputChanged,
             OnInputComplete = onInputChanged,
         };
+        // nine grid draws the field chrome; stock input fill would double-stack
         Input.BackgroundNode.IsVisible = false;
         Input.FocusBorderNode.IsVisible = true;
+        // hide "4096 max" style chrome
         Input.TextLimitsNode.IsVisible = false;
         Input.AttachNode(this);
     }

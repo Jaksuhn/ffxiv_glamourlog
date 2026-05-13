@@ -50,6 +50,7 @@ public sealed class SourceFlowNode : ResNode {
             AlignmentType = AlignmentType.Left,
             TextColor = new Vector4(0.65f, 0.65f, 0.65f, 1f),
         };
+        // grey +N overflow; emboss off
         _overflow.RemoveTextFlags(TextFlags.Emboss);
         _overflow.AttachNode(this);
     }

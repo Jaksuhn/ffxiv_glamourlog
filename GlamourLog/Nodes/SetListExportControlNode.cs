@@ -22,6 +22,7 @@ internal sealed class SetListExportControlNode : ResNode {
             Size = new Vector2(listOuterWidth, ButtonSize),
             Options = [GlamourDataExportFormat.LalaAchievements],
         };
+        // icon-only trigger: chrome is circle + popup list; hide stock dropdown chrome and its hitbox (circle toggles)
         ExportDropDown.BackgroundNode.IsVisible = false;
         ExportDropDown.LabelNode.IsVisible = false;
         ExportDropDown.CollapseArrowNode.IsVisible = false;

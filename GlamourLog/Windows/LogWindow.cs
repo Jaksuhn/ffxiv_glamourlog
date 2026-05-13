@@ -29,7 +29,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private VerticalLineNode? _columnSeparatorRight;
     private ScrollingListNode? _categoryListNode;
     private ListNode<SetListRowData, GlamourSetListItemNode>? _setListNode;
-    private ListNode<DetailListRowData, DetailListItemNode>? _detailRowsListNode;
+    private DetailRowsListNode? _detailRowsListNode; // not ListNode<>: generic ItemData setter can't be overridden; pooled-row ref skip broke piece text (DetailRowsListNode)
 
     private string _selectedCategoryId = "";
     private GlamourSet? _selectedSet;
@@ -41,8 +41,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private bool _pendingResetSetScroll;
     private bool _pendingResetDetailScroll;
     private bool _pendingClearSetSelection;
-    /// <summary> Category scroll list <see cref="ScrollingListNode.Clear"/> must not run until after <see cref="NativeAddon.OnUpdate"/> — native UldManager can still be traversing nodes on the first frame after setup. </summary>
-    private bool _pendingCategoryPaneRebuild;
+    private bool _pendingCategoryPaneRebuild; // defer ScrollingListNode.Clear: uldmgr can still traverse new nodes first frame after setup
     private int _lastDataVersion = -1;
     private readonly List<DetailListRowData> _detailRowOptions = [];
     private readonly HashSet<string> _collapsedDetailSections = [];
@@ -81,11 +80,8 @@ internal unsafe partial class LogWindow : NativeAddon {
         }
     }
 
-    //internal void OnBackingDataChanged() => RefreshListsAndDetails();
-
     private void PaintListsCore() {
-        // Set/detail columns reuse pooled rows; never ScrollingListNode.Clear() hot paths — that disposes natives
-        // and races AtkComponentScrollBar (same pattern as NativeMeters breakdown pooling).
+        // set/detail columns reuse pooled rows; hot-path Clear() disposes atk nodes and races scrollbar (cf. NativeMeters)
         var ownedItems = Svc.Get<OwnershipService>().GetOwnedItems();
         RefreshRows(ownedItems);
         RefreshDetails(ownedItems);
@@ -201,7 +197,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _setListNode.Size = new Vector2(middleWidth, midListHeight);
         var detailX = contentStart.X + leftWidth + middleWidth + columnGap * 2;
         var detailW = contentSize.X - (leftWidth + middleWidth + columnGap * 2);
-        _detailRowsListNode = new ListNode<DetailListRowData, DetailListItemNode> {
+        _detailRowsListNode = new DetailRowsListNode {
             Position = new Vector2(detailX, alignTop),
             OptionsList = [],
             OnItemSelected = _ => { },
@@ -251,7 +247,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             return;
         }
 
-        // only modify scroll lists before base.OnUpdate. Any modification after might use freed nodes from the prior frame
+        // only touch ktk lists before base.OnUpdate; after, native graph may have freed nodes from prior frame
         try {
             if (Svc.Get<CatalogService>().TryConsumePendingListRefresh())
                 _pendingRefreshListsAndDetails = true;
@@ -341,10 +337,10 @@ internal unsafe partial class LogWindow : NativeAddon {
         list.FullRebuild();
     }
 
-    private static void ResetScrollToTop(ListNode<DetailListRowData, DetailListItemNode>? list) {
+    private static void ResetScrollToTop(DetailRowsListNode? list) {
         if (list is null)
             return;
-        // do not call FullRebuild here, RefreshDetails already does. A second will double dispose and cause a crash
+        // don't FullRebuild here: RefreshDetails already did; second rebuild double-disposes pool nodes
         list.ScrollBarNode.ScrollPosition = 0;
     }
 

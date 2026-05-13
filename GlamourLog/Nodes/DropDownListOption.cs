@@ -6,6 +6,7 @@ using KamiToolKit.Nodes;
 namespace GlamourLog.Nodes;
 
 internal static class DropDownListOption {
+    // never attached; ktk TextNode.GetTextDrawSize for widest enum label (dropdown outer width math)
     private static readonly TextNode Axis14Measure = new() {
         FontType = FontType.Axis,
         FontSize = 14,

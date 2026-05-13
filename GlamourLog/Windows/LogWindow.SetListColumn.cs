@@ -41,7 +41,7 @@ internal unsafe partial class LogWindow {
         RepopulateSetListFromFilteredRows(ownedItems, ownedSets);
     }
 
-    /// <summary> Middle column only: re-filter, re-sort, rebuild row models. Skips stats/category work (sort direction / order changes only). </summary>
+    // middle column only: re-sort / re-filter row models; skips category + stats (sort chrome toggles)
     private void RebuildSetListOrderOnly() {
         if (_setListNode is null)
             return;
@@ -88,6 +88,7 @@ internal unsafe partial class LogWindow {
         _setListNode.OptionsList = [.. _setListOptions];
         if (_pendingClearSetSelection) {
             _pendingClearSetSelection = false;
+            // ktk ListNode: rebuild pool so internal scroll + selection can't reference wrong row after options clear
             _setListNode.FullRebuild();
         }
     }
