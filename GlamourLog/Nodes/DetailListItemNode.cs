@@ -334,6 +334,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             case DetailRowKind.EmptyHint:
                 _primary.Position = new Vector2(4f, 7f);
                 _primary.TextColor = new Vector4(0.65f, 0.65f, 0.65f, 1f);
+                // empty hint is short and never needs to be truncated and I can't figure out why it happens erroneously
+                _primary.RemoveTextFlags(TextFlags.Ellipsis);
                 break;
             case DetailRowKind.Piece:
                 var itemRow = Item.GetRow(itemData.ItemId);
