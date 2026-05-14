@@ -16,6 +16,8 @@ namespace GlamourLog;
  * loot window alert for missing pieces (and/or just general inventory change alert)
  * armoire store hide gearset pieces
  * xivcollect export
+ * inventory change event add remove
+ * check addonevent for cabinet/prismbox. Refresh doesn't seem to update ownership (maybe only paints?)
  */
 public sealed class Plugin : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;
