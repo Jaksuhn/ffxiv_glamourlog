@@ -19,18 +19,17 @@ namespace GlamourLog;
  * inventory change event add remove
  * check addonevent for cabinet/prismbox. Refresh doesn't seem to update ownership (maybe only paints?)
  */
-public sealed class Plugin : IAsyncDalamudPlugin {
+public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;
 
-    [PluginService] private static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     private readonly string[] _commands = ["/glamourlog", "/gl"];
 
     public async Task LoadAsync(CancellationToken cancellationToken) {
-        PluginInterface.Create<Svc>();
-        CLibMain.Init(PluginInterface, this);
-        await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(PluginInterface));
+        dalamud.Create<Svc>();
+        CLibMain.Init(dalamud, this);
+        await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(dalamud));
 
-        C = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        C = dalamud.GetPluginConfig() as Configuration ?? new Configuration();
         Svc.Register<CatalogService>();
         Svc.Register<OwnershipService>();
         Svc.Register<AllaganToolsIpc>();
