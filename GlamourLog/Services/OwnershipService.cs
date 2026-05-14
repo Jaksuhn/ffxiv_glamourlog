@@ -39,7 +39,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         foreach (var eventData in events) {
             if (!InventoryType.AllPlayer.Contains((InventoryType)eventData.Item.ContainerType))
                 continue;
-            if (eventData is not InventoryItemAddedArgs)
+            if (eventData is not (InventoryItemAddedArgs or InventoryItemRemovedArgs))
                 continue;
 
             if (Svc.Get<CatalogService>().GlamourSets.Any(set => set.Items.Contains(eventData.Item.BaseItemId))) {
