@@ -153,7 +153,7 @@ internal unsafe partial class LogWindow {
     }
 
     private static int GetOwnedCurrencyCount(uint costItemId) {
-        if (Svc.Get<AllaganToolsIpc>().TryGetOwnedCount(costItemId, out var allaganCount))
+        if (costItemId is not 1 && Svc.Get<AllaganToolsIpc>().TryGetOwnedCount(costItemId, out var allaganCount)) // don't use AT for gil since it returns a uint and you can overflow that
             return allaganCount;
         return CurrencyManager.Instance()->SpecialItemBucket.TryGetValue(costItemId, out var value, true)
             ? (int)value.Count
