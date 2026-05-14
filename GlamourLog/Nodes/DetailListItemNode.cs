@@ -203,7 +203,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private void ApplyDynamicWidth(DetailListRowData data) {
         switch (data.Kind) {
             case DetailRowKind.EmptyHint:
-                _primary.Size = new Vector2(Math.Max(20f, Width - 8f), 14f);
+                // same ATK quirk as Piece: 14px-tall text boxes ellipsize with horizontal room left
+                _primary.Size = new Vector2(Math.Max(20f, Width - 8f), 19f);
                 break;
             case DetailRowKind.Piece:
                 var pieceTextRightReserve = 8f;
@@ -215,7 +216,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 19f);
                 break;
             case DetailRowKind.Cost:
-                _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+                _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 19f);
                 _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
                 break;
             case DetailRowKind.SourceChest:
@@ -332,9 +333,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _inputCollision.ShowClickableCursor = journalClickable;
                 break;
             case DetailRowKind.EmptyHint:
-                _primary.Position = new Vector2(4f, 7f);
+                _primary.Position = new Vector2(4f, 5f);
                 _primary.TextColor = new Vector4(0.65f, 0.65f, 0.65f, 1f);
-                // empty hint is short and never needs to be truncated and I can't figure out why it happens erroneously
                 _primary.RemoveTextFlags(TextFlags.Ellipsis);
                 break;
             case DetailRowKind.Piece:
@@ -366,8 +366,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _icon.IsVisible = true;
                 _primary.Position = new Vector2(30f, 1f);
                 _primary.TextColor = ColorHelper.GetColor(currencyRow.AtkUiRarityColorId);
+                _primary.RemoveTextFlags(TextFlags.Ellipsis);
                 _secondary.IsVisible = true;
-                _secondary.Position = new Vector2(30f, 14f);
+                _secondary.Position = new Vector2(30f, 15f);
                 _inputCollision.ShowClickableCursor = true;
                 _inputCollision.ItemTooltip = itemData.ItemId;
                 if (itemData.CostVendorTextTooltip.Length > 0)
