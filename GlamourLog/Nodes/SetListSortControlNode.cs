@@ -14,7 +14,9 @@ public sealed class SetListSortControlNode : ResNode {
     public readonly CircleButtonNode SortButton;
 
     public SetListSortControlNode(ListSortDirection sortDirection) {
-        var listOuterWidth = DropDownListOption.OuterWidthForListLabels(DropDownListOption.EnumDescriptions<GlamourSetSortMode>());
+        var measure = DropDownListOption.CreateAxis14MeasureNode();
+        measure.AttachNode(this);
+        var listOuterWidth = DropDownListOption.OuterWidthForListLabels(measure, DropDownListOption.EnumDescriptions<GlamourSetSortMode>());
         Size = new Vector2(LayoutWidth, ButtonSize);
 
         var sortBlockEndX = LayoutWidth + ButtonGap;

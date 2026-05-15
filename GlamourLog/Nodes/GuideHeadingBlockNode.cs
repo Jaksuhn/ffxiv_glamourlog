@@ -7,10 +7,12 @@ internal sealed class GuideHeadingBlockNode : ResNode {
     private const float HeadingHeight = 26f;
     private static readonly Vector4 TextColor = new(238f / 255f, 225f / 255f, 197f / 255f, 1f);
 
+    private readonly TextNode _titleText;
+
     public GuideHeadingBlockNode(float width, string title) {
         Size = new Vector2(width, HeadingHeight);
 
-        var text = new TextNode {
+        _titleText = new TextNode {
             Size = new Vector2(width, HeadingHeight),
             FontType = FontType.Axis,
             FontSize = 14,
@@ -20,6 +22,6 @@ internal sealed class GuideHeadingBlockNode : ResNode {
             String = title,
             TextFlags = TextFlags.Emboss
         };
-        text.AttachNode(this);
+        _titleText.AttachNode(this);
     }
 }

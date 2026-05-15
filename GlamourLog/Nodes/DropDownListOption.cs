@@ -6,19 +6,21 @@ using KamiToolKit.Nodes;
 namespace GlamourLog.Nodes;
 
 internal static class DropDownListOption {
-    // never attached; ktk TextNode.GetTextDrawSize for widest enum label (dropdown outer width math)
-    private static readonly TextNode Axis14Measure = new() {
-        FontType = FontType.Axis,
-        FontSize = 14,
-        LineSpacing = 14,
-    };
+    // attach to root so it disposes normally. muy importante
+    internal static TextNode CreateAxis14MeasureNode()
+        => new() {
+            FontType = FontType.Axis,
+            FontSize = 14,
+            LineSpacing = 14,
+            IsVisible = false,
+        };
 
-    internal static float OuterWidthForListLabels(IEnumerable<string> labels, float minOuter = 96f) {
+    internal static float OuterWidthForListLabels(TextNode measure, IEnumerable<string> labels, float minOuter = 96f) {
         var maxText = 0f;
         foreach (var s in labels) {
             if (string.IsNullOrEmpty(s))
                 continue;
-            maxText = Math.Max(maxText, Axis14Measure.GetTextDrawSize(s).X);
+            maxText = Math.Max(maxText, measure.GetTextDrawSize(s).X);
         }
 
         // DropDown OptionList width = outer - 8; list row = OptionList - 25; label width = row - 10 -> outer >= text + 43.

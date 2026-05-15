@@ -12,7 +12,9 @@ internal sealed class SetListExportControlNode : ResNode {
     internal readonly CircleButtonNode ExportButton;
 
     internal SetListExportControlNode() {
-        var listOuterWidth = DropDownListOption.OuterWidthForListLabels(DropDownListOption.EnumDescriptions<GlamourDataExportFormat>());
+        var measure = DropDownListOption.CreateAxis14MeasureNode();
+        measure.AttachNode(this);
+        var listOuterWidth = DropDownListOption.OuterWidthForListLabels(measure, DropDownListOption.EnumDescriptions<GlamourDataExportFormat>());
         Size = new Vector2(LayoutWidth, ButtonSize);
 
         var blockEndX = LayoutWidth + ButtonGap;
