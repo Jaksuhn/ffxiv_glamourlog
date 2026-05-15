@@ -5,7 +5,7 @@ namespace GlamourLog.Windows;
 
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {
-    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
+    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, HashSet<GlamourSet> ownedSets, OwnershipSnapshot snap) {
         var rows = searchTrimmed.Length > 0 ? [.. Svc.Get<CatalogService>().GlamourSets] : categoryRows;
 
         if (C.HideCompleted)
@@ -13,17 +13,17 @@ internal static class SetListFilterSort {
 
         var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
         if (hasPositiveFilters) {
-            var inventoryOnly = C.HideUnready ? Svc.Get<OwnershipService>().GetInventoryItemsOnly() : null;
+            HashSet<uint>? inventoryOnly = C.HideUnready ? snap.InventoryItemIds : null;
             rows = [.. rows.Where(r =>
-                (!C.HideNonPartials || Svc.Get<OwnershipService>().IsPartiallyCompleted(r, ownedSets, ownedItems)) &&
-                (!C.HideUnaffordable || Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(r, ownedItems)) &&
-                (!C.HideUnready || (inventoryOnly is not null && Svc.Get<OwnershipService>().HasContributablePieceInInventory(r, inventoryOnly))) &&
+                (!C.HideNonPartials || Svc.Get<OwnershipService>().IsPartiallyCompleted(r, ownedSets, snap.OwnedItems, snap)) &&
+                (!C.HideUnaffordable || Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(r, snap.OwnedItems)) &&
+                (!C.HideUnready || (inventoryOnly is not null && Svc.Get<OwnershipService>().HasContributablePieceInInventory(r, inventoryOnly, snap))) &&
                 (!C.HideNoMarketboard || Svc.Get<OwnershipService>().IsMarketboardPurchasable(r))
             )];
         }
 
         if (C.ShowOnlyMisplaced)
-            rows = [.. rows.Where(r => Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(r, ownedItems, Svc.Get<CatalogService>().ArmoireItemIds))];
+            rows = [.. rows.Where(r => Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(r, snap.OwnedItems, Svc.Get<CatalogService>().ArmoireItemIds, snap))];
 
         if (searchTrimmed.Length > 0)
             rows = [.. rows.Where(r => MatchesSearch(r, searchTrimmed))];

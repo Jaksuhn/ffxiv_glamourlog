@@ -1,4 +1,4 @@
-﻿using AllaganLib.GameSheets.ItemSources;
+using AllaganLib.GameSheets.ItemSources;
 using GlamourLog.Services;
 
 namespace GlamourLog;
@@ -58,10 +58,11 @@ internal sealed class IpcProvider : IDisposable {
 
     private static bool IsItemInDresser(uint itemId) {
         var ownership = Svc.Get<OwnershipService>();
+        var snap = ownership.CaptureSnapshot();
         var catalog = Svc.Get<CatalogService>();
-        if (ownership.GetDresserStoredItemIds().Contains(itemId) && !catalog.GlamourSets.Select(s => s.ItemId).Contains(itemId))
+        if (snap.DresserItemIds.Contains(itemId) && !catalog.GlamourSets.Select(s => s.ItemId).Contains(itemId))
             return true;
-        return catalog.GlamourSets.Any(s => s.Items.Contains(itemId) && ownership.GetItemStorageState(itemId, s) is ItemStorageState.DresserSet);
+        return catalog.GlamourSets.Any(s => s.Items.Contains(itemId) && ownership.GetItemStorageState(itemId, s, snap) is ItemStorageState.DresserSet);
     }
 
     private static bool IsSetComplete(uint setItemId) {

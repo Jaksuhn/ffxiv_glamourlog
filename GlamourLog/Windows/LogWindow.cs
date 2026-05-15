@@ -84,9 +84,9 @@ internal unsafe partial class LogWindow : NativeAddon {
 
     private void PaintListsCore() {
         // set/detail columns reuse pooled rows; hot-path Clear() disposes atk nodes and races scrollbar (cf. NativeMeters)
-        var ownedItems = Svc.Get<OwnershipService>().GetOwnedItems();
-        RefreshRows(ownedItems);
-        RefreshDetails(ownedItems);
+        var snap = Svc.Get<OwnershipService>().CaptureSnapshot();
+        RefreshRows(snap);
+        RefreshDetails(snap);
     }
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {

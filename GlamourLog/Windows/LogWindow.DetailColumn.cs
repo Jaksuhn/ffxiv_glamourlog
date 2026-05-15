@@ -17,14 +17,14 @@ internal unsafe partial class LogWindow {
         if (_isFinalizing || !IsOpen || !CanPaintLists())
             return;
         try {
-            RefreshDetails(Svc.Get<OwnershipService>().GetOwnedItems());
+            RefreshDetails(Svc.Get<OwnershipService>().CaptureSnapshot());
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
         }
     }
 
-    private void RefreshDetails(HashSet<uint> ownedItems) {
+    private void RefreshDetails(OwnershipSnapshot snap) {
         if (_detailRowsListNode is null)
             return;
 
@@ -32,7 +32,7 @@ internal unsafe partial class LogWindow {
             _sourceFilterPieceItemId = null;
 
         _detailRowOptions.Clear();
-        var inventoryItems = Svc.Get<OwnershipService>().GetInventoryItemsOnly();
+        var inventoryItems = snap.InventoryItemIds;
 
         if (_selectedSet == null) {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details", IsTopLevelSection = true });
@@ -48,9 +48,9 @@ internal unsafe partial class LogWindow {
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = setJournalLine });
 
         var items = _selectedSet.Items;
-        var selectedSetStorageState = Svc.Get<OwnershipService>().GetSetStorageState(_selectedSet, ownedItems);
+        var selectedSetStorageState = Svc.Get<OwnershipService>().GetSetStorageState(_selectedSet, snap);
         foreach (var itemId in items) {
-            var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState);
+            var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState, snap);
             var iconPart = StorageIconPartFor(storageState);
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.Piece,
@@ -168,8 +168,8 @@ internal unsafe partial class LogWindow {
             _ => null,
         };
 
-    private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState)
-        => Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState);
+    private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState, OwnershipSnapshot snap)
+        => Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState, snap);
 
     private static void OnCraftRecipeJournalLeftClick(uint recipeRowId) {
         if (recipeRowId == 0)
