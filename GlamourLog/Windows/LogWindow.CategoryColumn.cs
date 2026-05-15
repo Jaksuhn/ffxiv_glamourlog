@@ -24,7 +24,7 @@ internal unsafe partial class LogWindow {
 
     // rebuilds left pane from _categoryPaneOrder (first setup + when CatalogService.DataVersion bumps)
     private void RebuildCategoryButtonsFromPaneOrder() {
-        if (_categoryListNode is null)
+        if (_isFinalizing || _categoryListNode is null)
             return;
 
         // full clear is ok here (small list); hot-path set/detail lists avoid ktk Clear for dispose/scrollbar races
@@ -105,15 +105,33 @@ internal unsafe partial class LogWindow {
     private void SyncCategoryPaneToDataVersion() {
         if (_categoryListNode is null)
             return;
-        if (_lastDataVersion == Svc.Get<CatalogService>().DataVersion)
+
+        var catalog = Svc.Get<CatalogService>();
+        var dataVersion = catalog.DataVersion;
+        if (_lastDataVersion == dataVersion)
+            return;
+
+        _lastDataVersion = dataVersion;
+
+        var newOrder = BuildOrderedCategoryPaneList();
+        if (CategoryPaneOrderMatches(newOrder))
             return;
 
         _categoryPaneOrder.Clear();
-        _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
+        _categoryPaneOrder.AddRange(newOrder);
         _pendingCategoryPaneRebuild = true;
         if (!_categoryPaneOrder.Contains(_selectedCategoryId))
-            _selectedCategoryId = Svc.Get<CatalogService>().UncategorizedTab.Name;
-        _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
+            _selectedCategoryId = catalog.UncategorizedTab.Name;
         ResetScrollToTop(_setListNode);
+    }
+
+    private bool CategoryPaneOrderMatches(List<string> newOrder) {
+        if (_categoryPaneOrder.Count != newOrder.Count)
+            return false;
+        for (var i = 0; i < newOrder.Count; i++) {
+            if (_categoryPaneOrder[i] != newOrder[i])
+                return false;
+        }
+        return true;
     }
 }

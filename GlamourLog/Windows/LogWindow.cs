@@ -17,6 +17,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private SetListExportControlNode? _setListExportControl;
     private SetListSortControlNode? _setListSortControl;
     private CircleButtonNode? _filterSettingsButton;
+    private CircleButtonNode? _helpMainMenuButton;
     private GatheringNoteSearchNode? _gatheringNoteSearch;
     private TextNode? _categoryColumnHeading;
     private readonly List<ListButtonNode> _categoryButtons = [];
@@ -27,6 +28,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private TextNode? _statsSpaceLine;
     private VerticalLineNode? _columnSeparatorLeft;
     private VerticalLineNode? _columnSeparatorRight;
+    private HorizontalLineNode? _columnSeparatorBottom;
     private ScrollingListNode? _categoryListNode;
     private ListNode<SetListRowData, GlamourSetListItemNode>? _setListNode;
     private DetailRowsListNode? _detailRowsListNode; // not ListNode<>: generic ItemData setter can't be overridden; pooled-row ref skip broke piece text (DetailRowsListNode)
@@ -41,7 +43,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private bool _pendingResetSetScroll;
     private bool _pendingResetDetailScroll;
     private bool _pendingClearSetSelection;
-    private bool _pendingCategoryPaneRebuild; // defer ScrollingListNode.Clear: uldmgr can still traverse new nodes first frame after setup
+    private bool _pendingCategoryPaneRebuild; // run Clear before native OnUpdate, not after (uldmgr races dispose post-update)
     private int _lastDataVersion = -1;
     private readonly List<DetailListRowData> _detailRowOptions = [];
     private readonly HashSet<string> _collapsedDetailSections = [];
@@ -52,6 +54,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private static readonly Vector4 CategoryNameGold = new(216f / 255f, 187f / 255f, 125f / 255f, 1f);
     private const float CategoryHeadingHeight = 26f;
     private const float FilterCogSize = 28f;
+    private const float HelpMenuButtonSize = 28f;
 
     public LogWindow(FilterWindow filterWindow) {
         _filterWindow = filterWindow;
@@ -226,7 +229,26 @@ internal unsafe partial class LogWindow : NativeAddon {
         };
         _columnSeparatorRight.AttachNode(this);
 
+        _columnSeparatorBottom = new HorizontalLineNode {
+            Position = new Vector2(contentStart.X, listBottom),
+            Size = new Vector2(contentSize.X, 2f),
+        };
+        _columnSeparatorBottom.AttachNode(this);
+
+        var helpBtnY = listBottom + (BottomStatsBlockHeight - HelpMenuButtonSize) * 0.5f;
+        _helpMainMenuButton = new CircleButtonNode {
+            Icon = ButtonIcon.QuestionMark,
+            TextTooltip = "Help and tweak settings",
+            Size = new Vector2(HelpMenuButtonSize, HelpMenuButtonSize),
+            Position = new Vector2(contentStart.X + leftPad, helpBtnY),
+            OnClick = () => { Svc.Get<WindowsService>().ToggleMainMenuNearLogWindow(); },
+        };
+        _helpMainMenuButton.AttachNode(this);
+
+        _categoryPaneOrder.Clear();
+        _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
         BuildCategoryButtons();
+        _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
 
         base.OnSetup(addon, atkValueSpan);
 
@@ -250,6 +272,12 @@ internal unsafe partial class LogWindow : NativeAddon {
         try {
             if (Svc.Get<CatalogService>().TryConsumePendingListRefresh())
                 _pendingRefreshListsAndDetails = true;
+
+            if (_pendingCategoryPaneRebuild) {
+                _pendingCategoryPaneRebuild = false;
+                RebuildCategoryButtonsFromPaneOrder();
+                _pendingRefreshListsAndDetails = true;
+            }
 
             if (_pendingResetSetScroll && _pendingRefreshListsAndDetails && _setListNode is not null) {
                 // ListNode keeps an internal scroll index; clearing options first guarantees clamp to zero.
@@ -292,14 +320,6 @@ internal unsafe partial class LogWindow : NativeAddon {
         base.OnUpdate(addon);
 
         try {
-            if (_pendingCategoryPaneRebuild) {
-                _pendingCategoryPaneRebuild = false;
-                RebuildCategoryButtonsFromPaneOrder();
-                // RefreshRows ran before this deferred rebuild (same frame), on the old buttons. New count nodes need a paint pass.
-                if (!_isFinalizing && IsOpen && CanPaintLists())
-                    _pendingRefreshListsAndDetails = true;
-            }
-
             _setListNode?.Update();
             _detailRowsListNode?.Update();
 
@@ -363,6 +383,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _setListExportControl = null;
         _setListSortControl = null;
         _filterSettingsButton = null;
+        _helpMainMenuButton = null;
         _gatheringNoteSearch = null;
         _categoryColumnHeading = null;
         _categoryListNode = null;
@@ -384,6 +405,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _detailRowsListNode = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;
+        _columnSeparatorBottom = null;
         _statsSetsLine = null;
         _statsSpaceLine = null;
         base.OnFinalize(addon);
@@ -403,5 +425,19 @@ internal unsafe partial class LogWindow : NativeAddon {
         var fh = FilterWindow.WindowHeight;
         var topLeft = new Vector2(mainCenterX - fw * 0.5f, mainCenterY - fh * 0.5f);
         return FilterWindow.ClampFilterWindowTopLeft(topLeft);
+    }
+
+    internal Vector2 ComputeMainMenuScreenOrigin() {
+        var unit = (AtkUnitBase*)this;
+        var root = unit->RootNode;
+        if (root is null)
+            return GuideWindow.ClampTopLeft(new Vector2(80f, 80f));
+
+        var mainCenterX = root->X + Size.X * 0.5f;
+        var mainCenterY = root->Y + Size.Y * 0.5f;
+        var topLeft = new Vector2(
+            mainCenterX - GuideWindow.WindowWidth * 0.5f,
+            mainCenterY - GuideWindow.WindowHeight * 0.5f);
+        return GuideWindow.ClampTopLeft(topLeft);
     }
 }

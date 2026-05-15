@@ -67,9 +67,7 @@ internal sealed class IpcProvider : IDisposable {
     private static bool IsSetComplete(uint setItemId) {
         if (Svc.Get<CatalogService>().GlamourSets.FirstOrDefault(s => s.ItemId == setItemId) is not { } set)
             return false;
-        var ownership = Svc.Get<OwnershipService>();
-        var items = ownership.GetOwnedItems();
-        return ownership.GetOwnedPieceCountForSet(set, items) == set.Items.Count;
+        return Svc.Get<OwnershipService>().IsSetCompleted(set);
     }
 
     private static List<uint> GetItemsFromContent(uint cfcId) {

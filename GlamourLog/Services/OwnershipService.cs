@@ -106,10 +106,22 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return owned;
     }
 
-    internal HashSet<uint> GetOwnedItems() {
+    /// <summary>Owned in glamour dresser (loose), armoire, or glamour cabinet — not player inventory.</summary>
+    internal HashSet<uint> GetStorageOwnedItems() {
         var dresserItemIds = GetDresserStoredItemIds();
         var setTokens = Svc.Get<CatalogService>().GlamourSets.Select(s => s.ItemId).ToHashSet();
-        HashSet<uint> ownedItems = [.. dresserItemIds.Where(id => !setTokens.Contains(id))];
+        HashSet<uint> owned = [.. dresserItemIds.Where(id => !setTokens.Contains(id))];
+        owned.UnionWith(GetArmoireOwnedItemIds());
+        foreach (var itemId in CabinetLookup.Value.Keys) {
+            if (IsInCabinet(itemId))
+                owned.Add(itemId);
+        }
+
+        return owned;
+    }
+
+    internal HashSet<uint> GetOwnedItems() {
+        var ownedItems = GetStorageOwnedItems();
 
         var inventoryManager = InventoryManager.Instance();
         if (inventoryManager != null) {
@@ -124,22 +136,23 @@ internal sealed unsafe class OwnershipService : IDisposable {
                 }
             }
         }
-        ownedItems.UnionWith(GetArmoireOwnedItemIds());
-        foreach (var itemId in CabinetLookup.Value.Keys) {
-            if (IsInCabinet(itemId))
-                ownedItems.Add(itemId);
-        }
 
         return ownedItems;
     }
 
+    /// <summary>Checkmark / completed sets: storage only, or a full mirage plate on the dresser.</summary>
+    internal bool IsSetCompleted(GlamourSet set) {
+        if (GetDresserStoredItemIds().Contains(set.ItemId) && IsFullMirageOutfit(set))
+            return true;
+
+        return GetOwnedPieceCountForSet(set, GetStorageOwnedItems()) == set.Items.Count;
+    }
+
     internal HashSet<GlamourSet> GetOwnedSets(HashSet<uint> ownedItems) {
-        var dresserItemIds = GetDresserStoredItemIds();
+        _ = ownedItems;
         var ownedSets = new HashSet<GlamourSet>();
         foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
-            var fullByPieces = GetOwnedPieceCountForSet(set, ownedItems) == set.Items.Count;
-            var fullByMirage = dresserItemIds.Contains(set.ItemId) && IsFullMirageOutfit(set);
-            if (fullByPieces || fullByMirage)
+            if (IsSetCompleted(set))
                 ownedSets.Add(set);
         }
 
@@ -178,8 +191,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     internal SetStorageState GetSetStorageState(GlamourSet set, HashSet<uint>? ownedItems = null) {
-        var effectiveOwned = ownedItems ?? GetOwnedItems();
-        if (GetOwnedPieceCountForSet(set, effectiveOwned) != set.Items.Count)
+        _ = ownedItems;
+        if (!IsSetCompleted(set))
             return SetStorageState.None;
 
         var hasArmoire = false;
