@@ -14,7 +14,6 @@ namespace GlamourLog;
  * rename glam plates tweak
  * loot window alert for missing pieces (and/or just general inventory change alert)
  * armoire store hide gearset pieces
- * check addonevent for cabinet/prismbox. Refresh doesn't seem to update ownership (maybe only paints?)
  */
 public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;
