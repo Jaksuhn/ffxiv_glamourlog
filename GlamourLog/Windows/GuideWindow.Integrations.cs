@@ -7,7 +7,7 @@ public partial class GuideWindow {
         CategoryTitle = "Guide",
         SubCategoryTitle = "Plugin Integrations",
         Body = new Lumina.Text.ReadOnly.ReadOnlySeString(
-                new SeStringBuilder().Append("GlamourLog only talks to other plugins when they are installed and loaded. Nothing here is required for the log to work.\n\n")
+                new SeStringBuilder().Append("GlamourLog does not require other plugins to work, but it can be enhanced with other plugins.\n\n")
                 .AddUiForeground(500).AddUiGlow(501).Append("Allagan Tools").AddUiGlowOff().AddUiForegroundOff()
                 .Append(" is used in the ").AddUiForeground(710).Append("currencies required").AddUiForegroundOff().Append(" section of ")
                 .AddUiForeground(710).Append("set details").AddUiForegroundOff()
