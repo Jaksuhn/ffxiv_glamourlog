@@ -8,7 +8,7 @@ using GlamourLog.Nodes;
 using GlamourLog.Services;
 using Lumina.Excel;
 
-namespace GlamourLog.Windows;
+namespace GlamourLog.Windows.LogWindow;
 
 internal static class SourcesPanelBuilder {
     private const int MaxSourceIconsVisible = 10;

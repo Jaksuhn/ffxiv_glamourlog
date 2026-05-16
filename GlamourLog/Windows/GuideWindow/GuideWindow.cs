@@ -1,10 +1,10 @@
-using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
+using GlamourLog.Nodes.GuideWindow;
 using KamiToolKit;
 using KamiToolKit.Nodes;
 using KamiToolKit.Premade.Node.Simple;
-namespace GlamourLog;
+namespace GlamourLog.Windows.GuideWindow;
 
 public unsafe partial class GuideWindow : NativeAddon {
     public const float WindowWidth = 944f;
@@ -37,10 +37,10 @@ public unsafe partial class GuideWindow : NativeAddon {
     private TextNode? _rightTitle;
     private float _rightTextWidth;
 
-    private readonly List<GuideNavCategorySection> _categorySections = [];
+    private readonly List<SidebarSection> _categorySections = [];
 
     private int _expandedCategoryIndex;
-    private GuidePage _selectedPage = null!;
+    private Page _selectedPage = null!;
 
     public void OpenOrToggleNear(Vector2 screenTopLeft) {
         if (IsOpen) {
@@ -118,9 +118,9 @@ public unsafe partial class GuideWindow : NativeAddon {
         _pendingPaneDisposes.Clear();
 
         foreach (var section in _categorySections) {
-            section.Parent.ClearClickHandlers();
-            foreach (var (sub, _) in section.Subs)
-                sub.ClearClickHandlers();
+            section.CategoryRow.ClearClickHandlers();
+            foreach (var (pageRow, _) in section.Pages)
+                pageRow.ClearClickHandlers();
         }
 
         _rightPaneBlocks.Clear();
@@ -216,27 +216,27 @@ public unsafe partial class GuideWindow : NativeAddon {
             var catIndex = c;
             var category = NavCategories[c];
 
-            var parentBtn = new GuideNavParentRowNode(category.Title, () => OnParentCategoryClicked(catIndex));
-            _leftNavList.AddNode(parentBtn);
+            var categoryRow = new SidebarCategoryRowNode(category.Title, () => OnParentCategoryClicked(catIndex));
+            _leftNavList.AddNode(categoryRow);
 
-            var subList = new VerticalListNode {
+            var pageList = new VerticalListNode {
                 ItemSpacing = 0f,
                 FitWidth = true,
                 FitContents = true,
             };
-            var subs = new List<(GuideNavSubRowNode Btn, GuidePage Page)>();
+            var pages = new List<(SidebarPageRowNode Btn, Page Page)>();
             foreach (var page in category.Pages) {
                 var captured = page;
-                var subBtn = new GuideNavSubRowNode(page.SubCategoryTitle, () => OnSubClicked(captured));
-                subList.AddNode(subBtn);
-                subs.Add((subBtn, page));
+                var pageRow = new SidebarPageRowNode(page.SubCategoryTitle, () => OnSubClicked(captured));
+                pageList.AddNode(pageRow);
+                pages.Add((pageRow, page));
             }
 
-            _leftNavList.AddNode(subList);
-            _categorySections.Add(new GuideNavCategorySection {
-                Parent = parentBtn,
-                SubList = subList,
-                Subs = subs,
+            _leftNavList.AddNode(pageList);
+            _categorySections.Add(new SidebarSection {
+                CategoryRow = categoryRow,
+                PageList = pageList,
+                Pages = pages,
             });
         }
 
@@ -248,14 +248,14 @@ public unsafe partial class GuideWindow : NativeAddon {
         for (var i = 0; i < _categorySections.Count; i++) {
             var expanded = i == _expandedCategoryIndex;
             var section = _categorySections[i];
-            section.SubList.IsVisible = expanded;
+            section.PageList.IsVisible = expanded;
             if (expanded) {
-                foreach (var (btn, page) in section.Subs)
-                    btn.SetGuideSelected(ReferenceEquals(page, _selectedPage));
+                foreach (var (btn, page) in section.Pages)
+                    btn.SetPageSelected(ReferenceEquals(page, _selectedPage));
             }
             else {
-                foreach (var (btn, _) in section.Subs)
-                    btn.SetGuideSelected(false);
+                foreach (var (btn, _) in section.Pages)
+                    btn.SetPageSelected(false);
             }
         }
 
@@ -279,7 +279,7 @@ public unsafe partial class GuideWindow : NativeAddon {
         PaintRight();
     }
 
-    private void OnSubClicked(GuidePage page) {
+    private void OnSubClicked(Page page) {
         if (_isFinalizing || _isTearingDown)
             return;
 

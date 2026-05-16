@@ -1,3 +1,5 @@
+using GlamourLog.Windows.GuideWindow;
+
 namespace GlamourLog.Services;
 
 internal sealed class WindowsService : IDisposable {

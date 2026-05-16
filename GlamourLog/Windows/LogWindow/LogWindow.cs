@@ -1,8 +1,9 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
-using GlamourLog.Windows;
 using GlamourLog.Windows.ContextMenus;
+using GlamourLog.Windows.GuideWindow;
+using GlamourLog.Windows.LogWindow;
 using KamiToolKit;
 using KamiToolKit.Nodes;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
@@ -435,9 +436,7 @@ internal unsafe partial class LogWindow : NativeAddon {
 
         var mainCenterX = root->X + Size.X * 0.5f;
         var mainCenterY = root->Y + Size.Y * 0.5f;
-        var topLeft = new Vector2(
-            mainCenterX - GuideWindow.WindowWidth * 0.5f,
-            mainCenterY - GuideWindow.WindowHeight * 0.5f);
+        var topLeft = new Vector2(mainCenterX - GuideWindow.WindowWidth * 0.5f, mainCenterY - GuideWindow.WindowHeight * 0.5f);
         return GuideWindow.ClampTopLeft(topLeft);
     }
 }

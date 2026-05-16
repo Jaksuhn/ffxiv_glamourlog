@@ -1,7 +1,7 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using MapType = FFXIVClientStructs.FFXIV.Client.UI.Agent.MapType;
 
-namespace GlamourLog.Windows;
+namespace GlamourLog.Windows.LogWindow;
 
 internal static unsafe class SourceMapFlagger {
     /// <summary> Places the player map flag and opens the map for the given territory / world position (quest / vendor style).</summary>

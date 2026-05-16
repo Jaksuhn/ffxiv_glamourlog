@@ -2,7 +2,7 @@ using System.ComponentModel;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
-using GlamourLog.Windows;
+using GlamourLog.Windows.LogWindow;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog;

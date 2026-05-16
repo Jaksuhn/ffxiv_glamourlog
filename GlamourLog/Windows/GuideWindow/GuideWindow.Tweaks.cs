@@ -1,7 +1,7 @@
-namespace GlamourLog;
+namespace GlamourLog.Windows.GuideWindow;
 
 public partial class GuideWindow {
-    private static readonly GuidePage TweaksComingSoon = new() {
+    private static readonly Page TweaksComingSoon = new() {
         CategoryTitle = "Tweaks",
         SubCategoryTitle = "Coming soon",
         Body = "A lot of people are saying 'maybe we would like more glamour related tweaks'. I'm a man with great common sense, and I'm a smart person. " +

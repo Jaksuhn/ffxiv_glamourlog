@@ -1,15 +1,15 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Nodes;
 
-namespace GlamourLog.Nodes;
+namespace GlamourLog.Nodes.GuideWindow;
 
-internal sealed class GuideHeadingBlockNode : ResNode {
+internal sealed class SectionTitleNode : ResNode {
     private const float HeadingHeight = 26f;
     private static readonly Vector4 TextColor = new(238f / 255f, 225f / 255f, 197f / 255f, 1f);
 
     private readonly TextNode _titleText;
 
-    public GuideHeadingBlockNode(float width, string title) {
+    public SectionTitleNode(float width, string title) {
         Size = new Vector2(width, HeadingHeight);
 
         _titleText = new TextNode {

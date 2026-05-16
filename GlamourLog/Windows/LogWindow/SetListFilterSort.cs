@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using GlamourLog.Services;
 
-namespace GlamourLog.Windows;
+namespace GlamourLog.Windows.LogWindow;
 
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {

@@ -2,10 +2,10 @@ using System.Reflection;
 using KamiToolKit;
 using KamiToolKit.Nodes;
 
-namespace GlamourLog.Nodes;
+namespace GlamourLog.Nodes.GuideWindow;
 
-/// <summary>Detach list children without <see cref="NodeBase.Dispose"/> (safe during scroll rebuilds).</summary>
-internal static class GuideListNodeHelper {
+// detach without disposing for scroll rebuilds
+internal static class VerticalListEject {
     private static readonly FieldInfo NodeListField =
         typeof(LayoutListNode).GetField("NodeList", BindingFlags.Instance | BindingFlags.NonPublic)!;
 

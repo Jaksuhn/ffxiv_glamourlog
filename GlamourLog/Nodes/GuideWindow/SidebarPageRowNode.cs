@@ -1,9 +1,9 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Nodes;
 
-namespace GlamourLog.Nodes;
+namespace GlamourLog.Nodes.GuideWindow;
 
-internal sealed class GuideNavSubRowNode : ListButtonNode {
+internal sealed class SidebarPageRowNode : ListButtonNode {
     public const float RowHeight = 26f;
     private const float LabelX = 30f;
 
@@ -11,7 +11,7 @@ internal sealed class GuideNavSubRowNode : ListButtonNode {
 
     private bool _showSelected;
 
-    public GuideNavSubRowNode(string title, System.Action onClick) {
+    public SidebarPageRowNode(string title, System.Action onClick) {
         Height = RowHeight;
 
         HoverBackgroundNode.IsVisible = false;
@@ -24,10 +24,10 @@ internal sealed class GuideNavSubRowNode : ListButtonNode {
         LabelNode.TextColor = TextColor;
         LabelNode.String = title;
         LabelNode.TextFlags = TextFlags.Emboss | TextFlags.Ellipsis;
-        GuideNavRowClick.Wire(this, onClick);
+        SidebarListButtonClick.Wire(this, onClick);
     }
 
-    public void SetGuideSelected(bool selected) {
+    public void SetPageSelected(bool selected) {
         _showSelected = selected;
         HoverBackgroundNode.IsVisible = false;
         Selected = _showSelected;

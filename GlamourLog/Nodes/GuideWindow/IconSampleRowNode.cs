@@ -1,32 +1,33 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Windows.GuideWindow;
 using KamiToolKit;
 using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 using Lumina.Text.ReadOnly;
 
-namespace GlamourLog.Nodes;
+namespace GlamourLog.Nodes.GuideWindow;
 
-internal sealed class GuideIconExampleNode : ResNode {
+internal sealed class IconSampleRowNode : ResNode {
     private const uint SampleItemId = 13066;
     private const float SetListIconSize = 29f;
     private static readonly Vector4 TextColor = new(204f / 255f, 204f / 255f, 204f / 255f, 1f);
 
-    private readonly GuideIconExampleKind _kind;
+    private readonly IconExampleKind _kind;
     private readonly ReadOnlySeString _description;
     private readonly float _textBoxHeight;
     private readonly TextNode _text;
     private readonly List<NodeBase> _sampleNodes = [];
     private float _lastLayoutWidth = -1f;
 
-    public GuideIconExampleNode(float width, GuideIconExampleKind kind, ReadOnlySeString description, float? textBoxHeight = null) {
+    public IconSampleRowNode(float width, IconExampleKind kind, ReadOnlySeString description, float? textBoxHeight = null) {
         _kind = kind;
         _description = description;
-        _textBoxHeight = textBoxHeight ?? GuideLayout.DefaultGuideIconExampleTextBoxHeight;
+        _textBoxHeight = textBoxHeight ?? Constants.DefaultGuideIconExampleTextBoxHeight;
 
         _text = new TextNode {
             FontType = FontType.Axis,
-            FontSize = GuideLayout.GuideBodyFontSize,
-            LineSpacing = GuideLayout.GuideBodyLineSpacing,
+            FontSize = Constants.GuideBodyFontSize,
+            LineSpacing = Constants.GuideBodyLineSpacing,
             AlignmentType = AlignmentType.TopLeft,
             TextColor = TextColor,
             TextFlags = TextFlags.WordWrap | TextFlags.MultiLine,
@@ -49,22 +50,22 @@ internal sealed class GuideIconExampleNode : ResNode {
 
     private void BuildSampleNodes() {
         switch (_kind) {
-            case GuideIconExampleKind.Checkmark:
+            case IconExampleKind.Checkmark:
                 AttachSample(new FramedItemIconNode(SetListIconSize, SampleItemId) {
                     Size = new Vector2(SetListIconSize, SetListIconSize),
                 });
                 AttachSample(new CheckMarkBadgeNode());
                 break;
-            case GuideIconExampleKind.FadedDresser:
+            case IconExampleKind.FadedDresser:
                 AttachSample(CreateStorageBadge(GlamourIconNode.IconPart.DresserFaded));
                 break;
-            case GuideIconExampleKind.Dresser:
+            case IconExampleKind.Dresser:
                 AttachSample(CreateStorageBadge(GlamourIconNode.IconPart.Dresser));
                 break;
-            case GuideIconExampleKind.Armoire:
+            case IconExampleKind.Armoire:
                 AttachSample(CreateStorageBadge(GlamourIconNode.IconPart.Armoire));
                 break;
-            case GuideIconExampleKind.WarningDresser:
+            case IconExampleKind.WarningDresser:
                 var badge = CreateStorageBadge(GlamourIconNode.IconPart.Dresser);
                 AttachSample(badge);
                 AttachSample(new ArmoireWarningBadgeNode());
@@ -89,15 +90,15 @@ internal sealed class GuideIconExampleNode : ResNode {
 
     private void ApplyHeight(float width) {
         _lastLayoutWidth = width;
-        var textX = GuideLayout.IconTextLeft;
+        var textX = Constants.IconTextLeft;
         var textW = Math.Max(40f, width - textX);
         var textH = _textBoxHeight;
         var iconH = SampleIconHeight();
         var contentH = Math.Max(textH, iconH);
-        var rowH = GuideLayout.RowPadTop + contentH + GuideLayout.RowPadBottom;
+        var rowH = Constants.RowPadTop + contentH + Constants.RowPadBottom;
 
         _text.String = _description;
-        _text.Position = new Vector2(textX, GuideLayout.RowPadTop + GuideLayout.TextTopInset);
+        _text.Position = new Vector2(textX, Constants.RowPadTop + Constants.TextTopInset);
         _text.Size = new Vector2(textW, textH);
         Size = new Vector2(width, rowH);
 
@@ -106,7 +107,7 @@ internal sealed class GuideIconExampleNode : ResNode {
 
     private float SampleIconHeight()
         => _kind switch {
-            GuideIconExampleKind.Checkmark => SetListIconSize + GuideLayout.FramedItemFrameBleed,
+            IconExampleKind.Checkmark => SetListIconSize + Constants.FramedItemFrameBleed,
             _ => _sampleNodes.Count > 0 ? _sampleNodes[0].Size.Y : 12f,
         };
 
@@ -115,10 +116,10 @@ internal sealed class GuideIconExampleNode : ResNode {
             return;
 
         switch (_kind) {
-            case GuideIconExampleKind.Checkmark: {
+            case IconExampleKind.Checkmark: {
                     var iconX = 0f;
                     // Frame draws above the node origin; offset down so the frame top meets RowPadTop.
-                    var iconY = GuideLayout.RowPadTop + GuideLayout.FramedItemFrameBleed;
+                    var iconY = Constants.RowPadTop + Constants.FramedItemFrameBleed;
                     _sampleNodes[0].Position = new Vector2(iconX, iconY);
                     var check = _sampleNodes[1];
                     check.Position = new Vector2(
@@ -127,7 +128,7 @@ internal sealed class GuideIconExampleNode : ResNode {
                     break;
                 }
             default:
-                LayoutBadgeSamples(GuideLayout.RowPadTop);
+                LayoutBadgeSamples(Constants.RowPadTop);
                 break;
         }
     }

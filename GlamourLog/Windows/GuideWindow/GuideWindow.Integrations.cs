@@ -1,9 +1,9 @@
 using Dalamud.Game.Text.SeStringHandling;
 
-namespace GlamourLog;
+namespace GlamourLog.Windows.GuideWindow;
 
 public partial class GuideWindow {
-    private static readonly GuidePage Integrations = new() {
+    private static readonly Page Integrations = new() {
         CategoryTitle = "Guide",
         SubCategoryTitle = "Plugin Integrations",
         Body = new Lumina.Text.ReadOnly.ReadOnlySeString(

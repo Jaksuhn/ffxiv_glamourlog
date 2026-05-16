@@ -1,18 +1,17 @@
-using System.Numerics;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Nodes;
 using KamiToolKit.Premade.Node.Simple;
 
-namespace GlamourLog.Nodes;
+namespace GlamourLog.Nodes.GuideWindow;
 
-internal sealed class GuideNavParentRowNode : ListButtonNode {
+internal sealed class SidebarCategoryRowNode : ListButtonNode {
     public const float RowHeight = 36f;
     private const float LabelX = 12f;
 
     private static readonly Vector4 TextColor = new(1f, 1f, 1f, 1f);
     private static readonly Vector4 EdgeColor = new(230f / 255f, 167f / 255f, 58f / 255f, 1f);
 
-    public GuideNavParentRowNode(string title, System.Action onClick) {
+    public SidebarCategoryRowNode(string title, System.Action onClick) {
         Height = RowHeight;
 
         HoverBackgroundNode.IsVisible = false;
@@ -44,7 +43,7 @@ internal sealed class GuideNavParentRowNode : ListButtonNode {
         LabelNode.RemoveTextFlags(TextFlags.Emboss);
         LabelNode.AttachNode(this);
 
-        GuideNavRowClick.Wire(this, onClick);
+        SidebarListButtonClick.Wire(this, onClick);
     }
 
     protected override void OnSizeChanged() {

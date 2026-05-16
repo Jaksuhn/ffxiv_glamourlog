@@ -1,6 +1,6 @@
-namespace GlamourLog.Nodes;
+namespace GlamourLog.Nodes.GuideWindow;
 
-internal static class GuideLayout {
+internal static class Constants {
     /// <summary>Axis body copy (line spacing matches the native glamour log help / Axis 14 rhythm).</summary>
     internal const uint GuideBodyFontSize = 14;
     internal const uint GuideBodyLineSpacing = 24;

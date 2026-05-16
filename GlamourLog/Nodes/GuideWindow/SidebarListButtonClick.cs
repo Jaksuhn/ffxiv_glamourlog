@@ -2,9 +2,9 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Extensions;
 using KamiToolKit.Nodes;
 
-namespace GlamourLog.Nodes;
+namespace GlamourLog.Nodes.GuideWindow;
 
-internal static unsafe class GuideNavRowClick {
+internal static unsafe class SidebarListButtonClick {
     internal static void Wire(ListButtonNode button, System.Action onClick) {
         button.OnClick = null;
         // native path; matches LogWindow category list (not ButtonClick alone)
