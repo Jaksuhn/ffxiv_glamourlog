@@ -34,11 +34,13 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
         await Svc.Framework.RunOnFrameworkThread(Svc.Register<WindowsService>);
         Svc.Interface.UiBuilder.OpenMainUi += Svc.Get<WindowsService>().ToggleMainWindow;
+        Svc.Interface.UiBuilder.OpenConfigUi += Svc.Get<WindowsService>().ToggleMainMenu;
     }
 
     public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.Commands.RemoveHandler(c));
         Svc.Interface.UiBuilder.OpenMainUi -= Svc.Get<WindowsService>().ToggleMainWindow;
+        Svc.Interface.UiBuilder.OpenConfigUi -= Svc.Get<WindowsService>().ToggleMainMenu;
         CLibMain.Dispose();
         await Svc.Framework.RunOnFrameworkThread(KamiToolKitLibrary.Dispose);
     }
