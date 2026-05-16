@@ -1,6 +1,7 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using KamiToolKit;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
@@ -13,19 +14,18 @@ internal static unsafe class PieceContextMenu {
         var itemName = item.Name.ToString();
         menu.Clear();
 
-        menu.AddItem(Addon.GetRow(4379).Text, () => Svc.Chat.ExecuteCommand($"/isearch {EscapeText(itemName)}"));
-        menu.AddItem("Link Item In Chat", () => {
-            try { Svc.Chat.Print(SeString.CreateItemLink(itemId, false)); } catch { }
+        menu.AddItem(Addon.GetRow(4379).Text, () => ItemFinderModule.Instance()->SearchForItem(itemId));
+        menu.AddItem(Addon.GetRow(4697).Text, () => {
+            Svc.Chat.Print(SeString.CreateItemLink(itemId));
+            AgentChatLog.Instance()->LinkItem(itemId);
         });
         menu.AddItem(Addon.GetRow(159).Text, () => ImGui.SetClipboardText(itemName));
         menu.AddItem(Addon.GetRow(2426).Text, () => AgentTryon.TryOn(0, itemId));
 
         if (Recipe.FirstOrNull(r => r.RowId > 0 && r.ItemResult.RowId == itemId) is { RowId: var id }) {
-            menu.AddItem("Open Recipe", () => AgentRecipeNote.Instance()->OpenRecipeByRecipeId(id));
+            menu.AddItem(Addon.GetRow(1412).Text, () => AgentRecipeNote.Instance()->OpenRecipeByRecipeId(id));
         }
 
         menu.Open();
     }
-
-    private static string EscapeText(string text) => $"\"{text.Replace("\"", "\\\"")}\"";
 }
