@@ -62,7 +62,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _selectedCategoryId = Svc.Get<CatalogService>().UncategorizedTab.Name;
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
         _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
-        DisableClose = true;
+        DisableClose = C.DisableClose;
     }
 
     internal void RefreshListsAndDetails() {
@@ -252,6 +252,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
 
         base.OnSetup(addon, atkValueSpan);
+        addon->ShouldFireCallbackAndHideOrClose = C.DisableClose; // why is this init-only
 
         // don't rebuild at all during Setup, just let OnUpdate handle it
         if (!_isFinalizing && CanPaintLists())

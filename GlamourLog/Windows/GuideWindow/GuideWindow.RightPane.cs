@@ -47,6 +47,7 @@ public unsafe partial class GuideWindow {
             GuideTextBlock text => (NodeBase)new ParagraphNode(_rightTextWidth, text.Text, text.TextLeftInset, text.TextBoxHeight),
             GuideHeadingBlock heading => new SectionTitleNode(_rightTextWidth, heading.Title),
             IconExampleBlock icon => new IconSampleRowNode(_rightTextWidth, icon.Kind, icon.Description, icon.TextBoxHeight),
+            CheckboxSettingBlock setting => new ConfigCheckboxRowNode(_rightTextWidth, setting),
             _ => throw new ArgumentOutOfRangeException(nameof(block)),
         };
 
@@ -68,6 +69,9 @@ public unsafe partial class GuideWindow {
                     break;
                 case IconSampleRowNode icon:
                     icon.Relayout(layoutWidth);
+                    break;
+                case ConfigCheckboxRowNode setting:
+                    setting.Relayout(layoutWidth);
                     break;
             }
         }

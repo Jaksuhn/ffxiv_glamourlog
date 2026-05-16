@@ -6,7 +6,7 @@ public partial class GuideWindow {
         => [
             new("Guide", [Icons, GuideCounters, Integrations]),
             new("Tweaks", [TweaksComingSoon]),
-            new("Settings", [SettingsComingSoon]),
+            new("Settings", [SettingsLogWindow]),
     ];
 }
 

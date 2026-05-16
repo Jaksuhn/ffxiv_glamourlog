@@ -3,9 +3,9 @@ using GlamourLog.Windows.GuideWindow;
 namespace GlamourLog.Services;
 
 internal sealed class WindowsService : IDisposable {
-    private FilterWindow FilterWindow { get; }
-    private GuideWindow MainMenuWindow { get; }
-    private LogWindow LogWindow { get; }
+    internal FilterWindow FilterWindow { get; }
+    internal GuideWindow MainMenuWindow { get; }
+    internal LogWindow LogWindow { get; }
 
     public WindowsService() {
         FilterWindow = new FilterWindow {

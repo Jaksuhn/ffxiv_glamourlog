@@ -17,5 +17,7 @@ public class Configuration : IPluginConfiguration {
     public GlamourSetSortMode SetListSortMode { get; set; } = GlamourSetSortMode.Alphabetical;
     public ListSortDirection SetListSortDirection { get; set; } = ListSortDirection.Ascending;
 
+    public bool DisableClose { get; set; } = true;
+
     public void Save() => Svc.Interface.SavePluginConfig(this);
 }
