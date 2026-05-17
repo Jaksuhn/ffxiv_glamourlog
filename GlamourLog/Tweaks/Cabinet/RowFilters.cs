@@ -2,6 +2,11 @@ using GlamourLog.Services;
 
 namespace GlamourLog.Features.Cabinet;
 
+internal interface ICabinetRowFilter {
+    bool IsEnabled { get; }
+    bool ShouldHide(uint itemId);
+}
+
 internal sealed class HideDepositedItemsFilter : ICabinetRowFilter {
     public bool IsEnabled => C.HideCabinetOwnedItems;
     public bool ShouldHide(uint itemId)
