@@ -3,7 +3,6 @@ using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Services;
-using KamiToolKit.Classes;
 using KamiToolKit.Controllers;
 
 namespace GlamourLog.Features.Cabinet;
@@ -12,12 +11,9 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
     private const string _addonName = "Cabinet";
     private readonly ICabinetRowFilter[] _filters;
     private readonly AddonController<AtkUnitBase> _addonController;
-    private readonly NativeListController<AtkUnitBase, CabinetListItemData> _listController;
     private readonly Dictionary<uint, CabinetRowMetrics> _rowMetrics = [];
-    private readonly Dictionary<uint, bool> _rowHideCache = [];
+    private readonly Dictionary<int, bool> _hideByListIndex = [];
     private bool _needsRestore;
-
-    private class CabinetListItemData : ListItemData;
 
     public CabinetListTweakService() {
         _filters = [new HideDepositedItemsFilter(), new HideGearsetItemsFilter()];
@@ -28,16 +24,7 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
             OnFinalize = OnFinalize,
         };
 
-        _listController = new NativeListController<AtkUnitBase, CabinetListItemData> {
-            AddonName = _addonName,
-            GetPopulatorNode = GetPopulatorNode,
-            ShouldModifyElement = (_, _) => IsFilteringActive,
-            UpdateElement = OnPopulateElement,
-            ResetElement = OnResetElement,
-        };
-
         _addonController.Enable();
-        _listController.Enable();
         Svc.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, _addonName, OnCabinetPreDraw);
         Svc.Get<OwnershipService>().ArmoireOwnershipChanged += OnArmoireOwnershipChanged;
     }
@@ -45,27 +32,27 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
     public void Dispose() {
         Svc.AddonLifecycle.UnregisterListener(OnCabinetPreDraw);
         Svc.Get<OwnershipService>().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
-        _listController.Dispose();
         _addonController.Dispose();
         _rowMetrics.Clear();
-        _rowHideCache.Clear();
+        _hideByListIndex.Clear();
     }
 
     private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
 
-    private bool ShouldHideRow(CabinetItemRenderer row)
-        => _filters.Any(f => f.IsEnabled && f.ShouldHide(row));
+    private bool ShouldHideItem(uint itemId)
+        => itemId != 0 && _filters.Any(f => f.IsEnabled && f.ShouldHide(itemId));
 
     internal void OnConfigChanged() {
         Svc.Framework.RunOnFrameworkThread(() => {
             CabinetGearsetLookup.Invalidate();
-            var wasFiltering = _rowHideCache.Count > 0 || _listController.ModifiedIndexes.Count > 0;
-            _rowHideCache.Clear();
+            var wasFiltering = _hideByListIndex.Count > 0;
+            _hideByListIndex.Clear();
 
-            var addon = GetCabinetAddon();
+            if (!CabinetState.TryGetOpen(out var addon, out _))
+                addon = null;
+
             if (addon is null) {
                 _rowMetrics.Clear();
-                _listController.ModifiedIndexes.Clear();
                 _needsRestore = false;
                 return;
             }
@@ -76,13 +63,11 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
                 else
                     _rowMetrics.Clear();
 
-                _listController.ModifiedIndexes.Clear();
                 _needsRestore = false;
                 return;
             }
 
             _rowMetrics.Clear();
-            _listController.ModifiedIndexes.Clear();
             RequestCabinetRefresh(addon);
         });
     }
@@ -92,23 +77,38 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
             return;
 
         Svc.Framework.RunOnFrameworkThread(() => {
-            _rowHideCache.Clear();
-            var addon = GetCabinetAddon();
-            if (addon is null)
+            _hideByListIndex.Clear();
+            if (!CabinetState.TryGetOpen(out var addon, out _))
                 return;
             RequestCabinetRefresh(addon);
         });
     }
 
     private static void OnPreRefresh(AtkUnitBase* addon) {
-        _ = addon;
         CabinetGearsetLookup.Invalidate();
-        Svc.Get<CabinetListTweakService>()._rowHideCache.Clear();
+
+        var service = Svc.Get<CabinetListTweakService>();
+        if (!service.IsFilteringActive)
+            return;
+
+        if (addon is null)
+            return;
+
+        var cabinet = (AddonCabinet*)addon;
+        var list = CabinetState.GetItemList(cabinet);
+        if (list is null)
+            return;
+
+        service._hideByListIndex.Clear();
+        CabinetListLayout.RestoreAllRows(list, service._rowMetrics);
     }
 
     private void OnCabinetPreDraw(AddonEvent type, AddonArgs args) {
         _ = type;
-        var addon = args.GetAddon<AtkUnitBase>();
+        var addon = (AddonCabinet*)args.GetAddon<AtkUnitBase>();
+        if (addon is null)
+            return;
+
         if (!IsFilteringActive) {
             if (_needsRestore)
                 RestoreCabinetList(addon);
@@ -119,71 +119,40 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
         ApplyCabinetFilter(addon);
     }
 
-    private static void OnResetElement(AtkUnitBase* addon, CabinetListItemData listItem) {
-        _ = addon;
-        var renderer = listItem.ItemRenderer;
-        if (renderer is null && listItem.ItemInfo is not null)
-            renderer = listItem.ItemInfo->ListItem->Renderer;
-        if (renderer is null)
+    private void ApplyCabinetFilter(AddonCabinet* addon) {
+        if (!CabinetState.TryGetOpen(out _, out var agent))
             return;
 
-        var service = Svc.Get<CabinetListTweakService>();
-        CabinetListLayout.ShowRow(renderer, service._rowMetrics);
-    }
-
-    private static void OnPopulateElement(AtkUnitBase* addon, CabinetListItemData listItem) {
-        _ = addon;
-        var service = Svc.Get<CabinetListTweakService>();
-        if (!service.IsFilteringActive)
-            return;
-
-        var renderer = listItem.ItemRenderer;
-        if (renderer is null && listItem.ItemInfo is not null)
-            renderer = listItem.ItemInfo->ListItem->Renderer;
-        if (renderer is null)
-            return;
-
-        try {
-            var nodeId = renderer->OwnerNode->NodeId;
-            var shouldHide = CabinetRowResolver.TryResolve(renderer, listItem.ItemInfo, out var row)
-                && service.ShouldHideRow(row);
-
-            service._rowHideCache[nodeId] = shouldHide;
-
-            if (shouldHide)
-                CabinetListLayout.HideRow(renderer, service._rowMetrics);
-        }
-        catch (Exception ex) {
-            Svc.Log.Error(ex, "[Cabinet] Failed to populate");
-        }
-    }
-
-    private static void ApplyCabinetFilter(AtkUnitBase* addon) {
-        var list = CabinetListLayout.GetList(addon);
+        var list = CabinetState.GetItemList(addon);
         if (list is null)
             return;
 
         try {
-            var service = Svc.Get<CabinetListTweakService>();
-            var count = list->AllocatedItemRendererListLength;
+            var rowCount = CabinetState.ActiveRowCount(addon);
+            _hideByListIndex.Clear();
 
-            for (var i = 0; i < count; i++) {
+            for (var i = 0; i < rowCount; i++) {
+                var itemId = CabinetState.GetItemId(agent, i);
+                _hideByListIndex[i] = ShouldHideItem(itemId);
+            }
+
+            var poolCount = list->AllocatedItemRendererListLength;
+            for (var i = 0; i < poolCount; i++) {
                 var renderer = list->GetItemRenderer(i);
                 if (renderer is null)
                     continue;
 
-                var nodeId = renderer->OwnerNode->NodeId;
-                var shouldHide = service._rowHideCache.TryGetValue(nodeId, out var cached)
-                    ? cached
-                    : CabinetRowResolver.TryResolve(renderer, null, out var row) && service.ShouldHideRow(row);
+                var listIndex = renderer->ListItemIndex;
+                if (listIndex < 0 || listIndex >= rowCount)
+                    continue;
 
-                if (shouldHide)
-                    CabinetListLayout.HideRow(renderer, service._rowMetrics);
+                if (_hideByListIndex.TryGetValue(listIndex, out var shouldHide) && shouldHide)
+                    CabinetListLayout.HideRow(renderer, _rowMetrics);
                 else
-                    CabinetListLayout.ShowRow(renderer, service._rowMetrics);
+                    CabinetListLayout.ShowRow(renderer, _rowMetrics);
             }
 
-            CabinetListLayout.CompactVisibleRows(list, service._rowMetrics);
+            CabinetListLayout.CompactVisibleRows(list, _rowMetrics, _hideByListIndex);
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, "[Cabinet] Failed to apply filter");
@@ -194,16 +163,15 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
         _ = addon;
         var service = Svc.Get<CabinetListTweakService>();
         service._rowMetrics.Clear();
-        service._rowHideCache.Clear();
-        service._listController.ModifiedIndexes.Clear();
+        service._hideByListIndex.Clear();
         service._needsRestore = false;
     }
 
-    private static void RestoreCabinetList(AtkUnitBase* addon) {
+    private static void RestoreCabinetList(AddonCabinet* addon) {
         if (addon is null)
             return;
 
-        var list = CabinetListLayout.GetList(addon);
+        var list = CabinetState.GetItemList(addon);
         if (list is null)
             return;
 
@@ -213,20 +181,10 @@ internal sealed unsafe class CabinetListTweakService : IDisposable {
         RequestCabinetRefresh(addon);
 
         service._rowMetrics.Clear();
-        service._rowHideCache.Clear();
+        service._hideByListIndex.Clear();
         service._needsRestore = false;
     }
 
-    private static AtkComponentListItemRenderer* GetPopulatorNode(AtkUnitBase* addon) {
-        var list = CabinetListLayout.GetList(addon);
-        return list is null ? null : list->FirstAtkComponentListItemRenderer;
-    }
-
-    private static AtkUnitBase* GetCabinetAddon() {
-        var addon = RaptureAtkUnitManager.Instance()->GetAddonByName(_addonName);
-        return addon is null || !addon->IsVisible ? null : addon;
-    }
-
-    private static void RequestCabinetRefresh(AtkUnitBase* addon)
-        => addon->OnRefresh(0, null);
+    private static void RequestCabinetRefresh(AddonCabinet* addon)
+        => ((AtkUnitBase*)addon)->OnRefresh(0, null);
 }

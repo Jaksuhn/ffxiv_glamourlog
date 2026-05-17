@@ -1,3 +1,4 @@
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.Cabinet;
@@ -9,24 +10,7 @@ internal struct CabinetRowMetrics {
 }
 
 internal static unsafe class CabinetListLayout {
-    internal const int CabinetListNodeId = 11;
     private const float FallbackRowHeight = 28f;
-
-    internal static AtkComponentList* GetList(AtkUnitBase* addon) {
-        AtkComponentNode* componentNode = null;
-
-        var direct = addon->GetNodeById(CabinetListNodeId);
-        if (direct is not null && direct->GetNodeType() == NodeType.Component)
-            componentNode = (AtkComponentNode*)direct;
-
-        if (componentNode is null) {
-            var searched = addon->UldManager.SearchNodeById<AtkComponentNode>(CabinetListNodeId);
-            if (searched is not null)
-                componentNode = searched;
-        }
-
-        return componentNode is null || componentNode->Component is null ? null : (AtkComponentList*)componentNode->Component;
-    }
 
     internal static void HideRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, CabinetRowMetrics> metrics) {
         var owner = (AtkResNode*)renderer->OwnerNode;
@@ -76,6 +60,7 @@ internal static unsafe class CabinetListLayout {
                 continue;
 
             RestoreRow(renderer, metrics, restoreY: false);
+            SetSubtreeDrawn(renderer, true);
 
             var owner = (AtkResNode*)renderer->OwnerNode;
             owner->Y = (short)(baseY + i * rowHeight);
@@ -88,24 +73,47 @@ internal static unsafe class CabinetListLayout {
         list->IsUpdatePending = true;
     }
 
-    internal static void CompactVisibleRows(AtkComponentList* list, Dictionary<uint, CabinetRowMetrics> metrics) {
-        var rowHeight = GetRowHeight(list, metrics);
-        var baseY = GetBaseY(list, metrics, list->AllocatedItemRendererListLength);
-        var visibleIndex = 0;
-
+    internal static void CompactVisibleRows(AtkComponentList* list, Dictionary<uint, CabinetRowMetrics> metrics, IReadOnlyDictionary<int, bool> hideByListIndex) {
         var count = list->AllocatedItemRendererListLength;
+        if (count <= 0)
+            return;
+
+        var rowHeight = GetRowHeight(list, metrics);
+        var baseY = GetBaseY(list, metrics, count);
+        var viewportOffset = CountVisibleItemsBefore(list, list->FirstVisibleItemIndex, hideByListIndex);
+
         for (var i = 0; i < count; i++) {
             var renderer = list->GetItemRenderer(i);
             if (renderer is null)
                 continue;
 
             var owner = (AtkResNode*)renderer->OwnerNode;
-            if (!IsRowVisible(owner))
+            if (!CountsForCompactLayout(owner))
                 continue;
 
-            owner->Y = (short)(baseY + visibleIndex * rowHeight);
-            visibleIndex++;
+            CaptureMetrics(owner, metrics);
+
+            var listIndex = renderer->ListItemIndex;
+            var displaySlot = CountVisibleItemsBefore(list, listIndex + 1, hideByListIndex) - 1 - viewportOffset;
+            if (displaySlot < 0)
+                displaySlot = 0;
+
+            owner->Y = (short)(baseY + displaySlot * rowHeight);
         }
+    }
+
+    private static int CountVisibleItemsBefore(AtkComponentList* list, int endExclusive, IReadOnlyDictionary<int, bool> hideByListIndex) {
+        if (endExclusive <= 0)
+            return 0;
+
+        var limit = Math.Min(endExclusive, list->ListLength);
+        var count = 0;
+        for (var i = 0; i < limit; i++) {
+            if (!hideByListIndex.TryGetValue(i, out var hide) || !hide)
+                count++;
+        }
+
+        return count;
     }
 
     private static void RestoreRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, CabinetRowMetrics> metrics, bool restoreY) {
@@ -147,13 +155,20 @@ internal static unsafe class CabinetListLayout {
                 continue;
 
             var owner = (AtkResNode*)renderer->OwnerNode;
-            if (metrics.TryGetValue(owner->NodeId, out var rowMetrics))
+            if (!CountsForCompactLayout(owner))
+                continue;
+
+            if (metrics.TryGetValue(owner->NodeId, out var rowMetrics) && rowMetrics.DefaultY != 0)
                 return rowMetrics.DefaultY;
+
+            return owner->Y;
         }
 
-        var first = list->GetItemRenderer(0);
-        return first is null ? 0f : ((AtkResNode*)first->OwnerNode)->Y;
+        return 0f;
     }
+
+    private static bool CountsForCompactLayout(AtkResNode* owner)
+        => owner->Height > 0;
 
     private static bool IsRowVisible(AtkResNode* owner)
         => owner->Height > 0 && (owner->NodeFlags & NodeFlags.Visible) != 0;
