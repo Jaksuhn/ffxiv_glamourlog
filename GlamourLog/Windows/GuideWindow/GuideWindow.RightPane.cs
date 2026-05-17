@@ -7,36 +7,15 @@ public unsafe partial class GuideWindow {
     private const float RightBlockSpacing = Constants.BlockSpacing;
 
     private readonly List<NodeBase> _rightPaneBlocks = [];
-    private readonly List<NodeBase> _pendingPaneDisposes = [];
-    private int _paneDisposeGeneration;
-
-    private void CancelDeferredPaneDisposes() => _paneDisposeGeneration++;
-
-    private void FlushPendingPaneDisposes() {
-        if (_pendingPaneDisposes.Count == 0)
-            return;
-
-        foreach (var node in _pendingPaneDisposes.ToList())
-            node.Dispose();
-
-        _pendingPaneDisposes.Clear();
-    }
 
     private void EjectRightPaneBlocks() {
-        if (_isFinalizing || _isTearingDown || _rightScroll is null || _rightPaneBlocks.Count == 0)
+        if (_isFinalizing || _rightScroll is null || _rightPaneBlocks.Count == 0)
             return;
 
-        VerticalListEject.EjectAll(_rightScroll.VerticalListNode, _rightPaneBlocks);
-        _pendingPaneDisposes.AddRange(_rightPaneBlocks);
+        VerticalListEject.RemoveAllWithoutDetach(_rightScroll.VerticalListNode, _rightPaneBlocks);
+        foreach (var node in _rightPaneBlocks)
+            node.Dispose();
         _rightPaneBlocks.Clear();
-
-        var generation = _paneDisposeGeneration;
-        Svc.Framework.RunOnTick(() => {
-            if (generation != _paneDisposeGeneration || _isFinalizing || _isTearingDown)
-                return;
-
-            FlushPendingPaneDisposes();
-        });
     }
 
     private void AppendRightPaneBlock(ContentBlock block) {
@@ -56,7 +35,7 @@ public unsafe partial class GuideWindow {
     }
 
     private void RelayoutRightPaneBlocks() {
-        if (_isFinalizing || _isTearingDown || _rightScroll is null)
+        if (_isFinalizing || _rightScroll is null)
             return;
 
         var width = _rightScroll.ContentWidth;

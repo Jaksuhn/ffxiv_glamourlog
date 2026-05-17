@@ -28,7 +28,6 @@ public unsafe partial class GuideWindow : NativeAddon {
     private bool _hasPendingScreenOrigin;
     private Vector2 _pendingScreenOrigin;
     private bool _isFinalizing;
-    private bool _isTearingDown;
 
     private TextNode? _categoryHeading;
     private VerticalListNode? _leftNavList;
@@ -44,7 +43,6 @@ public unsafe partial class GuideWindow : NativeAddon {
 
     public void OpenOrToggleNear(Vector2 screenTopLeft) {
         if (IsOpen) {
-            _isTearingDown = true;
             Close();
             return;
         }
@@ -63,11 +61,8 @@ public unsafe partial class GuideWindow : NativeAddon {
     }
 
     public void CloseIfOpen() {
-        if (!IsOpen)
-            return;
-
-        _isTearingDown = true;
-        Close();
+        if (IsOpen)
+            Close();
     }
 
     public static Vector2 ClampTopLeft(Vector2 origin) {
@@ -81,14 +76,13 @@ public unsafe partial class GuideWindow : NativeAddon {
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {
         _isFinalizing = false;
-        _isTearingDown = false;
 
         if (_hasPendingScreenOrigin) {
             SetWindowPosition(_pendingScreenOrigin);
             _hasPendingScreenOrigin = false;
         }
 
-        ResetChromeRefs();
+        TearDownGuideChrome();
         BuildChrome();
 
         SyncLeftNav();
@@ -97,33 +91,17 @@ public unsafe partial class GuideWindow : NativeAddon {
         base.OnSetup(addon, atkValueSpan);
     }
 
-    protected override void OnShow(AtkUnitBase* addon) {
-        SyncLeftNav();
-        PaintRight();
-        base.OnShow(addon);
-    }
-
-    private void ResetChromeRefs() => TearDownGuideChrome();
-
     /// <summary>
-    /// Dispose all chrome from <see cref="BuildChrome"/>, plus ejected right-pane blocks pending deferred dispose.
-    /// Must run before rebuilding chrome or in <see cref="OnFinalize"/>; otherwise managed nodes are dropped without
-    /// <see cref="NodeBase.Dispose"/> and Kami reports leaks for detached nodes.
+    /// Dispose all chrome from <see cref="BuildChrome"/> and right-pane blocks. OnSetup only — not OnFinalize.
     /// </summary>
     private void TearDownGuideChrome() {
-        CancelDeferredPaneDisposes();
-
-        foreach (var node in _pendingPaneDisposes.ToList())
-            node.Dispose();
-        _pendingPaneDisposes.Clear();
+        EjectRightPaneBlocks();
 
         foreach (var section in _categorySections) {
             section.CategoryRow.ClearClickHandlers();
             foreach (var (pageRow, _) in section.Pages)
                 pageRow.ClearClickHandlers();
         }
-
-        _rightPaneBlocks.Clear();
 
         _leftNavList?.Dispose();
         _rightScroll?.Dispose();
@@ -262,15 +240,8 @@ public unsafe partial class GuideWindow : NativeAddon {
         _leftNavList?.RecalculateLayout();
     }
 
-    protected override void OnHide(AtkUnitBase* addon) {
-        _isTearingDown = true;
-        CancelDeferredPaneDisposes();
-        FlushPendingPaneDisposes();
-        base.OnHide(addon);
-    }
-
     private void OnParentCategoryClicked(int catIndex) {
-        if (_isFinalizing || _isTearingDown)
+        if (_isFinalizing)
             return;
 
         _expandedCategoryIndex = catIndex;
@@ -280,7 +251,7 @@ public unsafe partial class GuideWindow : NativeAddon {
     }
 
     private void OnSubClicked(Page page) {
-        if (_isFinalizing || _isTearingDown)
+        if (_isFinalizing)
             return;
 
         _selectedPage = page;
@@ -289,7 +260,7 @@ public unsafe partial class GuideWindow : NativeAddon {
     }
 
     private void PaintRight() {
-        if (_isFinalizing || _isTearingDown || _rightTitle is null || _rightScroll is null)
+        if (_isFinalizing || _rightTitle is null || _rightScroll is null)
             return;
 
         var page = _selectedPage;
@@ -308,8 +279,20 @@ public unsafe partial class GuideWindow : NativeAddon {
 
     protected override void OnFinalize(AtkUnitBase* addon) {
         _isFinalizing = true;
-        TearDownGuideChrome();
 
+        foreach (var section in _categorySections) {
+            section.CategoryRow.ClearClickHandlers();
+            foreach (var (pageRow, _) in section.Pages)
+                pageRow.ClearClickHandlers();
+        }
+
+        _categorySections.Clear();
+        _rightPaneBlocks.Clear();
+        _categoryHeading = null;
+        _leftNavList = null;
+        _rightScroll = null;
+        _splitter = null;
+        _rightTitle = null;
         base.OnFinalize(addon);
     }
 
