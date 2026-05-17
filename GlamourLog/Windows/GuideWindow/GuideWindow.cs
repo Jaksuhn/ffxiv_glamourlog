@@ -31,6 +31,7 @@ public unsafe partial class GuideWindow : NativeAddon {
 
     private TextNode? _categoryHeading;
     private VerticalListNode? _leftNavList;
+    private ResNode? _rightHeaderRow;
     private ScrollingListNode? _rightScroll;
     private VerticalLineNode? _splitter;
     private TextNode? _rightTitle;
@@ -82,38 +83,33 @@ public unsafe partial class GuideWindow : NativeAddon {
             _hasPendingScreenOrigin = false;
         }
 
-        TearDownGuideChrome();
-        BuildChrome();
-
-        SyncLeftNav();
-        PaintRight();
-
-        base.OnSetup(addon, atkValueSpan);
-    }
-
-    /// <summary>
-    /// Dispose all chrome from <see cref="BuildChrome"/> and right-pane blocks. OnSetup only — not OnFinalize.
-    /// </summary>
-    private void TearDownGuideChrome() {
-        EjectRightPaneBlocks();
-
+        _pageBlocks.Clear();
         foreach (var section in _categorySections) {
             section.CategoryRow.ClearClickHandlers();
             foreach (var (pageRow, _) in section.Pages)
                 pageRow.ClearClickHandlers();
         }
+        _categorySections.Clear();
 
         _leftNavList?.Dispose();
         _rightScroll?.Dispose();
+        _rightHeaderRow?.Dispose();
         _splitter?.Dispose();
         _categoryHeading?.Dispose();
-
-        _categorySections.Clear();
         _leftNavList = null;
         _rightScroll = null;
+        _rightHeaderRow = null;
         _splitter = null;
         _categoryHeading = null;
         _rightTitle = null;
+
+        BuildChrome();
+
+        SyncLeftNav();
+        BuildAllRightPanePages();
+        PaintRight();
+
+        base.OnSetup(addon, atkValueSpan);
     }
 
     private void BuildChrome() {
@@ -167,15 +163,11 @@ public unsafe partial class GuideWindow : NativeAddon {
         };
         _splitter.AttachNode(this);
 
-        _rightScroll = SimpleScrollList.Create(new Vector2(rightInnerX, innerTop), new Vector2(rightInnerW, innerH), true);
-        _rightScroll.ItemSpacing = RightBlockSpacing;
-        _rightScroll.AttachNode(this);
-
-        var headerRow = new ResNode {
+        _rightHeaderRow = new ResNode {
+            Position = new Vector2(rightInnerX, innerTop),
             Size = new Vector2(_rightTextWidth, RightHeaderHeight),
         };
-        CreateHeaderPlateNineGrid(new Vector2(_rightTextWidth, RightHeaderHeight)).AttachNode(headerRow);
-
+        CreateHeaderPlateNineGrid(new Vector2(_rightTextWidth, RightHeaderHeight)).AttachNode(_rightHeaderRow);
         _rightTitle = new TextNode {
             Size = new Vector2(_rightTextWidth, RightHeaderHeight),
             FontType = FontType.Axis,
@@ -185,10 +177,17 @@ public unsafe partial class GuideWindow : NativeAddon {
             TextColor = HeaderTextColor,
             TextFlags = HeaderTextFlags,
         };
-        _rightTitle.AttachNode(headerRow);
+        _rightTitle.AttachNode(_rightHeaderRow);
+        _rightHeaderRow.AttachNode(this);
 
-        _rightScroll.AddNode(headerRow);
-        _rightScroll.AddDummy(RightHeaderBodyGap);
+        var rightScrollTop = innerTop + RightHeaderHeight + RightHeaderBodyGap;
+        var rightScrollHeight = innerBottom - rightScrollTop;
+        _rightScroll = SimpleScrollList.Create(
+            new Vector2(rightInnerX, rightScrollTop),
+            new Vector2(rightInnerW, rightScrollHeight),
+            true);
+        _rightScroll.ItemSpacing = RightBlockSpacing;
+        _rightScroll.AttachNode(this);
 
         for (var c = 0; c < NavCategories.Length; c++) {
             var catIndex = c;
@@ -197,23 +196,16 @@ public unsafe partial class GuideWindow : NativeAddon {
             var categoryRow = new SidebarCategoryRowNode(category.Title, () => OnParentCategoryClicked(catIndex));
             _leftNavList.AddNode(categoryRow);
 
-            var pageList = new VerticalListNode {
-                ItemSpacing = 0f,
-                FitWidth = true,
-                FitContents = true,
-            };
             var pages = new List<(SidebarPageRowNode Btn, Page Page)>();
             foreach (var page in category.Pages) {
                 var captured = page;
                 var pageRow = new SidebarPageRowNode(page.SubCategoryTitle, () => OnSubClicked(captured));
-                pageList.AddNode(pageRow);
+                _leftNavList.AddNode(pageRow);
                 pages.Add((pageRow, page));
             }
 
-            _leftNavList.AddNode(pageList);
             _categorySections.Add(new SidebarSection {
                 CategoryRow = categoryRow,
-                PageList = pageList,
                 Pages = pages,
             });
         }
@@ -226,14 +218,9 @@ public unsafe partial class GuideWindow : NativeAddon {
         for (var i = 0; i < _categorySections.Count; i++) {
             var expanded = i == _expandedCategoryIndex;
             var section = _categorySections[i];
-            section.PageList.IsVisible = expanded;
-            if (expanded) {
-                foreach (var (btn, page) in section.Pages)
-                    btn.SetPageSelected(ReferenceEquals(page, _selectedPage));
-            }
-            else {
-                foreach (var (btn, _) in section.Pages)
-                    btn.SetPageSelected(false);
+            foreach (var (btn, page) in section.Pages) {
+                btn.IsVisible = expanded;
+                btn.SetPageSelected(expanded && ReferenceEquals(page, _selectedPage));
             }
         }
 
@@ -263,15 +250,10 @@ public unsafe partial class GuideWindow : NativeAddon {
         if (_isFinalizing || _rightTitle is null || _rightScroll is null)
             return;
 
-        var page = _selectedPage;
-        _rightTitle.String = page.SubCategoryTitle;
-
-        RebuildRightPane(page);
-
+        _rightTitle.String = _selectedPage.SubCategoryTitle;
+        ShowRightPanePage(_selectedPage);
         _rightScroll.RecalculateLayout();
-        RelayoutRightPaneBlocks();
-        _rightScroll.RecalculateLayout();
-        RelayoutRightPaneBlocks();
+        RelayoutVisibleRightPaneBlocks();
         _rightScroll.RecalculateLayout();
         _rightScroll.FitToContentHeight();
         _rightScroll.ScrollPosition = 0;
@@ -287,9 +269,10 @@ public unsafe partial class GuideWindow : NativeAddon {
         }
 
         _categorySections.Clear();
-        _rightPaneBlocks.Clear();
+        _pageBlocks.Clear();
         _categoryHeading = null;
         _leftNavList = null;
+        _rightHeaderRow = null;
         _rightScroll = null;
         _splitter = null;
         _rightTitle = null;

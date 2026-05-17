@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using KamiToolKit.Classes;
 using KamiToolKit.Nodes;
 using KamiToolKit.Premade.Node.Simple;
 
@@ -26,10 +27,8 @@ internal sealed class SidebarCategoryRowNode : ListButtonNode {
             TopOffset = 8f,
             BottomOffset = 8f,
             Size = new Vector2(305f, RowHeight),
-        }.AttachNode(this);
+        }.AttachNode(LabelNode, NodePosition.BeforeTarget);
 
-        // re-attach label so it draws above the BgParts plate
-        LabelNode.DetachNode();
         LabelNode.Position = new Vector2(LabelX, 1f);
         LabelNode.Size = new Vector2(305f - LabelX - 8f, RowHeight - 2f);
         LabelNode.FontType = FontType.Axis;
@@ -41,7 +40,6 @@ internal sealed class SidebarCategoryRowNode : ListButtonNode {
         LabelNode.String = title;
         LabelNode.TextFlags = TextFlags.Emboss | TextFlags.Ellipsis;
         LabelNode.RemoveTextFlags(TextFlags.Emboss);
-        LabelNode.AttachNode(this);
 
         SidebarListButtonClick.Wire(this, onClick);
     }

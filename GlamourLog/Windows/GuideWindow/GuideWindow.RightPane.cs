@@ -6,42 +6,57 @@ namespace GlamourLog.Windows.GuideWindow;
 public unsafe partial class GuideWindow {
     private const float RightBlockSpacing = Constants.BlockSpacing;
 
-    private readonly List<NodeBase> _rightPaneBlocks = [];
+    private readonly Dictionary<Page, List<NodeBase>> _pageBlocks = [];
 
-    private void EjectRightPaneBlocks() {
-        if (_isFinalizing || _rightScroll is null || _rightPaneBlocks.Count == 0)
-            return;
-
-        VerticalListEject.RemoveAllWithoutDetach(_rightScroll.VerticalListNode, _rightPaneBlocks);
-        foreach (var node in _rightPaneBlocks)
-            node.Dispose();
-        _rightPaneBlocks.Clear();
-    }
-
-    private void AppendRightPaneBlock(ContentBlock block) {
+    private void BuildAllRightPanePages() {
         if (_rightScroll is null)
             return;
 
-        var node = block switch {
-            GuideTextBlock text => (NodeBase)new ParagraphNode(_rightTextWidth, text.Text, text.TextLeftInset, text.TextBoxHeight),
-            GuideHeadingBlock heading => new SectionTitleNode(_rightTextWidth, heading.Title),
-            IconExampleBlock icon => new IconSampleRowNode(_rightTextWidth, icon.Kind, icon.Description, icon.TextBoxHeight),
-            CheckboxSettingBlock setting => new ConfigCheckboxRowNode(_rightTextWidth, setting),
-            _ => throw new ArgumentOutOfRangeException(nameof(block)),
-        };
-
-        _rightScroll.AddNode(node);
-        _rightPaneBlocks.Add(node);
+        _pageBlocks.Clear();
+        foreach (var category in NavCategories) {
+            foreach (var page in category.Pages)
+                _pageBlocks[page] = AddPageBlocks(page);
+        }
     }
 
-    private void RelayoutRightPaneBlocks() {
-        if (_isFinalizing || _rightScroll is null)
+    private List<NodeBase> AddPageBlocks(Page page) {
+        var scroll = _rightScroll!;
+        var blocks = new List<NodeBase>();
+        foreach (var block in page.EnumerateBlocks()) {
+            var node = CreateRightPaneBlock(block);
+            node.IsVisible = false;
+            scroll.AddNode(node);
+            blocks.Add(node);
+        }
+
+        return blocks;
+    }
+
+    private NodeBase CreateRightPaneBlock(ContentBlock block) => block switch {
+        GuideTextBlock text => new ParagraphNode(_rightTextWidth, text.Text, text.TextLeftInset, text.TextBoxHeight),
+        GuideHeadingBlock heading => new SectionTitleNode(_rightTextWidth, heading.Title),
+        IconExampleBlock icon => new IconSampleRowNode(_rightTextWidth, icon.Kind, icon.Description, icon.TextBoxHeight),
+        CheckboxSettingBlock setting => new ConfigCheckboxRowNode(_rightTextWidth, setting),
+        _ => throw new ArgumentOutOfRangeException(nameof(block)),
+    };
+
+    private void ShowRightPanePage(Page page) {
+        foreach (var (knownPage, nodes) in _pageBlocks) {
+            var visible = ReferenceEquals(knownPage, page);
+            foreach (var node in nodes)
+                node.IsVisible = visible;
+        }
+    }
+
+    private void RelayoutVisibleRightPaneBlocks() {
+        if (_isFinalizing || _rightScroll is null || !_pageBlocks.TryGetValue(_selectedPage, out var nodes))
             return;
 
-        var width = _rightScroll.ContentWidth;
-        var layoutWidth = Math.Min(_rightTextWidth, width);
+        var layoutWidth = Math.Min(_rightTextWidth, _rightScroll.ContentWidth);
+        foreach (var node in nodes) {
+            if (!node.IsVisible)
+                continue;
 
-        foreach (var node in _rightPaneBlocks) {
             switch (node) {
                 case ParagraphNode text:
                     text.Relayout(layoutWidth);
@@ -54,14 +69,5 @@ public unsafe partial class GuideWindow {
                     break;
             }
         }
-    }
-
-    private void RebuildRightPane(Page page) {
-        EjectRightPaneBlocks();
-
-        foreach (var block in page.EnumerateBlocks())
-            AppendRightPaneBlock(block);
-
-        RelayoutRightPaneBlocks();
     }
 }
