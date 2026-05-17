@@ -9,9 +9,11 @@ using KamiToolKit.Controllers;
 namespace GlamourLog.Features.Cabinet;
 
 internal sealed unsafe class CabinetListHandler : IDisposable {
-    private const string _addonName = "Cabinet";
+    private const string AddonName = "Cabinet";
+    private const float FallbackRowHeight = 28f;
+
     private readonly ICabinetRowFilter[] _filters;
-    private readonly AddonController<AtkUnitBase> _addonController;
+    private readonly AddonController<AddonCabinet> _addonController;
     private readonly Dictionary<uint, RowDetails> _rowMetrics = [];
     private readonly Dictionary<int, bool> _hideByListIndex = [];
     private bool _needsRestore;
@@ -19,14 +21,14 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
     public CabinetListHandler() {
         _filters = [new HideDepositedItemsFilter(), new HideGearsetItemsFilter()];
 
-        _addonController = new AddonController<AtkUnitBase> {
-            AddonName = _addonName,
+        _addonController = new AddonController<AddonCabinet> {
+            AddonName = AddonName,
             OnPreRefresh = OnPreRefresh,
             OnFinalize = OnFinalize,
         };
 
         _addonController.Enable();
-        Svc.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, _addonName, OnCabinetPreDraw);
+        Svc.AddonLifecycle.RegisterListener(AddonEvent.PreDraw, AddonName, OnCabinetPreDraw);
         Svc.Get<OwnershipService>().ArmoireOwnershipChanged += OnArmoireOwnershipChanged;
     }
 
@@ -49,7 +51,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
             var wasFiltering = _hideByListIndex.Count > 0;
             _hideByListIndex.Clear();
 
-            var addon = RaptureAtkUnitManager.Instance()->GetAddonByName("Cabinet");
+            var addon = GetCabinetAddon();
             if (addon is null) {
                 _rowMetrics.Clear();
                 _needsRestore = false;
@@ -58,7 +60,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
 
             if (!IsFilteringActive) {
                 if (wasFiltering || _needsRestore)
-                    RestoreCabinetList((AddonCabinet*)addon);
+                    RestoreCabinetList(addon);
                 else
                     _rowMetrics.Clear();
 
@@ -77,33 +79,28 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
 
         Svc.Framework.RunOnFrameworkThread(() => {
             _hideByListIndex.Clear();
-            if (RaptureAtkUnitManager.Instance()->GetAddonByName("Cabinet") is not null and var addon)
+            var addon = GetCabinetAddon();
+            if (addon is not null)
                 addon->OnRefresh(0, null);
         });
     }
 
-    private static void OnPreRefresh(AtkUnitBase* addon) {
+    private void OnPreRefresh(AddonCabinet* addon) {
         CabinetGearsetLookup.Invalidate();
 
-        var service = Svc.Get<CabinetListHandler>();
-        if (!service.IsFilteringActive)
+        if (!IsFilteringActive || addon is null)
             return;
 
-        if (addon is null)
-            return;
-
-        var cabinet = (AddonCabinet*)addon;
-        var list = cabinet->ItemList;
+        var list = addon->ItemList;
         if (list is null)
             return;
 
-        service._hideByListIndex.Clear();
-        CabinetListLayout.RestoreAllRows(list, service._rowMetrics);
+        _hideByListIndex.Clear();
+        RestoreAllRows(list);
     }
 
-    private void OnCabinetPreDraw(AddonEvent type, AddonArgs args) {
-        _ = type;
-        var addon = (AddonCabinet*)args.GetAddon<AtkUnitBase>();
+    private void OnCabinetPreDraw(AddonEvent _, AddonArgs args) {
+        var addon = args.GetAddon<AddonCabinet>();
         if (addon is null)
             return;
 
@@ -119,21 +116,18 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
 
     private void ApplyFilter(AddonCabinet* addon) {
         var agent = AgentCabinet.Instance();
-        if (agent is null) return;
         var list = addon->ItemList;
-        if (list is null) return;
+        if (agent is null || list is null)
+            return;
 
         try {
-            var rowCount = addon->ItemList->ListLength;
+            var rowCount = list->ListLength;
             _hideByListIndex.Clear();
 
-            for (var i = 0; i < rowCount; i++) {
-                var itemId = agent->ItemCaches[i].Id;
-                _hideByListIndex[i] = ShouldHideItem(itemId);
-            }
+            for (var i = 0; i < rowCount; i++)
+                _hideByListIndex[i] = ShouldHideItem(agent->ItemCaches[i].Id);
 
-            var poolCount = list->AllocatedItemRendererListLength;
-            for (var i = 0; i < poolCount; i++) {
+            for (var i = 0; i < list->AllocatedItemRendererListLength; i++) {
                 var renderer = list->GetItemRenderer(i);
                 if (renderer is null)
                     continue;
@@ -143,40 +137,252 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
                     continue;
 
                 if (_hideByListIndex.TryGetValue(listIndex, out var shouldHide) && shouldHide)
-                    CabinetListLayout.HideRow(renderer, _rowMetrics);
+                    HideRow(renderer);
                 else
-                    CabinetListLayout.ShowRow(renderer, _rowMetrics);
+                    ShowRow(renderer);
             }
 
-            CabinetListLayout.CompactVisibleRows(list, _rowMetrics, _hideByListIndex);
+            CompactVisibleRows(list);
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, "[Cabinet] Failed to apply filter");
         }
     }
 
-    private void OnFinalize(AtkUnitBase* addon) {
-        _ = addon;
+    private void OnFinalize(AddonCabinet* _) {
         _rowMetrics.Clear();
         _hideByListIndex.Clear();
         _needsRestore = false;
     }
 
-    private static void RestoreCabinetList(AddonCabinet* addon) {
-        if (addon is null)
-            return;
-
+    private void RestoreCabinetList(AddonCabinet* addon) {
         var list = addon->ItemList;
         if (list is null)
             return;
 
-        var service = Svc.Get<CabinetListHandler>();
-        CabinetListLayout.RestoreAllRows(list, service._rowMetrics);
-        CabinetListLayout.RefreshListLayout(list);
+        RestoreAllRows(list);
+        RefreshListLayout(list);
         addon->OnRefresh(0, null);
 
-        service._rowMetrics.Clear();
-        service._hideByListIndex.Clear();
-        service._needsRestore = false;
+        _rowMetrics.Clear();
+        _hideByListIndex.Clear();
+        _needsRestore = false;
+    }
+
+    private AddonCabinet* GetCabinetAddon()
+        => (AddonCabinet*)RaptureAtkUnitManager.Instance()->GetAddonByName(AddonName);
+
+    private void HideRow(AtkComponentListItemRenderer* renderer) {
+        var owner = (AtkResNode*)renderer->OwnerNode;
+        CaptureMetrics(owner);
+
+        renderer->SetEnabledState(false);
+        SetSubtreeDrawn(renderer, false);
+        owner->ToggleVisibility(false);
+        owner->NodeFlags &= ~NodeFlags.Visible;
+        owner->Height = 0;
+        SetCollisionEnabled(renderer, false, 0);
+
+        if (_rowMetrics.TryGetValue(owner->NodeId, out var rowMetrics)) {
+            rowMetrics.HiddenByFilter = true;
+            _rowMetrics[owner->NodeId] = rowMetrics;
+        }
+    }
+
+    private void ShowRow(AtkComponentListItemRenderer* renderer) {
+        var owner = (AtkResNode*)renderer->OwnerNode;
+        var nodeId = owner->NodeId;
+        var wasHiddenByFilter = _rowMetrics.TryGetValue(nodeId, out var rowMetrics) && rowMetrics.HiddenByFilter;
+        if (IsRowVisible(owner) && renderer->IsEnabled && !wasHiddenByFilter)
+            return;
+
+        RestoreRow(renderer, restoreY: true);
+        if (wasHiddenByFilter)
+            SetSubtreeDrawn(renderer, true);
+
+        if (_rowMetrics.TryGetValue(nodeId, out rowMetrics)) {
+            rowMetrics.HiddenByFilter = false;
+            _rowMetrics[nodeId] = rowMetrics;
+        }
+    }
+
+    private void RestoreAllRows(AtkComponentList* list) {
+        var count = list->AllocatedItemRendererListLength;
+        if (count <= 0)
+            return;
+
+        var rowHeight = GetRowHeight(list);
+        var baseY = GetBaseY(list, count);
+
+        for (var i = 0; i < count; i++) {
+            var renderer = list->GetItemRenderer(i);
+            if (renderer is null)
+                continue;
+
+            RestoreRow(renderer, restoreY: false);
+            SetSubtreeDrawn(renderer, true);
+
+            var owner = (AtkResNode*)renderer->OwnerNode;
+            owner->Y = (short)(baseY + i * rowHeight);
+        }
+    }
+
+    private void RefreshListLayout(AtkComponentList* list) {
+        list->UpdateListItems();
+        list->IsScrollRefreshPending = true;
+        list->IsUpdatePending = true;
+    }
+
+    private void CompactVisibleRows(AtkComponentList* list) {
+        var count = list->AllocatedItemRendererListLength;
+        if (count <= 0)
+            return;
+
+        var rowHeight = GetRowHeight(list);
+        var baseY = GetBaseY(list, count);
+        var viewportOffset = CountVisibleItemsBefore(list, list->FirstVisibleItemIndex);
+
+        for (var i = 0; i < count; i++) {
+            var renderer = list->GetItemRenderer(i);
+            if (renderer is null)
+                continue;
+
+            var owner = (AtkResNode*)renderer->OwnerNode;
+            if (!CountsForCompactLayout(owner))
+                continue;
+
+            CaptureMetrics(owner);
+
+            var listIndex = renderer->ListItemIndex;
+            var displaySlot = CountVisibleItemsBefore(list, listIndex + 1) - 1 - viewportOffset;
+            if (displaySlot < 0)
+                displaySlot = 0;
+
+            owner->Y = (short)(baseY + displaySlot * rowHeight);
+        }
+    }
+
+    private int CountVisibleItemsBefore(AtkComponentList* list, int endExclusive) {
+        if (endExclusive <= 0)
+            return 0;
+
+        var limit = Math.Min(endExclusive, list->ListLength);
+        var count = 0;
+        for (var i = 0; i < limit; i++) {
+            if (!_hideByListIndex.TryGetValue(i, out var hide) || !hide)
+                count++;
+        }
+
+        return count;
+    }
+
+    private void RestoreRow(AtkComponentListItemRenderer* renderer, bool restoreY) {
+        var owner = (AtkResNode*)renderer->OwnerNode;
+        CaptureMetrics(owner);
+
+        var rowHeight = (ushort)GetRowHeightForNode(owner);
+        renderer->SetEnabledState(true);
+        owner->Height = rowHeight;
+        owner->ToggleVisibility(true);
+        owner->NodeFlags |= NodeFlags.Visible;
+        SetCollisionEnabled(renderer, true, rowHeight);
+
+        if (restoreY && _rowMetrics.TryGetValue(owner->NodeId, out var rowMetrics))
+            owner->Y = (short)rowMetrics.DefaultY;
+    }
+
+    private float GetRowHeight(AtkComponentList* list) {
+        if (list->ItemHeight > 0)
+            return list->ItemHeight;
+
+        foreach (var rowMetrics in _rowMetrics.Values) {
+            if (rowMetrics.DefaultHeight > 0f)
+                return rowMetrics.DefaultHeight;
+        }
+
+        return FallbackRowHeight;
+    }
+
+    private float GetRowHeightForNode(AtkResNode* owner)
+        => _rowMetrics.TryGetValue(owner->NodeId, out var rowMetrics) && rowMetrics.DefaultHeight > 0f
+            ? rowMetrics.DefaultHeight
+            : FallbackRowHeight;
+
+    private float GetBaseY(AtkComponentList* list, int count) {
+        for (var i = 0; i < count; i++) {
+            var renderer = list->GetItemRenderer(i);
+            if (renderer is null)
+                continue;
+
+            var owner = (AtkResNode*)renderer->OwnerNode;
+            if (!CountsForCompactLayout(owner))
+                continue;
+
+            if (_rowMetrics.TryGetValue(owner->NodeId, out var rowMetrics) && rowMetrics.DefaultY != 0)
+                return rowMetrics.DefaultY;
+
+            return owner->Y;
+        }
+
+        return 0f;
+    }
+
+    private static bool CountsForCompactLayout(AtkResNode* owner)
+        => owner->Height > 0;
+
+    private static bool IsRowVisible(AtkResNode* owner)
+        => owner->Height > 0 && (owner->NodeFlags & NodeFlags.Visible) != 0;
+
+    private void CaptureMetrics(AtkResNode* owner) {
+        var nodeId = owner->NodeId;
+        _rowMetrics.TryGetValue(nodeId, out var existing);
+        if (existing.DefaultHeight > 0f)
+            return;
+
+        _rowMetrics[nodeId] = new RowDetails {
+            DefaultHeight = owner->Height > 0 ? owner->Height : FallbackRowHeight,
+            DefaultY = owner->Y,
+            HiddenByFilter = existing.HiddenByFilter,
+        };
+    }
+
+    private static void SetSubtreeDrawn(AtkComponentListItemRenderer* renderer, bool drawn) {
+        var uld = &renderer->UldManager;
+        if (uld->NodeList is null)
+            return;
+
+        for (var i = 0u; i < uld->NodeListCount; i++) {
+            var node = uld->NodeList[i];
+            if (node is null)
+                continue;
+
+            if (drawn)
+                node->NodeFlags |= NodeFlags.Visible;
+            else
+                node->NodeFlags &= ~NodeFlags.Visible;
+        }
+    }
+
+    private static void SetCollisionEnabled(AtkComponentListItemRenderer* renderer, bool enabled, ushort height) {
+        for (uint nodeId = 1; nodeId <= 32; nodeId++) {
+            var collision = renderer->GetCollisionNodeById(nodeId);
+            if (collision is null)
+                continue;
+
+            if (enabled) {
+                collision->NodeFlags |= NodeFlags.Visible;
+                collision->Height = height;
+            }
+            else {
+                collision->NodeFlags &= ~NodeFlags.Visible;
+                collision->Height = 0;
+            }
+        }
+    }
+
+    private struct RowDetails {
+        internal float DefaultHeight;
+        internal float DefaultY;
+        internal bool HiddenByFilter;
     }
 }
