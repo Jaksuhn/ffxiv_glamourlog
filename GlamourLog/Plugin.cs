@@ -1,5 +1,6 @@
 using clib;
 using Dalamud.Plugin;
+using GlamourLog.Features.Cabinet;
 using GlamourLog.Services;
 using KamiToolKit;
 using System.Threading;
@@ -28,6 +29,7 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
         C = dalamud.GetPluginConfig() as Configuration ?? new Configuration();
         Svc.Register<CatalogService>();
         Svc.Register<OwnershipService>();
+        Svc.Register<CabinetListTweakService>();
         Svc.Register<AllaganToolsIpc>();
         Svc.Register<IpcProvider>();
 

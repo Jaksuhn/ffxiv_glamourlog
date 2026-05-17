@@ -35,9 +35,12 @@ internal sealed unsafe class OwnershipService : IDisposable {
         _armoireService.Dispose();
     }
 
+    internal event System.Action? ArmoireOwnershipChanged;
+
     private void OnArmoireChanged() {
         Svc.Get<CatalogService>().OnArmoireChanged();
         Svc.Get<CatalogService>().NotifyDisplayedOwnershipMayHaveChanged();
+        ArmoireOwnershipChanged?.Invoke();
     }
 
     private void OnInventoryChanged(IReadOnlyCollection<InventoryEventArgs> events) {
@@ -223,6 +226,15 @@ internal sealed unsafe class OwnershipService : IDisposable {
     internal ItemStorageState GetItemStorageState(uint itemId, GlamourSet? forSet) {
         var snap = CaptureSnapshot();
         return GetItemStorageState(itemId, forSet, snap);
+    }
+
+    internal bool IsItemInArmoire(uint itemId) {
+        itemId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (itemId == 0)
+            return false;
+        if (GetArmoireOwnedItemIds().Contains(itemId))
+            return true;
+        return IsInCabinet(itemId);
     }
 
     private static bool IsInCabinet(uint itemId) {

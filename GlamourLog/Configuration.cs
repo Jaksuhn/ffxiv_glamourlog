@@ -19,5 +19,8 @@ public class Configuration : IPluginConfiguration {
 
     public bool DisableClose { get; set; } = true;
 
+    public bool HideCabinetOwnedItems { get; set; }
+    public bool HideCabinetGearsetItems { get; set; }
+
     public void Save() => Svc.Interface.SavePluginConfig(this);
 }
