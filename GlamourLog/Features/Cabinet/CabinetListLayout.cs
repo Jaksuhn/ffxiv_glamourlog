@@ -3,7 +3,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.Cabinet;
 
-internal struct CabinetRowMetrics {
+internal struct RowDetails {
     internal float DefaultHeight;
     internal float DefaultY;
     internal bool HiddenByFilter;
@@ -12,7 +12,7 @@ internal struct CabinetRowMetrics {
 internal static unsafe class CabinetListLayout {
     private const float FallbackRowHeight = 28f;
 
-    internal static void HideRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, CabinetRowMetrics> metrics) {
+    internal static void HideRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, RowDetails> metrics) {
         var owner = (AtkResNode*)renderer->OwnerNode;
         CaptureMetrics(owner, metrics);
 
@@ -29,7 +29,7 @@ internal static unsafe class CabinetListLayout {
         }
     }
 
-    internal static void ShowRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, CabinetRowMetrics> metrics) {
+    internal static void ShowRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, RowDetails> metrics) {
         var owner = (AtkResNode*)renderer->OwnerNode;
         var nodeId = owner->NodeId;
         var wasHiddenByFilter = metrics.TryGetValue(nodeId, out var rowMetrics) && rowMetrics.HiddenByFilter;
@@ -46,7 +46,7 @@ internal static unsafe class CabinetListLayout {
         }
     }
 
-    internal static void RestoreAllRows(AtkComponentList* list, Dictionary<uint, CabinetRowMetrics> metrics) {
+    internal static void RestoreAllRows(AtkComponentList* list, Dictionary<uint, RowDetails> metrics) {
         var count = list->AllocatedItemRendererListLength;
         if (count <= 0)
             return;
@@ -73,7 +73,7 @@ internal static unsafe class CabinetListLayout {
         list->IsUpdatePending = true;
     }
 
-    internal static void CompactVisibleRows(AtkComponentList* list, Dictionary<uint, CabinetRowMetrics> metrics, IReadOnlyDictionary<int, bool> hideByListIndex) {
+    internal static void CompactVisibleRows(AtkComponentList* list, Dictionary<uint, RowDetails> metrics, IReadOnlyDictionary<int, bool> hideByListIndex) {
         var count = list->AllocatedItemRendererListLength;
         if (count <= 0)
             return;
@@ -116,7 +116,7 @@ internal static unsafe class CabinetListLayout {
         return count;
     }
 
-    private static void RestoreRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, CabinetRowMetrics> metrics, bool restoreY) {
+    private static void RestoreRow(AtkComponentListItemRenderer* renderer, Dictionary<uint, RowDetails> metrics, bool restoreY) {
         var owner = (AtkResNode*)renderer->OwnerNode;
         CaptureMetrics(owner, metrics);
 
@@ -131,7 +131,7 @@ internal static unsafe class CabinetListLayout {
             owner->Y = (short)rowMetrics.DefaultY;
     }
 
-    private static float GetRowHeight(AtkComponentList* list, Dictionary<uint, CabinetRowMetrics> metrics) {
+    private static float GetRowHeight(AtkComponentList* list, Dictionary<uint, RowDetails> metrics) {
         if (list->ItemHeight > 0)
             return list->ItemHeight;
 
@@ -143,12 +143,12 @@ internal static unsafe class CabinetListLayout {
         return FallbackRowHeight;
     }
 
-    private static float GetRowHeightForNode(AtkResNode* owner, Dictionary<uint, CabinetRowMetrics> metrics)
+    private static float GetRowHeightForNode(AtkResNode* owner, Dictionary<uint, RowDetails> metrics)
         => metrics.TryGetValue(owner->NodeId, out var rowMetrics) && rowMetrics.DefaultHeight > 0f
             ? rowMetrics.DefaultHeight
             : FallbackRowHeight;
 
-    private static float GetBaseY(AtkComponentList* list, Dictionary<uint, CabinetRowMetrics> metrics, int count) {
+    private static float GetBaseY(AtkComponentList* list, Dictionary<uint, RowDetails> metrics, int count) {
         for (var i = 0; i < count; i++) {
             var renderer = list->GetItemRenderer(i);
             if (renderer is null)
@@ -173,13 +173,13 @@ internal static unsafe class CabinetListLayout {
     private static bool IsRowVisible(AtkResNode* owner)
         => owner->Height > 0 && (owner->NodeFlags & NodeFlags.Visible) != 0;
 
-    private static void CaptureMetrics(AtkResNode* owner, Dictionary<uint, CabinetRowMetrics> metrics) {
+    private static void CaptureMetrics(AtkResNode* owner, Dictionary<uint, RowDetails> metrics) {
         var nodeId = owner->NodeId;
         metrics.TryGetValue(nodeId, out var existing);
         if (existing.DefaultHeight > 0f)
             return;
 
-        metrics[nodeId] = new CabinetRowMetrics {
+        metrics[nodeId] = new RowDetails {
             DefaultHeight = owner->Height > 0 ? owner->Height : FallbackRowHeight,
             DefaultY = owner->Y,
             HiddenByFilter = existing.HiddenByFilter,
