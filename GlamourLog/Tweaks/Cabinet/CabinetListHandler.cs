@@ -98,7 +98,19 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
 
     private void OnSetup(AddonCabinet* addon) {
         _itemList = addon->ItemList;
-        EnablePopulateHook();
+        if (_itemList is null)
+            return;
+
+        var renderer = _itemList->FirstAtkComponentListItemRenderer;
+        if (renderer is null)
+            return;
+
+        var populate = renderer->Populator.PopulateWithRenderer;
+        if (populate is null)
+            return;
+
+        _populateHook ??= Svc.Hook.HookFromAddress<AtkComponentListItemPopulator.PopulateWithRendererDelegate>(populate, OnPopulateWithRendererDetour);
+        _populateHook.Enable();
     }
 
     private void OnPreRefresh(AddonCabinet* addon) {
@@ -207,35 +219,13 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         list->IsUpdatePending = true;
     }
 
-    private void EnablePopulateHook() {
-        if (_itemList is null)
-            return;
-
-        var renderer = _itemList->FirstAtkComponentListItemRenderer;
-        if (renderer is null)
-            return;
-
-        var populate = renderer->Populator.PopulateWithRenderer;
-        if (populate is null)
-            return;
-
-        _populateHook ??= Svc.Hook.HookFromAddress<AtkComponentListItemPopulator.PopulateWithRendererDelegate>(
-            populate,
-            OnPopulateWithRendererDetour);
-        _populateHook.Enable();
-    }
-
     private void DisablePopulateHook() {
         _populateHook?.Disable();
         _populateHook?.Dispose();
         _populateHook = null;
     }
 
-    private void OnPopulateWithRendererDetour(
-        AtkEventListener* eventListener,
-        int listItemIndex,
-        AtkResNode** nodeList,
-        AtkComponentListItemRenderer* renderer) {
+    private void OnPopulateWithRendererDetour(AtkEventListener* eventListener, int listItemIndex, AtkResNode** nodeList, AtkComponentListItemRenderer* renderer) {
         var sourceIndex = listItemIndex;
         if (IsFilteringActive && _displayToSource.Length > 0) {
             if ((uint)listItemIndex >= (uint)_displayToSource.Length)
