@@ -228,8 +228,25 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return GetItemStorageState(itemId, forSet, snap);
     }
 
+    internal uint GetItemIdFromLookups(uint cacheOrEntryId) {
+        if (cacheOrEntryId == 0)
+            return 0;
+
+        var baseId = ItemUtil.GetBaseId(cacheOrEntryId).ItemId;
+        if (CabinetLookup.Value.ContainsKey(baseId))
+            return baseId;
+
+        if (CabinetByRowLookup.Value.TryGetValue(cacheOrEntryId, out var fromEntry))
+            return ItemUtil.GetBaseId(fromEntry).ItemId;
+
+        if (CabinetByRowLookup.Value.TryGetValue(baseId, out var fromBase))
+            return ItemUtil.GetBaseId(fromBase).ItemId;
+
+        return baseId;
+    }
+
     internal bool IsItemInArmoire(uint itemId) {
-        itemId = ItemUtil.GetBaseId(itemId).ItemId;
+        itemId = GetItemIdFromLookups(itemId);
         if (itemId == 0)
             return false;
         if (GetArmoireOwnedItemIds().Contains(itemId))
