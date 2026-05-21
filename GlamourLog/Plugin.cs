@@ -1,8 +1,12 @@
 using clib;
+using Dalamud.Hooking;
 using Dalamud.Plugin;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using GlamourLog.Features.Cabinet;
 using GlamourLog.Services;
+using GlamourLog.Tweaks;
 using KamiToolKit;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,15 +27,26 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 
     public async Task LoadAsync(CancellationToken cancellationToken) {
         dalamud.Create<Svc>();
+#if LOCAL_CS
+        FFXIVClientStructs.Interop.Generated.Addresses.Register();
+        InteropGenerator.Runtime.Resolver.GetInstance.Setup(Svc.SigScanner.SearchBase, Svc.Data.GameData.Repositories["ffxiv"].Version, new(System.IO.Path.Join(dalamud.ConfigDirectory.FullName, "SigCache.json")));
+        InteropGenerator.Runtime.Resolver.GetInstance.Resolve();
+#endif
+
         CLibMain.Init(dalamud, this, CLibModule.All);
         await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(dalamud));
 
         C = dalamud.GetPluginConfig() as Configuration ?? new Configuration();
         Svc.Register<CatalogService>();
         Svc.Register<OwnershipService>();
-        Svc.Register<CabinetListTweakService>();
+        Svc.Register<CabinetListHandler>();
         Svc.Register<AllaganToolsIpc>();
         Svc.Register<IpcProvider>();
+        Svc.Register<ChatAlerts>();
+
+        // these are lazy-loaded so gotta call them here since they aren't called elsewhere
+        _ = Svc.Get<IpcProvider>();
+        _ = Svc.Get<ChatAlerts>();
 
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
         await Svc.Framework.RunOnFrameworkThread(Svc.Register<WindowsService>);
