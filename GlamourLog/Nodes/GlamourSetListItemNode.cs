@@ -79,7 +79,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         };
         _inputCollision.AddDrawFlags(KamiToolKit.Enums.DrawFlags.ClickableCursor);
         _inputCollision.AttachNode(this);
-        // full-row hitbox: forwards left to OnClick (ListNode selection), right to context menu
+        // full-row hitbox
         _inputCollision.AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => {
             if (eventData is null || ItemData is null)
                 return;
@@ -87,8 +87,10 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
                 OnClick?.Invoke(this);
                 return;
             }
-            if (eventData->IsRightClick)
+            if (eventData->IsRightClick) {
+                OnClick?.Invoke(this);
                 OnRowRightClick?.Invoke(ItemData.Set);
+            }
         });
     }
 
@@ -110,8 +112,9 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
     }
 
     protected override void SetNodeData(SetListRowData itemData) {
-        _iconNode.SetItemId(itemData.Set.ItemId);
-        _inputCollision.ItemTooltip = itemData.Set.ItemId;
+        var iconItemId = itemData.Set.NonSetCabinetPiece ? itemData.Set.Items[0] : itemData.Set.ItemId;
+        _iconNode.SetItemId(iconItemId);
+        _inputCollision.ItemTooltip = iconItemId;
         _titleNode.String = itemData.Title;
         _subtitleNode.String = itemData.Subtitle;
         _checkBadge.IsVisible = itemData.IsOwned;

@@ -21,9 +21,12 @@ internal unsafe partial class LogWindow {
 
         var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(snap);
 
-        var totalObtainable = Svc.Get<CatalogService>().GlamourSets.Count(x => !x.IsUnobtainable || ownedSets.Contains(x));
-        _statsSetsLine.String = $"{ownedSets.Count} / {totalObtainable}";
-        _statsSpaceLine.String = $"{ownedSets.Sum(x => x.Items.Count - 1)}";
+        // mirage sets only. non-set armoire doesn't get included
+        var mirageCatalogSets = Svc.Get<CatalogService>().GlamourSets.Where(s => !s.NonSetCabinetPiece);
+        var ownedMirageSets = ownedSets.Where(s => !s.NonSetCabinetPiece);
+        var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || ownedSets.Contains(x));
+        _statsSetsLine.String = $"{ownedMirageSets.Count()} / {totalObtainable}";
+        _statsSpaceLine.String = $"{ownedMirageSets.Sum(x => x.Items.Count - 1)}";
 
         foreach (var btn in _categoryButtons) {
             if (!_categoryButtonMap.TryGetValue(btn, out var categoryId))
@@ -127,7 +130,10 @@ internal unsafe partial class LogWindow {
         var n = set.Items.Count;
         var c = Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap.OwnedItems, snap);
         string core;
-        if (ownedSets.Contains(set))
+        if (set.NonSetCabinetPiece) {
+            core = ownedSets.Contains(set) ? "Obt. 1/1" : $"Obt. {c}/1";
+        }
+        else if (ownedSets.Contains(set))
             core = $"Obt. {n}/{n}";
         else if (n == 0)
             core = "Obt. 0/0";

@@ -8,7 +8,7 @@ namespace GlamourLog;
 
 internal unsafe class FilterWindow : NativeAddon {
     public const float WindowWidth = 456f;
-    public const float WindowHeight = 250f;
+    public const float WindowHeight = 272f;
     private readonly List<CheckboxNode> _checkboxes = [];
     private TextButtonNode? _okButton;
     private bool _hasPendingScreenOrigin;
@@ -82,6 +82,11 @@ internal unsafe class FilterWindow : NativeAddon {
             c => c.HideCompleted,
             c => c.HideCompleted ^= true);
         AddCheckbox(
+            "Hide incompatible items",
+            "Hides all sets whose items are unwearable due to race or sex restrictions",
+            c => c.HideIncompatible,
+            c => c.HideIncompatible ^= true);
+        AddCheckbox(
             "Hide uncontributable",
             "Hide sets where no piece is in your inventory to contribute to the set",
             c => c.HideUnready,
@@ -110,7 +115,7 @@ internal unsafe class FilterWindow : NativeAddon {
         const float okWidth = 150f;
         const float okHeight = 28f;
         var bottomPad = 10f;
-        var checkboxCount = 6;
+        var checkboxCount = 7;
         var checklistBottom = start.Y + 8f + checkboxCount * (rowHeight + 2f);
         var okY = start.Y + ContentSize.Y - okHeight - bottomPad;
         var minOkY = checklistBottom + 8f;
@@ -133,17 +138,18 @@ internal unsafe class FilterWindow : NativeAddon {
     }
 
     protected override void OnUpdate(AtkUnitBase* addon) {
-        if (_checkboxes.Count < 6) {
+        if (_checkboxes.Count < 7) {
             base.OnUpdate(addon);
             return;
         }
 
         _checkboxes[0].IsChecked = C.HideCompleted;
-        _checkboxes[1].IsChecked = C.HideUnready;
-        _checkboxes[2].IsChecked = C.HideUnaffordable;
-        _checkboxes[3].IsChecked = C.HideNoMarketboard;
-        _checkboxes[4].IsChecked = C.HideNonPartials;
-        _checkboxes[5].IsChecked = C.ShowOnlyMisplaced;
+        _checkboxes[1].IsChecked = C.HideIncompatible;
+        _checkboxes[2].IsChecked = C.HideUnready;
+        _checkboxes[3].IsChecked = C.HideUnaffordable;
+        _checkboxes[4].IsChecked = C.HideNoMarketboard;
+        _checkboxes[5].IsChecked = C.HideNonPartials;
+        _checkboxes[6].IsChecked = C.ShowOnlyMisplaced;
 
         base.OnUpdate(addon);
     }

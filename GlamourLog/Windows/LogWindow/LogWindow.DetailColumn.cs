@@ -43,11 +43,20 @@ internal unsafe partial class LogWindow {
             return;
         }
 
-        var setJournalLine = string.IsNullOrWhiteSpace(_selectedSet.Name) ? Item.GetRow(_selectedSet.ItemId).Name.ToString() : _selectedSet.Name;
-        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details", IsTopLevelSection = true });
+        var isCabinetOnly = _selectedSet.NonSetCabinetPiece;
+        var setJournalLine = isCabinetOnly || !string.IsNullOrWhiteSpace(_selectedSet.Name)
+            ? _selectedSet.Name
+            : Item.GetRow(_selectedSet.ItemId).Name.ToString();
+        _detailRowOptions.Add(new DetailListRowData {
+            Kind = DetailRowKind.SectionHeader,
+            PrimaryText = isCabinetOnly ? "Item Details" : "Set Details",
+            IsTopLevelSection = true,
+        });
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = setJournalLine });
 
         var items = _selectedSet.Items;
+        if (isCabinetOnly)
+            _sourceFilterPieceItemId = null;
         var selectedSetStorageState = Svc.Get<OwnershipService>().GetSetStorageState(_selectedSet, snap);
         foreach (var itemId in items) {
             var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState, snap);
@@ -178,7 +187,7 @@ internal unsafe partial class LogWindow {
     }
 
     private void OnDetailPieceItemLeftClick(uint itemId) {
-        if (_isFinalizing)
+        if (_isFinalizing || _selectedSet?.NonSetCabinetPiece == true)
             return;
         _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
         _pendingPaintDetailsOnly = true;

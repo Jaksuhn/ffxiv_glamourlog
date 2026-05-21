@@ -129,7 +129,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     /// <summary> Dresser / armoire / glamour cabinet (not player inventories). </summary>
     private HashSet<uint> BuildStorageOwnedItems(HashSet<uint> dresserItemIds, HashSet<uint> armoireOwned) {
-        var setTokens = Svc.Get<CatalogService>().GlamourSets.Select(s => s.ItemId).ToHashSet();
+        var setTokens = Svc.Get<CatalogService>().GlamourSets.Where(s => !s.NonSetCabinetPiece).Select(s => s.ItemId).ToHashSet();
         HashSet<uint> owned = [.. dresserItemIds.Where(id => !setTokens.Contains(id))];
         owned.UnionWith(armoireOwned);
         foreach (var itemId in CabinetLookup.Value.Keys) {
@@ -189,6 +189,9 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     /// <summary>Checkmark / completed sets: storage only, or a full mirage plate on the dresser.</summary>
     internal bool IsSetCompleted(GlamourSet set, OwnershipSnapshot snap) {
+        if (set.NonSetCabinetPiece)
+            return set.Items.Count > 0 && set.Items.All(snap.StorageOwnedItems.Contains);
+
         if (snap.DresserItemIds.Contains(set.ItemId) && IsFullMirageOutfit(set))
             return true;
 
@@ -215,7 +218,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
             return ItemStorageState.Armoire;
 
         var dresserItemIds = snap.DresserItemIds;
-        if (forSet is not null && dresserItemIds.Contains(forSet.ItemId) && forSet.Items.Contains(itemId)) {
+        if (forSet is not null && !forSet.NonSetCabinetPiece && dresserItemIds.Contains(forSet.ItemId) && forSet.Items.Contains(itemId)) {
             var setRow = MirageStoreSetItem.GetRow(forSet.ItemId);
             return IsPieceInMirageOutfitSlot(setRow, itemId) ? ItemStorageState.DresserSet : ItemStorageState.None;
         }
@@ -350,6 +353,9 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     internal int GetOwnedPieceCountForSet(GlamourSet set, HashSet<uint> effectiveOwned, OwnershipSnapshot snap) {
+        if (set.NonSetCabinetPiece)
+            return set.Items.Count(effectiveOwned.Contains);
+
         var count = 0;
         var hasSetToken = snap.DresserItemIds.Contains(set.ItemId);
         var setRow = MirageStoreSetItem.GetRow(set.ItemId);

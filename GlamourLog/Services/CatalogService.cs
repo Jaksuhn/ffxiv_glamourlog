@@ -109,26 +109,21 @@ internal sealed class CatalogService : IDisposable {
     /// <summary> Real outfit tabs (excludes synthetic uncategorized / unobtainable rows).</summary>
     internal IReadOnlyList<OutfitCategory> OutfitCategories => _catalog.ClassifiableCategories;
     internal OutfitCategory UncategorizedTab => _catalog.UncategorizedBucket;
+    internal OutfitCategory MiscArmoireTab => _catalog.MiscArmoireBucket;
     internal OutfitCategory UnobtainableTab => _catalog.UnobtainableBucket;
 
     internal string? CategoryNameForPrimaryCostLookup(GlamourSet set) {
         if (set.IsUnobtainable || set.CategoryName is null)
             return null;
         lock (_glamourDataLock) {
-            if (set.CategoryName == _catalog.UncategorizedBucket.Name || set.CategoryName == _catalog.UnobtainableBucket.Name)
+            if (set.CategoryName == _catalog.UncategorizedBucket.Name
+                || set.CategoryName == _catalog.MiscArmoireBucket.Name
+                || set.CategoryName == _catalog.UnobtainableBucket.Name
+                || set.NonSetCabinetPiece)
                 return null;
             return set.CategoryName;
         }
     }
-
-    /// <summary> Category for <see cref="GetPrimaryItemCosts"/> when browsing a bucket tab (not a <see cref="GlamourSet"/>).</summary>
-    //internal string? CategoryNameForCostDiscriminatorBucket(string categoryName) {
-    //    lock (_glamourDataLock) {
-    //        if (categoryName == _catalog.UncategorizedBucket.Name || categoryName == _catalog.UnobtainableBucket.Name)
-    //            return null;
-    //        return categoryName;
-    //    }
-    //}
 
     /// <summary> Item ids whose sources/costs should be shown for the Sources panel (set pieces + primary currencies for the current scope).</summary>
     internal IReadOnlyCollection<uint> GetSourceScopeItemIds(GlamourSet set, uint? costScopePieceItemId) {

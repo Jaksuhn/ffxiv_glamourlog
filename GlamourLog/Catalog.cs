@@ -13,6 +13,7 @@ internal sealed class Catalog {
     public OutfitCategory PvpSeriesAttire { get; }
     public OutfitCategory DungeonChest { get; }
     public OutfitCategory UncategorizedBucket { get; }
+    public OutfitCategory MiscArmoireBucket { get; }
     public OutfitCategory UnobtainableBucket { get; }
 
     private Catalog(
@@ -21,12 +22,14 @@ internal sealed class Catalog {
         OutfitCategory pvpSeriesAttire,
         OutfitCategory dungeonChest,
         OutfitCategory uncategorizedBucket,
+        OutfitCategory miscArmoireBucket,
         OutfitCategory unobtainableBucket) {
         UITabsInOrder = uiTabsInOrder;
         ClassifiableCategories = classifiableCategories;
         PvpSeriesAttire = pvpSeriesAttire;
         DungeonChest = dungeonChest;
         UncategorizedBucket = uncategorizedBucket;
+        MiscArmoireBucket = miscArmoireBucket;
         UnobtainableBucket = unobtainableBucket;
     }
 
@@ -118,15 +121,16 @@ internal sealed class Catalog {
     /// <summary> Placeholder until <see cref="Build"/> runs after login (Tradecraft needs <see cref="CurrencyManager"/>).</summary>
     internal static Catalog CreateEmptyStub() {
         var uncategorized = new OutfitCategory("Unsorted", int.MinValue) { IsSyntheticBucket = true };
+        var miscArmoire = new OutfitCategory("Misc Armoire", 17) { IsSyntheticBucket = true };
         var unobtainableBucket = new OutfitCategory("Unobtainable", int.MaxValue) { IsSyntheticBucket = true };
         var pvp = new OutfitCategory("PvP", 1);
         var dungeons = new OutfitCategory("Dungeons", 8);
         OutfitCategory[] classifiable = [];
-        var uiTabs = new List<OutfitCategory> { uncategorized, unobtainableBucket };
-        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, unobtainableBucket);
+        var uiTabs = new List<OutfitCategory> { uncategorized, miscArmoire, unobtainableBucket };
+        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire, unobtainableBucket);
     }
 
-    /// <summary> Builds catalog topology. <paramref name="tradecraftCurrencyItemIds"/> must be resolved via <see cref="CurrencyManager"/> after login.</summary>
+    // tradecraftCurrencyItemIds must be resolved via CurrencyManager after login. It's not populated before
     public static Catalog Build(ItemCostLookup costs, IReadOnlyList<uint> tradecraftCurrencyItemIds) {
         _ = costs;
         var dungeonChestPieces = BuildDungeonChestPieceIdsFromSupplemental();
@@ -228,6 +232,7 @@ internal sealed class Catalog {
         mogstation.Rules.Add(new LateTabBundleRule(mogstation));
 
         var uncategorized = new OutfitCategory("Unsorted", int.MinValue) { IsSyntheticBucket = true };
+        var miscArmoire = new OutfitCategory("Misc Armoire", 17) { IsSyntheticBucket = true };
         var unobtainableBucket = new OutfitCategory("Unobtainable", int.MaxValue) { IsSyntheticBucket = true };
 
         OutfitCategory[] classifiable = [
@@ -237,9 +242,10 @@ internal sealed class Catalog {
 
         var uiTabs = new List<OutfitCategory> { uncategorized };
         uiTabs.AddRange(classifiable);
+        uiTabs.Add(miscArmoire);
         uiTabs.Add(unobtainableBucket);
 
-        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, unobtainableBucket);
+        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire, unobtainableBucket);
     }
 
     public static Dictionary<uint, SpecialShop> BuildSpecialShopByReceiveItemId()

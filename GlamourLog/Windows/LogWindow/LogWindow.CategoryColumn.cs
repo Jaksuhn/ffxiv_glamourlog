@@ -10,6 +10,7 @@ internal unsafe partial class LogWindow {
         var r = new List<string> { Svc.Get<CatalogService>().UncategorizedTab.Name };
         foreach (var (category, _) in Svc.Get<CatalogService>().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
             r.Add(category.Name);
+        r.Add(Svc.Get<CatalogService>().MiscArmoireTab.Name);
         r.Add(Svc.Get<CatalogService>().UnobtainableTab.Name);
         return r;
     }
