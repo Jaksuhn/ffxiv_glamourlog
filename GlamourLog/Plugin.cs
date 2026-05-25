@@ -27,12 +27,6 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 
     public async Task LoadAsync(CancellationToken cancellationToken) {
         dalamud.Create<Svc>();
-#if LOCAL_CS
-        FFXIVClientStructs.Interop.Generated.Addresses.Register();
-        InteropGenerator.Runtime.Resolver.GetInstance.Setup(Svc.SigScanner.SearchBase, Svc.Data.GameData.Repositories["ffxiv"].Version, new(System.IO.Path.Join(dalamud.ConfigDirectory.FullName, "SigCache.json")));
-        InteropGenerator.Runtime.Resolver.GetInstance.Resolve();
-#endif
-
         CLibMain.Init(dalamud, this, CLibModule.All);
         await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(dalamud));
 

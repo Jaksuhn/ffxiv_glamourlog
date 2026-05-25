@@ -17,7 +17,7 @@ public partial class GuideWindow {
                 .Append(" If installed, this context menu entry will navigate you to the relevant source of the item.\n\n")
                 .AddUiForeground(500).AddUiGlow(501).Append("AutoDuty").AddUiGlowOff().AddUiForegroundOff()
                 .Append(" is used in the context menu of duty ").AddUiForeground(710).Append("Sources.").AddUiForegroundOff()
-                .Append(" If installed, this context menu entry will start an AutoDuty loop where your\ncharacter will run the relevant dungeon until all missing outfit pieces are acquired.")
+                .Append(" If installed, this context menu entry will start an AutoDuty loop where your\ncharacter will run the relevant dungeon until all missing outfit pieces\nare acquired.")
                 .Encode()),
         BodyTextBoxHeight = 420f,
     };

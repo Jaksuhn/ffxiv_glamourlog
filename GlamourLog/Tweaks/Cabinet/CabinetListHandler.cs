@@ -106,7 +106,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         if (agent is null)
             return;
 
-        if (addon->PreviousCategoryIndex != _categoryIndex)
+        if (addon->CategoryIndex != _categoryIndex)
             _needsCategorySnapshot = true;
 
         EnsureCategoryTracked(addon, agent);
@@ -145,7 +145,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
     }
 
     private bool HasValidCategorySnapshot(AddonCabinet* addon)
-        => _categoryRows.Length > 0 && _categoryIndex == addon->PreviousCategoryIndex;
+        => _categoryRows.Length > 0 && _categoryIndex == addon->CategoryIndex;
 
     private bool TryApplyFilterPipeline(AddonCabinet* addon, AgentCabinet* agent) {
         if (_categoryRows.Length == 0)
@@ -158,10 +158,10 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
     }
 
     private void EnsureCategoryTracked(AddonCabinet* addon, AgentCabinet* agent) {
-        if (_categoryIndex == addon->PreviousCategoryIndex && _categoryItemCount > 0)
+        if (_categoryIndex == addon->CategoryIndex && _categoryItemCount > 0)
             return;
 
-        _categoryIndex = addon->PreviousCategoryIndex;
+        _categoryIndex = addon->CategoryIndex;
         _categoryItemCount = InferCategoryItemCount(addon, agent);
         _needsCategorySnapshot = true;
     }
@@ -188,7 +188,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
                 : ResolveRowItemId(agent, addon, i);
         }
 
-        _categoryIndex = addon->PreviousCategoryIndex;
+        _categoryIndex = addon->CategoryIndex;
         _needsCategorySnapshot = false;
     }
 
@@ -261,9 +261,9 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         internal static ItemSlotProjection Capture(ref AddonCabinet.ItemSlot source) {
             fixed (Utf8String* name = &source.Name)
                 return new ItemSlotProjection {
-                    IconId = source.IconId,
-                    Unk6C = source.Unk6C,
-                    Unk70 = source.Unk70,
+                    IconId = source.Unk68,
+                    Unk6C = source.InventorySlotIndex,
+                    Unk70 = source.InventorySlotIndex,
                     ItemsArrayIndex = source.ItemsArrayIndex,
                     ConditionNormalized = source.ConditionNormalized,
                     _nameClone = Utf8String.FromUtf8String(name),
@@ -271,9 +271,9 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         }
 
         internal readonly void ApplyTo(ref AddonCabinet.ItemSlot dest) {
-            dest.IconId = IconId;
-            dest.Unk6C = Unk6C;
-            dest.Unk70 = Unk70;
+            dest.Unk68 = IconId;
+            dest.InventorySlotIndex = Unk6C;
+            dest.InventorySlotIndex = Unk70;
             dest.ItemsArrayIndex = ItemsArrayIndex;
             dest.ConditionNormalized = ConditionNormalized;
 
@@ -386,10 +386,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
             return lastIndex + 1;
 
         var list = addon->ItemList;
-        if (list is not null && list->ListLength > 0)
-            return list->ListLength;
-
-        return 0;
+        return list is not null && list->ListLength > 0 ? list->ListLength : 0;
     }
 
     private void ClearFilterState() {
