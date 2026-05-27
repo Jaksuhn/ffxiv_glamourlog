@@ -19,12 +19,10 @@ internal unsafe partial class LogWindow {
             return;
         }
 
-        var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(snap);
-
         // mirage sets only. non-set armoire doesn't get included
         var mirageCatalogSets = Svc.Get<CatalogService>().GlamourSets.Where(s => !s.NonSetCabinetPiece);
-        var ownedMirageSets = ownedSets.Where(s => !s.NonSetCabinetPiece);
-        var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || ownedSets.Contains(x));
+        var ownedMirageSets = snap.OwnedSets.Where(s => !s.NonSetCabinetPiece);
+        var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || snap.OwnedSets.Contains(x));
         _statsSetsLine.String = $"{ownedMirageSets.Count()} / {totalObtainable}";
         _statsSpaceLine.String = $"{ownedMirageSets.Sum(x => x.Items.Count - 1)}";
 
@@ -36,12 +34,12 @@ internal unsafe partial class LogWindow {
             btn.Selected = categoryId == _selectedCategoryId;
             if (_categoryCountByButton.TryGetValue(btn, out var countNode)) {
                 var cr = CategoryRows(categoryId);
-                countNode.String = $"{cr.Count(ownedSets.Contains)}/{cr.Count}";
+                countNode.String = $"{cr.Count(snap.OwnedSets.Contains)}/{cr.Count}";
             }
         }
         SyncCategoryCountLayouts();
 
-        RepopulateSetListFromFilteredRows(snap, ownedSets);
+        RepopulateSetListFromFilteredRows(snap);
     }
 
     // middle column only: re-sort / re-filter row models; skips category + stats (sort chrome toggles)
@@ -51,18 +49,16 @@ internal unsafe partial class LogWindow {
         if (ItemFinderModule.Instance() is null)
             return;
 
-        var snap = Svc.Get<OwnershipService>().CaptureSnapshot();
-        var ownedSets = Svc.Get<OwnershipService>().GetOwnedSets(snap);
-        RepopulateSetListFromFilteredRows(snap, ownedSets);
+        RepopulateSetListFromFilteredRows(Svc.Get<OwnershipService>().CaptureSnapshot());
     }
 
-    private void RepopulateSetListFromFilteredRows(OwnershipSnapshot snap, HashSet<GlamourSet> ownedSets) {
+    private void RepopulateSetListFromFilteredRows(OwnershipSnapshot snap) {
         if (_setListNode is null)
             return;
 
         var searchRaw = _gatheringNoteSearch?.Input.String.ToString() ?? string.Empty;
         var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
-        var rows = SetListFilterSort.Apply(searchTrimmed, CategoryRows(_selectedCategoryId), ownedSets, snap);
+        var rows = SetListFilterSort.Apply(searchTrimmed, CategoryRows(_selectedCategoryId), snap);
 
         if (_selectedSet != null && !rows.Contains(_selectedSet)) {
             _selectedSet = null;
@@ -76,10 +72,10 @@ internal unsafe partial class LogWindow {
                 _setListOptions.Add(new SetListRowData {
                     Set = set,
                     Title = set.Name,
-                    Subtitle = SetSublineText(set, ownedSets, snap),
-                    IsOwned = ownedSets.Contains(set),
+                    Subtitle = SetSublineText(set, snap),
+                    IsOwned = snap.OwnedSets.Contains(set),
                     ShowStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire,
-                    ShowArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, snap.OwnedItems, Svc.Get<CatalogService>().ArmoireItemIds, snap),
+                    ShowArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, snap),
                     StorageIconPart = setStorageState == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,
                 });
             }
@@ -126,14 +122,14 @@ internal unsafe partial class LogWindow {
     private static ButtonIcon SortDirectionButtonIcon(ListSortDirection direction)
         => direction == ListSortDirection.Ascending ? ButtonIcon.UpArrow : ButtonIcon.ArrowDown;
 
-    private string SetSublineText(GlamourSet set, HashSet<GlamourSet> ownedSets, OwnershipSnapshot snap) {
+    private string SetSublineText(GlamourSet set, OwnershipSnapshot snap) {
         var n = set.Items.Count;
-        var c = Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap.OwnedItems, snap);
+        var c = Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap);
         string core;
         if (set.NonSetCabinetPiece) {
-            core = ownedSets.Contains(set) ? "Obt. 1/1" : $"Obt. {c}/1";
+            core = snap.OwnedSets.Contains(set) ? "Obt. 1/1" : $"Obt. {c}/1";
         }
-        else if (ownedSets.Contains(set))
+        else if (snap.OwnedSets.Contains(set))
             core = $"Obt. {n}/{n}";
         else if (n == 0)
             core = "Obt. 0/0";

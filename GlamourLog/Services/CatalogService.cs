@@ -10,6 +10,7 @@ internal sealed class CatalogService : IDisposable {
     internal Dictionary<string, List<GlamourSet>> GlamourSetsByCategory { get; } = [];
     internal ItemCostLookup CostsLookup { get; } = new();
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
+    private HashSet<uint> _costCurrencyItemIds = [];
 
     private readonly Lock _glamourDataLock = new();
     private readonly Lock _catalogRequestLock = new();
@@ -38,8 +39,10 @@ internal sealed class CatalogService : IDisposable {
         _catalogCts?.Cancel();
         _catalogCts?.Dispose();
         _catalogCts = null;
-        lock (_glamourDataLock)
+        lock (_glamourDataLock) {
             _catalogBuilt = false;
+            _costCurrencyItemIds = [];
+        }
     }
 
     private void OnClientLogin() {
@@ -86,6 +89,7 @@ internal sealed class CatalogService : IDisposable {
                 DataVersion++;
                 _catalogBuilt = true;
             }
+            _costCurrencyItemIds = BuildAllPrimaryCostCurrencyIds();
             Interlocked.Exchange(ref _pendingListRefresh, 1);
             Svc.Get<WindowsService>().RefreshLogWindow();
         }
@@ -98,6 +102,8 @@ internal sealed class CatalogService : IDisposable {
     }
 
     internal bool CatalogReady => _catalogBuilt;
+
+    internal bool IsKnownCostCurrency(uint itemId) => itemId != 0 && _catalogBuilt && _costCurrencyItemIds.Contains(itemId);
 
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
 
@@ -186,6 +192,20 @@ internal sealed class CatalogService : IDisposable {
             }
         }
         return categoryName;
+    }
+
+    private HashSet<uint> BuildAllPrimaryCostCurrencyIds() {
+        var ids = new HashSet<uint>();
+        foreach (var set in GlamourSets) {
+            var cat = CategoryNameForPrimaryCostLookup(set);
+            foreach (var pieceId in set.Items) {
+                foreach (var c in GetPrimaryItemCosts(pieceId, cat)) {
+                    if (c.ItemId != 0)
+                        ids.Add(c.ItemId);
+                }
+            }
+        }
+        return ids;
     }
 
     private void LogMissingMirageSets() {

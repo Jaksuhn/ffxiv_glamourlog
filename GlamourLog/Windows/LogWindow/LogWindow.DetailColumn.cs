@@ -68,7 +68,7 @@ internal unsafe partial class LogWindow {
                 IsSelected = _sourceFilterPieceItemId == itemId,
                 StorageIconPart = iconPart,
                 ShowInventoryBadge = iconPart is null && inventoryItems.Contains(itemId),
-                ShowArmoireWarning = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && Svc.Get<CatalogService>().ArmoireItemIds.Contains(itemId),
+                ShowArmoireWarning = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && snap.ArmoireCatalogItemIds.Contains(itemId),
             });
         }
 
@@ -177,7 +177,7 @@ internal unsafe partial class LogWindow {
             _ => null,
         };
 
-    private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState, OwnershipSnapshot snap)
+    private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState, in OwnershipSnapshot snap)
         => Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState, snap);
 
     private static void OnCraftRecipeJournalLeftClick(uint recipeRowId) {

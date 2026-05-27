@@ -12,6 +12,8 @@ internal readonly struct OwnershipSnapshot {
     internal HashSet<uint> StorageOwnedItems { get; init; }
     internal HashSet<uint> OwnedItems { get; init; }
     internal HashSet<uint> InventoryItemIds { get; init; }
+    internal HashSet<GlamourSet> OwnedSets { get; init; }
+    internal HashSet<uint> ArmoireCatalogItemIds { get; init; }
 }
 
 internal sealed unsafe class OwnershipService : IDisposable {
@@ -53,18 +55,20 @@ internal sealed unsafe class OwnershipService : IDisposable {
             if (eventData is not (InventoryItemAddedArgs or InventoryItemRemovedArgs))
                 continue;
 
-            if (Svc.Get<CatalogService>().GlamourSets.Any(set => set.Items.Contains(eventData.Item.BaseItemId))) {
-                Svc.Get<CatalogService>().NotifyDisplayedOwnershipMayHaveChanged();
+            var itemId = eventData.Item.BaseItemId;
+            var catalog = Svc.Get<CatalogService>();
+            if (catalog.GlamourSets.Any(set => set.Items.Contains(itemId)) || catalog.IsKnownCostCurrency(itemId)) {
+                catalog.NotifyDisplayedOwnershipMayHaveChanged();
                 return;
             }
         }
     }
 
-    internal bool CanAffordAllMissingGearPieces(GlamourSet glamourSet, HashSet<uint> ownedItems) {
+    internal bool CanAffordAllMissingGearPieces(GlamourSet glamourSet, OwnershipSnapshot snap) {
         (uint CostItemId, uint TotalAmount)? firstCost = null;
         uint totalCostQuantity = 0;
         foreach (var itemId in glamourSet.Items) {
-            if (ownedItems.Contains(itemId))
+            if (snap.OwnedItems.Contains(itemId))
                 continue;
             var costs = Svc.Get<CatalogService>().CostsLookup.GetItemCosts(itemId);
             if (costs.Count == 0)
@@ -84,28 +88,16 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return totalCostQuantity <= ownedCount;
     }
 
-    internal bool IsPartiallyCompleted(GlamourSet glamourSet, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems, OwnershipSnapshot snap) {
-        if (ownedSets.Contains(glamourSet))
+    internal bool IsPartiallyCompleted(GlamourSet glamourSet, OwnershipSnapshot snap) {
+        if (snap.OwnedSets.Contains(glamourSet))
             return false;
-        var ownedCount = GetOwnedPieceCountForSet(glamourSet, ownedItems, snap);
+        var ownedCount = GetOwnedPieceCountForSet(glamourSet, snap);
         return ownedCount > 0 && ownedCount < glamourSet.Items.Count;
     }
 
-    internal bool IsPartiallyCompleted(GlamourSet glamourSet, HashSet<GlamourSet> ownedSets, HashSet<uint> ownedItems) {
-        var snap = CaptureSnapshot();
-        return IsPartiallyCompleted(glamourSet, ownedSets, ownedItems, snap);
-    }
-
-    internal bool HasContributablePieceInInventory(GlamourSet glamourSet, HashSet<uint> inventoryItemIds, OwnershipSnapshot snap)
-        => glamourSet.Items.Any(itemId => inventoryItemIds.Contains(itemId) && GetItemStorageState(itemId, glamourSet, snap) is not (ItemStorageState.Armoire or ItemStorageState.DresserSet));
-
-    internal bool HasContributablePieceInInventory(GlamourSet glamourSet, HashSet<uint> inventoryItemIds) {
-        var snap = CaptureSnapshot();
-        return HasContributablePieceInInventory(glamourSet, inventoryItemIds, snap);
-    }
-
-    internal bool IsMarketboardPurchasable(GlamourSet glamourSet)
-        => glamourSet.Items.Any(itemId => !Item.GetRow(itemId).IsUntradable);
+    internal bool HasContributablePieceInInventory(GlamourSet glamourSet, OwnershipSnapshot snap)
+        => glamourSet.Items.Any(itemId => snap.InventoryItemIds.Contains(itemId)
+            && GetItemStorageState(itemId, snap, glamourSet) is not (ItemStorageState.Armoire or ItemStorageState.DresserSet));
 
     internal HashSet<uint> GetDresserStoredItemIds() {
         var dresserItemIds = new HashSet<uint>();
@@ -140,51 +132,24 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return owned;
     }
 
-    private HashSet<uint> ScanInventoryItemIds() {
-        HashSet<uint> ownedItems = [];
-        var inventoryManager = InventoryManager.Instance();
-        if (inventoryManager != null) {
-            foreach (var inventoryType in InventoryType.AllPlayer) {
-                var inventoryContainer = inventoryManager->GetInventoryContainer(inventoryType);
-                if (inventoryContainer == null)
-                    continue;
-                for (var i = 0; i < inventoryContainer->Size; ++i) {
-                    var item = inventoryContainer->GetInventorySlot(i);
-                    if (item != null && item->ItemId != 0)
-                        ownedItems.Add(ItemUtil.GetBaseId(item->ItemId).ItemId);
-                }
-            }
-        }
-        return ownedItems;
-    }
-
     /// <summary> One scan each of dresser, armoire, glamour cabinet, and player inventories. </summary>
     internal OwnershipSnapshot CaptureSnapshot() {
         var dresser = GetDresserStoredItemIds();
         var armoire = GetArmoireOwnedItemIds();
         var storage = BuildStorageOwnedItems(dresser, armoire);
-        var inventory = ScanInventoryItemIds();
+        var inventory = InventoryType.AllPlayer.SelectMany(inv => inv.Items.Where(i => i.ItemId != 0)).Select(item => item.BaseItemId).ToHashSet();
         var owned = new HashSet<uint>(storage);
         owned.UnionWith(inventory);
-        return new OwnershipSnapshot {
+        var snap = new OwnershipSnapshot {
             DresserItemIds = dresser,
             ArmoireOwnedItemIds = armoire,
             StorageOwnedItems = storage,
             OwnedItems = owned,
             InventoryItemIds = inventory,
+            ArmoireCatalogItemIds = Svc.Get<CatalogService>().ArmoireItemIds,
         };
-    }
-
-    /// <summary>Owned in glamour dresser (loose), armoire, or glamour cabinet — not player inventory.</summary>
-    internal HashSet<uint> GetStorageOwnedItems() {
-        var dresserItemIds = GetDresserStoredItemIds();
-        var armoire = GetArmoireOwnedItemIds();
-        return BuildStorageOwnedItems(dresserItemIds, armoire);
-    }
-
-    internal HashSet<uint> GetOwnedItems() {
-        var snap = CaptureSnapshot();
-        return snap.OwnedItems;
+        var ownedSets = Svc.Get<CatalogService>().GlamourSets.Where(s => IsSetCompleted(s, snap)).ToHashSet();
+        return snap with { OwnedSets = ownedSets };
     }
 
     /// <summary>Checkmark / completed sets: storage only, or a full mirage plate on the dresser.</summary>
@@ -195,40 +160,21 @@ internal sealed unsafe class OwnershipService : IDisposable {
         if (snap.DresserItemIds.Contains(set.ItemId) && IsFullMirageOutfit(set))
             return true;
 
-        return GetOwnedPieceCountForSet(set, snap.StorageOwnedItems, snap) == set.Items.Count;
+        return GetOwnedPieceCountForSet(set, snap, storageOnly: true) == set.Items.Count;
     }
 
-    internal bool IsSetCompleted(GlamourSet set) {
-        var snap = CaptureSnapshot();
-        return IsSetCompleted(set, snap);
-    }
-
-    internal HashSet<GlamourSet> GetOwnedSets(OwnershipSnapshot snap) {
-        var ownedSets = new HashSet<GlamourSet>();
-        foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
-            if (IsSetCompleted(set, snap))
-                ownedSets.Add(set);
-        }
-
-        return ownedSets;
-    }
-
-    internal ItemStorageState GetItemStorageState(uint itemId, GlamourSet? forSet, OwnershipSnapshot snap) {
+    internal ItemStorageState GetItemStorageState(uint itemId, OwnershipSnapshot snap, GlamourSet? mirageContext = null) {
         if (snap.ArmoireOwnedItemIds.Contains(itemId) || IsInCabinet(itemId))
             return ItemStorageState.Armoire;
 
-        var dresserItemIds = snap.DresserItemIds;
-        if (forSet is not null && !forSet.NonSetCabinetPiece && dresserItemIds.Contains(forSet.ItemId) && forSet.Items.Contains(itemId)) {
-            var setRow = MirageStoreSetItem.GetRow(forSet.ItemId);
-            return IsPieceInMirageOutfitSlot(setRow, itemId) ? ItemStorageState.DresserSet : ItemStorageState.None;
+        if (mirageContext is { NonSetCabinetPiece: false } set && set.Items.Contains(itemId)) {
+            return IsPieceInMirageOutfitSlot(MirageStoreSetItem.GetRow(set.ItemId), itemId) ? ItemStorageState.DresserSet : ItemStorageState.None;
         }
 
-        return dresserItemIds.Contains(itemId) ? ItemStorageState.DresserLoose : ItemStorageState.None;
-    }
+        if (IsPieceInMirageOutfitSlot(itemId))
+            return ItemStorageState.DresserSet;
 
-    internal ItemStorageState GetItemStorageState(uint itemId, GlamourSet? forSet) {
-        var snap = CaptureSnapshot();
-        return GetItemStorageState(itemId, forSet, snap);
+        return snap.DresserItemIds.Contains(itemId) ? ItemStorageState.DresserLoose : ItemStorageState.None;
     }
 
     internal uint GetItemIdFromLookups(uint cacheOrEntryId) {
@@ -283,7 +229,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         var hasDresserSet = false;
         var hasDresserLoose = false;
         foreach (var itemId in set.Items) {
-            switch (GetItemStorageState(itemId, set, snap)) {
+            switch (GetItemStorageState(itemId, snap, set)) {
                 case ItemStorageState.Armoire:
                     hasArmoire = true;
                     break;
@@ -307,52 +253,37 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return SetStorageState.None;
     }
 
-    internal SetStorageState GetSetStorageState(GlamourSet set, HashSet<uint>? ownedItems = null) {
-        _ = ownedItems;
-        return GetSetStorageState(set, CaptureSnapshot());
-    }
-
     /// <summary> Piece storage as shown in set details (mirage slot, loose dresser, armoire, or none). </summary>
     internal ItemStorageState GetPieceDisplayStorageState(uint itemId, GlamourSet set, SetStorageState setStorageState, OwnershipSnapshot snap) {
-        var direct = GetItemStorageState(itemId, set, snap);
+        var direct = GetItemStorageState(itemId, snap, set);
         if (direct is not ItemStorageState.None)
             return direct;
 
         return setStorageState switch {
             SetStorageState.Armoire => ItemStorageState.Armoire,
             SetStorageState.Dresser => ItemStorageState.DresserSet,
-            SetStorageState.Mixed when GetItemStorageState(itemId, null, snap) is ItemStorageState.Armoire => ItemStorageState.Armoire,
+            SetStorageState.Mixed when GetItemStorageState(itemId, snap) is ItemStorageState.Armoire => ItemStorageState.Armoire,
             SetStorageState.Mixed => ItemStorageState.DresserSet,
             _ => ItemStorageState.None,
         };
     }
 
-    internal ItemStorageState GetPieceDisplayStorageState(uint itemId, GlamourSet set, SetStorageState setStorageState) {
-        var snap = CaptureSnapshot();
-        return GetPieceDisplayStorageState(itemId, set, setStorageState, snap);
-    }
-
     /// <summary> True when the set list or any piece row would show the armoire (dresser) misplacement badge. </summary>
-    internal bool SetHasArmoireMisplacementWarning(GlamourSet set, HashSet<uint> ownedItems, HashSet<uint> armoireItemIds, OwnershipSnapshot snap) {
-        _ = ownedItems;
+    internal bool SetHasArmoireMisplacementWarning(GlamourSet set, OwnershipSnapshot snap) {
         var setStorageState = GetSetStorageState(set, snap);
-        if (setStorageState is SetStorageState.Dresser && set.Items.Any(armoireItemIds.Contains))
+        if (setStorageState is SetStorageState.Dresser && set.Items.Any(snap.ArmoireCatalogItemIds.Contains))
             return true;
         foreach (var itemId in set.Items) {
             var pieceState = GetPieceDisplayStorageState(itemId, set, setStorageState, snap);
-            if (pieceState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && armoireItemIds.Contains(itemId))
+            if (pieceState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && snap.ArmoireCatalogItemIds.Contains(itemId))
                 return true;
         }
 
         return false;
     }
 
-    internal bool SetHasArmoireMisplacementWarning(GlamourSet set, HashSet<uint> ownedItems, HashSet<uint> armoireItemIds) {
-        var snap = CaptureSnapshot();
-        return SetHasArmoireMisplacementWarning(set, ownedItems, armoireItemIds, snap);
-    }
-
-    internal int GetOwnedPieceCountForSet(GlamourSet set, HashSet<uint> effectiveOwned, OwnershipSnapshot snap) {
+    internal int GetOwnedPieceCountForSet(GlamourSet set, OwnershipSnapshot snap, bool storageOnly = false) {
+        var effectiveOwned = storageOnly ? snap.StorageOwnedItems : snap.OwnedItems;
         if (set.NonSetCabinetPiece)
             return set.Items.Count(effectiveOwned.Contains);
 
@@ -376,26 +307,20 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return count;
     }
 
-    internal int GetOwnedPieceCountForSet(GlamourSet set, HashSet<uint>? ownedItems = null) {
-        var snap = CaptureSnapshot();
-        var effectiveOwned = ownedItems ?? snap.OwnedItems;
-        return GetOwnedPieceCountForSet(set, effectiveOwned, snap);
-    }
+    internal bool IsItemInGlamourDresser(uint itemId) {
+        itemId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (itemId == 0)
+            return false;
 
-    // TODO: use inventorymanager/inventorytype extensions
-    internal HashSet<uint> GetInventoryItemsOnly() => ScanInventoryItemIds();
-
-    // TODO: make ContainsAny extensions that take predicates
-    internal bool IsItemInGlamourDresser(uint itemId, GlamourSet? forSet) {
         if (ItemFinderModule.Instance() is null)
             return false;
+
         foreach (var id in ItemFinderModule.Instance()->GlamourDresserBaseItemIds) {
             if (id == itemId)
                 return true;
-            if (forSet != null && id == forSet.ItemId)
-                return true;
         }
-        return false;
+
+        return IsPieceInMirageOutfitSlot(itemId);
     }
 
     /// <summary> True when the sheet lists the same number of pieces as <paramref name="set"/> and each slot is collected on the mirage outfit (see <see cref="MirageStoreSetItemExtensions.IsFullSetCollected(MirageStoreSetItem, bool)"/>). </summary>
@@ -414,15 +339,18 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     private static bool IsPieceInMirageOutfitSlot(MirageStoreSetItem row, uint pieceItemId) {
-        var itemIndex = 0;
+        var slotIndex = 0;
         foreach (var itemRef in row.Items) {
-            if (itemRef.RowId != 0 && itemRef.RowId == pieceItemId && row.IsSetSlotCollected(itemIndex))
+            if (itemRef.RowId != 0 && itemRef.RowId == pieceItemId && row.IsSetSlotCollected(slotIndex))
                 return true;
-            itemIndex++;
+            slotIndex++;
         }
 
         return false;
     }
+
+    private static bool IsPieceInMirageOutfitSlot(uint pieceItemId)
+        => MirageStoreSetItem.Where(r => r.RowId > 0).Any(r => IsPieceInMirageOutfitSlot(r, pieceItemId));
 
     internal void GetLalaAchievementsExportBuckets(out Dictionary<string, uint[]> outfitsBySetId, out uint[] armoires) {
         var dresserIds = GetDresserStoredItemIds();

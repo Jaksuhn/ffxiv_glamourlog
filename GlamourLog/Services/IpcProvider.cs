@@ -35,7 +35,12 @@ internal sealed class IpcProvider : IDisposable {
     }
 
     private static bool IsItemOwned(uint itemId) => IsItemInArmoire(itemId) || IsItemInDresser(itemId);
-    private static bool IsItemInArmoire(uint itemId) => Svc.Get<OwnershipService>().GetItemStorageState(itemId, null) == ItemStorageState.Armoire;
+
+    private static bool IsItemInArmoire(uint itemId) {
+        var ownership = Svc.Get<OwnershipService>();
+        var snap = ownership.CaptureSnapshot();
+        return ownership.GetItemStorageState(itemId, snap) == ItemStorageState.Armoire;
+    }
 
     private static List<uint> GetArmoireItemIds() {
         Svc.Get<OwnershipService>().GetLalaAchievementsExportBuckets(out _, out var armoires);
@@ -62,13 +67,13 @@ internal sealed class IpcProvider : IDisposable {
         var catalog = Svc.Get<CatalogService>();
         if (snap.DresserItemIds.Contains(itemId) && !catalog.GlamourSets.Select(s => s.ItemId).Contains(itemId))
             return true;
-        return catalog.GlamourSets.Any(s => s.Items.Contains(itemId) && ownership.GetItemStorageState(itemId, s, snap) is ItemStorageState.DresserSet);
+        return catalog.GlamourSets.Any(s => s.Items.Contains(itemId)
+            && ownership.GetItemStorageState(itemId, snap, s) is ItemStorageState.DresserSet);
     }
 
     private static bool IsSetComplete(uint setItemId) {
-        if (Svc.Get<CatalogService>().GlamourSets.FirstOrDefault(s => s.ItemId == setItemId) is not { } set)
-            return false;
-        return Svc.Get<OwnershipService>().IsSetCompleted(set);
+        var snap = Svc.Get<OwnershipService>().CaptureSnapshot();
+        return snap.OwnedSets.Any(s => s.ItemId == setItemId);
     }
 
     private static List<uint> GetItemsFromContent(uint cfcId) {

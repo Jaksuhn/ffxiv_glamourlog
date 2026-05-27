@@ -5,28 +5,27 @@ namespace GlamourLog.Windows.LogWindow;
 
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {
-    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, HashSet<GlamourSet> ownedSets, OwnershipSnapshot snap) {
+    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, OwnershipSnapshot snap) {
         var rows = searchTrimmed.Length > 0 ? [.. Svc.Get<CatalogService>().GlamourSets] : categoryRows;
 
         if (C.HideCompleted)
-            rows = [.. rows.Where(r => !ownedSets.Contains(r))];
+            rows = [.. rows.Where(r => !snap.OwnedSets.Contains(r))];
 
         if (C.HideIncompatible)
             rows = [.. rows.Where(r => !r.IsIncompatible)];
 
         var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
         if (hasPositiveFilters) {
-            HashSet<uint>? inventoryOnly = C.HideUnready ? snap.InventoryItemIds : null;
             rows = [.. rows.Where(r =>
-                (!C.HideNonPartials || PassesStartedFilter(r, ownedSets, snap)) &&
+                (!C.HideNonPartials || PassesStartedFilter(r, snap)) &&
                 (!C.HideUnaffordable || PassesAffordableFilter(r, snap)) &&
-                (!C.HideUnready || (inventoryOnly is not null && Svc.Get<OwnershipService>().HasContributablePieceInInventory(r, inventoryOnly, snap))) &&
+                (!C.HideUnready || Svc.Get<OwnershipService>().HasContributablePieceInInventory(r, snap)) &&
                 (!C.HideNoMarketboard || PassesTradeableFilter(r))
             )];
         }
 
         if (C.ShowOnlyMisplaced)
-            rows = [.. rows.Where(r => Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(r, snap.OwnedItems, Svc.Get<CatalogService>().ArmoireItemIds, snap))];
+            rows = [.. rows.Where(r => Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(r, snap))];
 
         if (searchTrimmed.Length > 0)
             rows = [.. rows.Where(r => MatchesSearch(r, searchTrimmed))];
@@ -34,10 +33,10 @@ internal static class SetListFilterSort {
         return ApplySort(rows);
     }
 
-    private static bool PassesStartedFilter(GlamourSet set, HashSet<GlamourSet> ownedSets, OwnershipSnapshot snap) {
+    private static bool PassesStartedFilter(GlamourSet set, OwnershipSnapshot snap) {
         if (set.NonSetCabinetPiece)
-            return !ownedSets.Contains(set) && Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap.OwnedItems, snap) > 0;
-        return Svc.Get<OwnershipService>().IsPartiallyCompleted(set, ownedSets, snap.OwnedItems, snap);
+            return !snap.OwnedSets.Contains(set) && Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap) > 0;
+        return Svc.Get<OwnershipService>().IsPartiallyCompleted(set, snap);
     }
 
     private static bool PassesAffordableFilter(GlamourSet set, OwnershipSnapshot snap) {
@@ -47,13 +46,13 @@ internal static class SetListFilterSort {
                 return true;
             return missing.All(id => Svc.Get<CatalogService>().CostsLookup.GetItemCosts(id).Count == 0);
         }
-        return Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(set, snap.OwnedItems);
+        return Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(set, snap);
     }
 
     private static bool PassesTradeableFilter(GlamourSet set) {
         if (set.NonSetCabinetPiece && set.Items.Count == 1)
             return !Item.GetRow(set.Items[0]).IsUntradable;
-        return Svc.Get<OwnershipService>().IsMarketboardPurchasable(set);
+        return set.Items.Any(itemId => !Item.GetRow(itemId).IsUntradable);
     }
 
     private static bool MatchesSearch(GlamourSet set, string searchTrimmed)

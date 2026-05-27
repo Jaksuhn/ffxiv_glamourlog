@@ -16,7 +16,7 @@ internal class ChatAlerts : IDisposable {
     private void OnChatMessage(IHandleableChatMessage message) {
         if (message.LogKind is Dalamud.Game.Text.XivChatType.LootNotice) {
             if (message.Message.Payloads.FirstOrDefault(p => p is ItemPayload) is ItemPayload { Item: var row }) {
-                if (!Svc.Get<OwnershipService>().IsItemInArmoire(row.RowId) && !Svc.Get<OwnershipService>().IsItemInGlamourDresser(row.RowId, null) && Svc.Get<CatalogService>().GlamourSets.Any(s => s.Items.Contains(row.RowId))) {
+                if (!Svc.Get<OwnershipService>().IsItemInArmoire(row.RowId) && !Svc.Get<OwnershipService>().IsItemInGlamourDresser(row.RowId) && Svc.Get<CatalogService>().GlamourSets.Any(s => s.Items.Contains(row.RowId))) {
                     Svc.Chat.Print("You found an outfit item!");
                 }
             }
