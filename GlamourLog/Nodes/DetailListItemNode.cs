@@ -308,6 +308,10 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _inputCollision.CollisionType = CollisionType.Hit;
         _inputCollision.ShowClickableCursor = false;
 
+        // pooled rows keep SourceChest's narrow primary width; reset before kind-specific layout
+        _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+        _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+
         // piece branch strips this; atk ellipsis on names was wrong more often than clip
         _primary.AddTextFlags(TextFlags.Ellipsis);
 
@@ -424,6 +428,24 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         }
 
         ApplyDynamicWidth(itemData);
+        NudgeTextLayoutIfNeeded(itemData.Kind);
+    }
+
+    // atk caches ellipsis metrics until string is toggled after a native draw pass
+    private void NudgeTextLayoutIfNeeded(DetailRowKind kind) {
+        if (kind is not (DetailRowKind.Cost or DetailRowKind.Piece or DetailRowKind.EmptyHint))
+            return;
+        NudgeTextNode(_primary);
+        if (_secondary.IsVisible)
+            NudgeTextNode(_secondary);
+    }
+
+    private static void NudgeTextNode(TextNode node) {
+        var text = node.String.ToString();
+        if (text.Length == 0)
+            return;
+        node.String = string.Empty;
+        node.String = text;
     }
 
     private void HandleClick(AtkEventData* eventData) {

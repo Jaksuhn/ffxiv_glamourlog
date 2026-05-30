@@ -101,7 +101,10 @@ internal unsafe partial class LogWindow : NativeAddon {
         var contentSize = ContentSize;
         var leftPad = 3f;
 
-        _gatheringNoteSearch = new GatheringNoteSearchNode(leftWidth, _ => RefreshListsAndDetails()) {
+        _gatheringNoteSearch = new GatheringNoteSearchNode(leftWidth, _ => {
+            _pendingResetSetScroll = true;
+            RefreshListsAndDetails();
+        }) {
             Position = new Vector2(contentStart.X, contentStart.Y + topGap),
         };
         _gatheringNoteSearch.AttachNode(this);
@@ -289,6 +292,11 @@ internal unsafe partial class LogWindow : NativeAddon {
                 _pendingResetSetScroll = false;
             }
 
+            if (_pendingResetDetailScroll) {
+                _pendingResetDetailScroll = false;
+                ResetScrollToTop(_detailRowsListNode);
+            }
+
             if (_pendingRefreshListsAndDetails) {
                 _pendingRefreshListsAndDetails = false;
                 _pendingPaintDetailsOnly = false;
@@ -308,11 +316,6 @@ internal unsafe partial class LogWindow : NativeAddon {
             if (_pendingResetSetScroll) {
                 _pendingResetSetScroll = false;
                 ResetScrollToTop(_setListNode);
-            }
-
-            if (_pendingResetDetailScroll) {
-                _pendingResetDetailScroll = false;
-                ResetScrollToTop(_detailRowsListNode);
             }
         }
         catch (Exception ex) {
@@ -362,7 +365,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         if (list is null)
             return;
         // don't FullRebuild here: RefreshDetails already did; second rebuild double-disposes pool nodes
-        list.ScrollBarNode.ScrollPosition = 0;
+        list.ResetScrollToTop();
     }
 
     protected override void OnFinalize(AtkUnitBase* addon) {

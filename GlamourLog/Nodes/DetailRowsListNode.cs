@@ -16,6 +16,7 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     private int scrollPosition;
     private int nodeCount;
     private int[] lastDataIndexBySlot = [];
+    private bool needsPostNativeRebind;
 
     public DetailRowsListNode() {
         ScrollBarNode = new ScrollBarNode {
@@ -60,6 +61,7 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
         get;
         set {
             field = value;
+            needsPostNativeRebind = true;
 
             var newNodeCount = (int)(Height / (itemHeight + ItemSpacing));
             if (newNodeCount != nodeCount)
@@ -70,6 +72,15 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
             }
         }
     } = [];
+
+    public void ResetScrollToTop() {
+        scrollPosition = 0;
+        ScrollBarNode.ScrollPosition = 0;
+        ResetSlotIndexMemory();
+        RecalculateScroll();
+        // don't PopulateNodes here: caller replaces OptionsList next frame; repainting the old
+        // list re-applies SourceChest narrow text widths that atk keeps until scroll/rebind
+    }
 
     public void FullRebuild() {
         foreach (var node in nodeList)
@@ -86,7 +97,13 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     }
 
     public void Update() {
-        PopulateNodes();
+        // post-native pass: pre-native populate + atk draw can leave SourceChest narrow text metrics on Cost rows
+        if (needsPostNativeRebind) {
+            PopulateNodes(forceRebind: true);
+            needsPostNativeRebind = false;
+        }
+        else
+            PopulateNodes();
 
         foreach (var node in nodeList) {
             if (node.IsVisible)
@@ -122,7 +139,7 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
             lastDataIndexBySlot[i] = -1;
     }
 
-    private void PopulateNodes() {
+    private void PopulateNodes(bool forceRebind = false) {
         if (lastDataIndexBySlot.Length != nodeList.Count)
             ResetSlotIndexMemory();
 
@@ -136,8 +153,12 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
                 lastDataIndexBySlot[nodeIndex] = dataIndex;
 
                 // null first forces SetNodeData: same ref + same slot index skips in ListItemNode; piece needs every-frame refresh too
-                if (ReferenceEquals(node.ItemData, item)
-                    && (prevDataIndex != dataIndex || item.Kind == DetailRowKind.Piece))
+                var prevKind = node.ItemData?.Kind;
+                if (forceRebind
+                    || !ReferenceEquals(node.ItemData, item)
+                    || prevDataIndex != dataIndex
+                    || prevKind != item.Kind
+                    || item.Kind == DetailRowKind.Piece)
                     node.ItemData = null;
 
                 node.ItemData = item;
@@ -165,10 +186,8 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     }
 
     private void RecalculateScroll() {
-        if (OptionsList.Count < nodeCount) {
-            ScrollBarNode.ScrollPosition = 0;
-            ScrollBarNode.IsEnabled = false;
-        }
+        scrollPosition = Math.Clamp(scrollPosition, 0, Math.Max(0, OptionsList.Count - nodeCount));
+        ScrollBarNode.IsEnabled = OptionsList.Count > nodeCount;
 
         var totalHeight = (int)(OptionsList.Count * (itemHeight + ItemSpacing) + ItemSpacing);
         ScrollBarNode.UpdateScrollParams((int)(nodeList.Count * (itemHeight + ItemSpacing)), totalHeight);
