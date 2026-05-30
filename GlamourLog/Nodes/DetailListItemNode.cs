@@ -47,6 +47,9 @@ internal sealed class DetailListRowData {
 
 internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
     public static float ItemHeight => 30f;
+    private const float PieceIconSize = 22f;
+    private const float PieceTextBoxHeight = 19f; // ellipsis needs extra height vs line size
+    private static float PieceIconY => (ItemHeight - PieceIconSize) * 0.5f;
 
     public static Action<uint>? OnPieceLeftClick { get; set; }
     public static Action<uint>? OnItemRightClick { get; set; }
@@ -75,9 +78,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         EnableSelection = false;
         EnableHighlight = false;
 
-        _icon = new FramedItemIconNode(22f) {
-            Position = new Vector2(2f, 4f),
-            Size = new Vector2(22f, 22f),
+        _icon = new FramedItemIconNode(PieceIconSize) {
+            Position = new Vector2(2f, PieceIconY),
+            Size = new Vector2(PieceIconSize),
             IsVisible = false,
         };
         _icon.AttachNode(this);
@@ -186,8 +189,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             header.Width = Width;
         _journalChrome.Width = Width;
         _journalChrome.Position = new Vector2(0f, 3f);
-        _storageBadge.Position = new Vector2(Math.Max(0f, Width - _storageBadge.Size.X - 12f), 3f);
-        _inventoryBadge.Position = new Vector2(Math.Max(0f, Width - _inventoryBadge.Size.X - 12f), 3f);
+        var badgeY = ItemData?.Kind == DetailRowKind.Piece ? (ItemHeight - _storageBadge.Size.Y) * 0.5f : 3f;
+        _storageBadge.Position = new Vector2(Math.Max(0f, Width - _storageBadge.Size.X - 12f), badgeY);
+        _inventoryBadge.Position = new Vector2(Math.Max(0f, Width - _inventoryBadge.Size.X - 12f), badgeY);
         _armoireWarningBadge.Position = _storageBadge.Position + new Vector2(
             _storageBadge.Size.X - _armoireWarningBadge.Size.X,
             _storageBadge.Size.Y - _armoireWarningBadge.Size.Y);
@@ -203,7 +207,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private void ApplyDynamicWidth(DetailListRowData data) {
         switch (data.Kind) {
             case DetailRowKind.EmptyHint:
-                // same ATK quirk as Piece: 14px-tall text boxes ellipsize with horizontal room left
+                // same quirk as Piece: 14px-tall text boxes ellipsize with horizontal room left
                 _primary.Size = new Vector2(Math.Max(20f, Width - 8f), 19f);
                 break;
             case DetailRowKind.Piece:
@@ -212,8 +216,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                     pieceTextRightReserve = _storageBadge.Size.X + 16f;
                 else if (_inventoryBadge.IsVisible)
                     pieceTextRightReserve = _inventoryBadge.Size.X + 16f;
-                // atk text + ellipsis needs extra height vs line size; too short ellipsizes with horizontal room left
-                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), 19f);
+                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), PieceTextBoxHeight);
+                _primary.Position = new Vector2(30f, PieceIconY + (PieceIconSize - PieceTextBoxHeight) * 0.5f);
                 break;
             case DetailRowKind.Cost:
                 _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 19f);
@@ -302,6 +306,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _secondary.String = itemData.SecondaryText;
         _primary.FontSize = 12;
         _primary.LineSpacing = 12;
+        _primary.AlignmentType = AlignmentType.Left;
         _primary.TextColor = ImGuiColors.DalamudWhite;
         _primary.Position = new Vector2(30f, 1f);
         _secondary.Position = new Vector2(30f, 14f);
@@ -345,7 +350,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 var itemRow = Item.GetRow(itemData.ItemId);
                 _icon.SetItemId(itemData.ItemId);
                 _icon.IsVisible = true;
-                _primary.Position = new Vector2(30f, 8f);
+                // Left = middle-left in atk; Center also centers horizontally in the text box
+                _primary.AlignmentType = AlignmentType.Left;
                 _primary.FontSize = 14;
                 _primary.LineSpacing = 14;
                 _primary.TextColor = itemData.IsSelected ? new Vector4(216f / 255f, 187f / 255f, 125f / 255f, 1f) : ColorHelper.GetColor(itemRow.AtkUiRarityColorId);

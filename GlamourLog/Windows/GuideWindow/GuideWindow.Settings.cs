@@ -9,8 +9,8 @@ public unsafe partial class GuideWindow {
         SubCategoryTitle = "Glamour Log Window",
         Blocks = [
             new CheckboxSettingBlock(
-                "Disable closing during area transitions",
-                "Also disables the ability to close via ESC. Must be clicked manually.",
+                "Disable force window closing",
+                "Prevents the game from closing the addon when you go through an area transition or cutscene. Will still hide the addon. Also disables the ability to close via ESC. Must be clicked manually.",
                 () => C.DisableClose,
                 v => C.DisableClose = v,
                 () => {
