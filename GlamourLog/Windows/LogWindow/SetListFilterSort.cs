@@ -64,7 +64,10 @@ internal static class SetListFilterSort {
                     keep.Add(set);
             }
             else {
-                keep.Add(members.MinBy(s => s.ItemId)!);
+                keep.Add(members
+                    .OrderByDescending(s => s.Items.Max(id => Item.GetRow(id).DyeCount))
+                    .ThenBy(s => s.ItemId)
+                    .First());
             }
         }
 
