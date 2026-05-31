@@ -210,10 +210,9 @@ internal unsafe partial class LogWindow {
                 PrimaryText = "Shared Models",
                 IsTopLevelSection = true,
             });
-            var itemLabel = itemSiblings.Count == 1 ? "1 other item with this appearance" : $"{itemSiblings.Count} other items with this appearance";
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.JournalHeader,
-                PrimaryText = itemLabel,
+                PrimaryText = "Items with this appearance",
             });
 
             foreach (var itemId in itemSiblings) {
@@ -238,10 +237,9 @@ internal unsafe partial class LogWindow {
             PrimaryText = "Shared Models",
             IsTopLevelSection = true,
         });
-        var optionLabel = siblings.Count == 1 ? "1 other obtainment option" : $"{siblings.Count} other obtainment options";
         _detailRowOptions.Add(new DetailListRowData {
             Kind = DetailRowKind.JournalHeader,
-            PrimaryText = optionLabel,
+            PrimaryText = "Sets that contain same-model items",
         });
 
         foreach (var sibling in siblings) {
