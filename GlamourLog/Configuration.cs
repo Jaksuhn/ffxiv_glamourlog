@@ -8,6 +8,7 @@ public class Configuration : IPluginConfiguration {
     public int Version { get; set; } = 0;
 
     public bool HideCompleted { get; set; }
+    public bool ShowOnlyCompleted { get; set; }
     public bool HideIncompatible { get; set; }
     public bool HideNonPartials { get; set; }
     public bool HideUnaffordable { get; set; }

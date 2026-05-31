@@ -11,6 +11,9 @@ internal static class SetListFilterSort {
         if (C.HideCompleted)
             rows = [.. rows.Where(r => !snap.OwnedSets.Contains(r))];
 
+        if (C.ShowOnlyCompleted)
+            rows = [.. rows.Where(r => snap.OwnedSets.Contains(r))];
+
         if (C.HideIncompatible)
             rows = [.. rows.Where(r => !r.IsIncompatible)];
 
