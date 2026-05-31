@@ -230,7 +230,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.Position = new Vector2(30f, PieceIconY + (PieceIconSize - PieceTextBoxHeight) * 0.5f);
                 break;
             case DetailRowKind.Cost:
-                _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 19f);
+            case DetailRowKind.SharedModelSet:
+                _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
                 _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
                 break;
             case DetailRowKind.SourceChest:
@@ -382,14 +383,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.RemoveTextFlags(TextFlags.Ellipsis);
                 break;
             case DetailRowKind.Cost:
-                var currencyRow = Item.GetRow(itemData.ItemId);
                 _icon.SetItemId(itemData.ItemId);
                 _icon.IsVisible = true;
-                _primary.Position = new Vector2(30f, 1f);
-                _primary.TextColor = ColorHelper.GetColor(currencyRow.AtkUiRarityColorId);
-                _primary.RemoveTextFlags(TextFlags.Ellipsis);
-                _secondary.IsVisible = true;
-                _secondary.Position = new Vector2(30f, 15f);
+                ApplyIconTwoLineTextLayout(itemData.PrimaryText, itemData.SecondaryText);
                 _inputCollision.ShowClickableCursor = true;
                 _inputCollision.ItemTooltip = itemData.ItemId;
                 if (itemData.CostVendorTextTooltip.Length > 0)
@@ -450,15 +446,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                     : sharedRow.Set.NonSetCabinetPiece ? sharedRow.Set.Items[0] : sharedRow.Set.ItemId;
                 _icon.SetItemId(sharedIconId);
                 _icon.IsVisible = true;
-                _primary.String = sharedRow.Title;
-                _primary.Position = new Vector2(30f, 1f);
-                _primary.FontSize = 12;
-                _primary.LineSpacing = 12;
-                _primary.RemoveTextFlags(TextFlags.Ellipsis);
-                _secondary.String = sharedRow.Subtitle;
-                _secondary.IsVisible = true;
-                _secondary.Position = new Vector2(30f, 15f);
-                _secondary.TextColor = new Vector4(157f / 255f, 131f / 255f, 91f / 255f, 1f);
+                ApplyIconTwoLineTextLayout(sharedRow.Title, sharedRow.Subtitle);
                 _checkBadge.IsVisible = sharedRow.IsOwned;
                 if (sharedRow.ShowStorage) {
                     if (_lastStoragePart != sharedRow.StorageIconPart) {
@@ -476,6 +464,24 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
         ApplyDynamicWidth(itemData);
         NudgeTextLayoutIfNeeded(itemData.Kind);
+    }
+
+    private static readonly Vector4 TwoLineSubtitleColor = new(157f / 255f, 131f / 255f, 91f / 255f, 1f);
+
+    private void ApplyIconTwoLineTextLayout(string primaryText, string secondaryText) {
+        _primary.String = primaryText;
+        _primary.Position = new Vector2(30f, 1f);
+        _primary.FontSize = 12;
+        _primary.LineSpacing = 12;
+        _primary.AlignmentType = AlignmentType.Left;
+        _primary.TextColor = ImGuiColors.DalamudWhite;
+        _primary.RemoveTextFlags(TextFlags.Ellipsis);
+        _secondary.String = secondaryText;
+        _secondary.IsVisible = true;
+        _secondary.Position = new Vector2(30f, 15f);
+        _secondary.FontSize = 12;
+        _secondary.LineSpacing = 12;
+        _secondary.TextColor = TwoLineSubtitleColor;
     }
 
     // atk caches ellipsis metrics until string is toggled after a native draw pass
