@@ -11,7 +11,9 @@ internal sealed class SetListRowData {
     public required bool IsOwned { get; init; }
     public required bool ShowStorage { get; init; }
     public bool ShowArmoireWarning { get; init; }
+    public bool IsSelected { get; init; }
     public GlamourIconNode.IconPart StorageIconPart { get; init; } = GlamourIconNode.IconPart.Dresser;
+    public uint IconItemId { get; init; } // row icon uses this item id instead of set token when non-zero
 }
 
 internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowData>, IListItemNode {
@@ -135,6 +137,13 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         }
 
         UpdateTextBounds();
+    }
+
+    // ListNode.PopulateNodes clears highlight when row refs are rebuilt; re-apply from row data after populate.
+    // only promote to selected — clicks use SelectItem for immediate feedback before the next rebuild.
+    public override void Update() {
+        if (ItemData is { IsSelected: true })
+            IsSelected = true;
     }
 
     private void UpdateTextBounds() {

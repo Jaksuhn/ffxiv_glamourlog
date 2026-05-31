@@ -14,6 +14,9 @@ internal static class SetListFilterSort {
         if (C.HideIncompatible)
             rows = [.. rows.Where(r => !r.IsIncompatible)];
 
+        if (C.HideSharedModels)
+            rows = ApplySharedModelDedup(rows, snap);
+
         var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
         if (hasPositiveFilters) {
             rows = [.. rows.Where(r =>
@@ -38,6 +41,35 @@ internal static class SetListFilterSort {
             return !snap.OwnedSets.Contains(set) && Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap) > 0;
         return Svc.Get<OwnershipService>().IsPartiallyCompleted(set, snap);
     }
+
+    private static List<GlamourSet> ApplySharedModelDedup(List<GlamourSet> rows, OwnershipSnapshot snap) {
+        if (rows.Count == 0)
+            return rows;
+
+        var keep = new HashSet<GlamourSet>();
+        foreach (var group in rows.GroupBy(r => r.ModelSignature)) {
+            var members = group.ToList();
+            if (members[0].SharedModelGroupSize <= 1) {
+                foreach (var set in members)
+                    keep.Add(set);
+                continue;
+            }
+
+            var active = members.Where(s => snap.OwnedSets.Contains(s) || PassesStartedFilter(s, snap)).ToList();
+            if (active.Count > 0) {
+                foreach (var set in active)
+                    keep.Add(set);
+            }
+            else {
+                keep.Add(members.MinBy(s => s.ItemId)!);
+            }
+        }
+
+        return [.. rows.Where(keep.Contains)];
+    }
+
+    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipSnapshot snap)
+        => Apply(searchTrimmed, categoryRows, snap).Contains(set);
 
     private static bool PassesAffordableFilter(GlamourSet set, OwnershipSnapshot snap) {
         if (set.NonSetCabinetPiece) {

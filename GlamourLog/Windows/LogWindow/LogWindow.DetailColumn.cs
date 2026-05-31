@@ -97,6 +97,7 @@ internal unsafe partial class LogWindow {
 
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources", IsTopLevelSection = true });
         SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions);
+        AppendSharedModelsSection(snap);
         ApplyCollapsedDetailSections(_detailRowOptions);
         _detailRowsListNode.OptionsList = [.. _detailRowOptions];
         _detailRowsListNode.Update();
@@ -191,5 +192,98 @@ internal unsafe partial class LogWindow {
             return;
         _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
         _pendingPaintDetailsOnly = true;
+    }
+
+    private void AppendSharedModelsSection(OwnershipSnapshot snap) {
+        if (_selectedSet is null)
+            return;
+
+        var catalog = Svc.Get<CatalogService>();
+
+        if (_sourceFilterPieceItemId is { } pieceId) {
+            var itemSiblings = catalog.GetSharedModelItemSiblings(pieceId);
+            if (itemSiblings.Count == 0)
+                return;
+
+            _detailRowOptions.Add(new DetailListRowData {
+                Kind = DetailRowKind.SectionHeader,
+                PrimaryText = "Shared Models",
+                IsTopLevelSection = true,
+            });
+            var itemLabel = itemSiblings.Count == 1 ? "1 other item with this appearance" : $"{itemSiblings.Count} other items with this appearance";
+            _detailRowOptions.Add(new DetailListRowData {
+                Kind = DetailRowKind.JournalHeader,
+                PrimaryText = itemLabel,
+            });
+
+            foreach (var itemId in itemSiblings) {
+                var set = catalog.FindCatalogSetForItem(itemId);
+                if (set is null)
+                    continue;
+                _detailRowOptions.Add(new DetailListRowData {
+                    Kind = DetailRowKind.SharedModelSet,
+                    SharedModelItemId = itemId,
+                    SharedModelRow = BuildSharedModelItemRowData(itemId, snap),
+                });
+            }
+            return;
+        }
+
+        var siblings = catalog.GetSharedModelSiblings(_selectedSet);
+        if (siblings.Count == 0)
+            return;
+
+        _detailRowOptions.Add(new DetailListRowData {
+            Kind = DetailRowKind.SectionHeader,
+            PrimaryText = "Shared Models",
+            IsTopLevelSection = true,
+        });
+        var optionLabel = siblings.Count == 1 ? "1 other obtainment option" : $"{siblings.Count} other obtainment options";
+        _detailRowOptions.Add(new DetailListRowData {
+            Kind = DetailRowKind.JournalHeader,
+            PrimaryText = optionLabel,
+        });
+
+        foreach (var sibling in siblings) {
+            _detailRowOptions.Add(new DetailListRowData {
+                Kind = DetailRowKind.SharedModelSet,
+                SharedModelRow = BuildSetListRowData(sibling, snap, appendNotInListSuffix: true),
+            });
+        }
+    }
+
+    private void OnSharedModelItemLeftClick(uint itemId, GlamourSet catalogSet) {
+        if (_isFinalizing)
+            return;
+
+        if (_sourceFilterPieceItemId is not null && _selectedSet?.Items.Contains(itemId) == true) {
+            if (_sourceFilterPieceItemId == itemId)
+                return;
+            _sourceFilterPieceItemId = itemId;
+            _pendingPaintDetailsOnly = true;
+            return;
+        }
+
+        OnSharedModelSetLeftClick(catalogSet);
+    }
+
+    private void OnSharedModelSetLeftClick(GlamourSet set) {
+        if (_isFinalizing)
+            return;
+        if (ReferenceEquals(_selectedSet, set))
+            return;
+
+        var targetCategory = Svc.Get<CatalogService>().GetCategoryBucketKey(set);
+        if (targetCategory != _selectedCategoryId) {
+            _selectedCategoryId = targetCategory;
+            ClearSetSearchIfActive();
+            _pendingResetSetScroll = true;
+        }
+
+        _selectedSet = set;
+        _sourceFilterPieceItemId = null;
+        _pendingSelectSet = set;
+        _pendingResetDetailScroll = true;
+        _pendingRefreshListsAndDetails = true;
     }
 }

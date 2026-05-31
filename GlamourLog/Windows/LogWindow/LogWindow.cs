@@ -44,6 +44,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private bool _pendingResetSetScroll;
     private bool _pendingResetDetailScroll;
     private bool _pendingClearSetSelection;
+    private GlamourSet? _pendingSelectSet;
     private bool _pendingCategoryPaneRebuild; // run Clear before native OnUpdate, not after (uldmgr races dispose post-update)
     private int _lastDataVersion = -1;
     private readonly List<DetailListRowData> _detailRowOptions = [];
@@ -215,6 +216,8 @@ internal unsafe partial class LogWindow : NativeAddon {
         DetailListItemNode.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
         DetailListItemNode.OnDetailSectionToggle = OnDetailSectionToggle;
         DetailListItemNode.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
+        DetailListItemNode.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;
+        DetailListItemNode.OnSharedModelItemLeftClick = OnSharedModelItemLeftClick;
         _detailRowsListNode.AttachNode(this);
         _detailRowsListNode.Size = new Vector2(detailW, listBottom - alignTop);
 
@@ -288,7 +291,8 @@ internal unsafe partial class LogWindow : NativeAddon {
                 // ListNode keeps an internal scroll index; clearing options first guarantees clamp to zero.
                 _setListNode.OptionsList = [];
                 _setListNode.FullRebuild();
-                _pendingClearSetSelection = true;
+                if (_pendingSelectSet is null)
+                    _pendingClearSetSelection = true;
                 _pendingResetSetScroll = false;
             }
 
@@ -407,6 +411,8 @@ internal unsafe partial class LogWindow : NativeAddon {
         DetailListItemNode.OnCraftRecipeJournalLeftClick = null;
         DetailListItemNode.OnDetailSectionToggle = null;
         DetailListItemNode.IsDetailSectionCollapsed = null;
+        DetailListItemNode.OnSharedModelSetLeftClick = null;
+        DetailListItemNode.OnSharedModelItemLeftClick = null;
         _detailRowsListNode = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;

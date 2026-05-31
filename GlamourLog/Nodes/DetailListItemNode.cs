@@ -21,6 +21,7 @@ internal enum DetailRowKind {
     SourceDuty,
     SourceChest,
     SourceArrowFlow,
+    SharedModelSet,
 }
 
 internal sealed class DetailListRowData {
@@ -43,6 +44,8 @@ internal sealed class DetailListRowData {
     public int SourceIconOverflow { get; init; } // # icons not shown when SourceItemIds exceeds space
     public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; } // left strip ids for SourceArrowFlow, right is SourceItemIds
     public bool IsTopLevelSection { get; init; }
+    public SetListRowData? SharedModelRow { get; init; }
+    public uint SharedModelItemId { get; init; } // shared model row represents this id for piece filter scope
 }
 
 internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
@@ -58,6 +61,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     public static Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
     public static Action<string, bool>? OnDetailSectionToggle { get; set; } // fired when SectionHeader is toggled
     public static Func<string, bool>? IsDetailSectionCollapsed { get; set; } // restore collapsed state for headers are rebuild if true
+    public static Action<GlamourSet>? OnSharedModelSetLeftClick { get; set; }
+    public static Action<uint, GlamourSet>? OnSharedModelItemLeftClick { get; set; }
 
     private readonly CollisionNode _inputCollision;
     private readonly TextNode _primary;
@@ -71,6 +76,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private readonly List<FramedItemIconNode> _sourceIcons = [];
     private readonly TextNode _sourceOverflow;
     private readonly SourceFlowNode _arrowFlow;
+    private readonly CheckMarkBadgeNode _checkBadge;
     private GlamourIconNode.IconPart _lastStoragePart = GlamourIconNode.IconPart.Dresser;
 
     public DetailListItemNode() {
@@ -176,6 +182,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
         _arrowFlow = new SourceFlowNode { IsVisible = false };
         _arrowFlow.AttachNode(this);
+
+        _checkBadge = new CheckMarkBadgeNode { IsVisible = false };
+        _checkBadge.AttachNode(this);
     }
 
     protected override void OnSizeChanged() {
@@ -195,6 +204,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _armoireWarningBadge.Position = _storageBadge.Position + new Vector2(
             _storageBadge.Size.X - _armoireWarningBadge.Size.X,
             _storageBadge.Size.Y - _armoireWarningBadge.Size.Y);
+        _checkBadge.Position = new Vector2(PieceIconSize - _checkBadge.Size.X - 2f, PieceIconY + PieceIconSize - _checkBadge.Size.Y);
 
         _inputCollision.Position = Vector2.Zero;
         _inputCollision.Size = Size;
@@ -296,6 +306,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _sourceOverflow.IsVisible = false;
         _arrowFlow.IsVisible = false;
         _arrowFlow.Hide();
+        _checkBadge.IsVisible = false;
 
         _inputCollision.ItemTooltip = 0;
         _inputCollision.TextTooltip = string.Empty;
@@ -431,6 +442,36 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 // same as SourceChest: row collision would eat icon hits
                 _inputCollision.IsVisible = false;
                 break;
+            case DetailRowKind.SharedModelSet:
+                if (itemData.SharedModelRow is not { } sharedRow)
+                    break;
+                var sharedIconId = sharedRow.IconItemId != 0
+                    ? sharedRow.IconItemId
+                    : sharedRow.Set.NonSetCabinetPiece ? sharedRow.Set.Items[0] : sharedRow.Set.ItemId;
+                _icon.SetItemId(sharedIconId);
+                _icon.IsVisible = true;
+                _primary.String = sharedRow.Title;
+                _primary.Position = new Vector2(30f, 1f);
+                _primary.FontSize = 12;
+                _primary.LineSpacing = 12;
+                _primary.RemoveTextFlags(TextFlags.Ellipsis);
+                _secondary.String = sharedRow.Subtitle;
+                _secondary.IsVisible = true;
+                _secondary.Position = new Vector2(30f, 15f);
+                _secondary.TextColor = new Vector4(157f / 255f, 131f / 255f, 91f / 255f, 1f);
+                _checkBadge.IsVisible = sharedRow.IsOwned;
+                if (sharedRow.ShowStorage) {
+                    if (_lastStoragePart != sharedRow.StorageIconPart) {
+                        _storageBadge.SetPart(sharedRow.StorageIconPart);
+                        _lastStoragePart = sharedRow.StorageIconPart;
+                    }
+                    _storageBadge.IsVisible = true;
+                    _armoireWarningBadge.IsVisible = sharedRow.ShowArmoireWarning;
+                }
+                _inputCollision.IsVisible = true;
+                _inputCollision.ShowClickableCursor = true;
+                _inputCollision.ItemTooltip = sharedIconId;
+                break;
         }
 
         ApplyDynamicWidth(itemData);
@@ -491,6 +532,14 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                     OnSourceMapFlagLeftClick?.Invoke(nav, ItemData.PrimaryText);
                     return;
                 }
+            }
+
+            if (ItemData.Kind is DetailRowKind.SharedModelSet && ItemData.SharedModelRow is { Set: { } sharedSet }) {
+                if (ItemData.SharedModelItemId != 0)
+                    OnSharedModelItemLeftClick?.Invoke(ItemData.SharedModelItemId, sharedSet);
+                else
+                    OnSharedModelSetLeftClick?.Invoke(sharedSet);
+                return;
             }
 
             if (ItemData.Kind is DetailRowKind.SourceDuty && ItemData.NavigateTarget is { } nav2 && nav2.TerritoryTypeId != 0) {

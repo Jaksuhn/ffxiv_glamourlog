@@ -34,6 +34,7 @@ internal static unsafe class CatalogBuilder {
 
             // Mirage token row is not in ItemPatch ranges; max patch across gear pieces matches PatchDescending.
             var sortPatch = items.Count == 0 ? 0m : items.Max(id => itemSheet.GetItemPatch(id));
+            var modelSignature = SetModelSignature.ForMirageSet(items);
             return new GlamourSet {
                 ItemId = x.RowId,
                 Name = name,
@@ -44,6 +45,8 @@ internal static unsafe class CatalogBuilder {
                 SortPatchNo = sortPatch,
                 NonSetCabinetPiece = false,
                 IsIncompatible = x.Items.None(i => i.Value.EquipRestriction.Value.CanEquip),
+                ModelSignature = modelSignature,
+                SharedModelGroupSize = 1,
             };
         })
         .Where(g => g.Items.Count > 0 && !string.IsNullOrWhiteSpace(g.Name))
@@ -79,6 +82,8 @@ internal static unsafe class CatalogBuilder {
                 SortPatchNo = itemSheet.GetItemPatch(itemId),
                 NonSetCabinetPiece = true,
                 IsIncompatible = !row.EquipRestriction.Value.CanEquip,
+                ModelSignature = SetModelSignature.ForMiscSingle(itemId),
+                SharedModelGroupSize = 1,
             });
         }
 
@@ -90,7 +95,24 @@ internal static unsafe class CatalogBuilder {
         var armoireItemIds = LoadArmoireItemIds();
         var mirageSets = BuildClassifiedSets(catalog, costsLookup);
         var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets);
-        var allSets = mirageSets.Concat(miscArmoireEntries).ToList().AsReadOnly();
+        var allSets = ApplySharedModelGroupSizes(mirageSets.Concat(miscArmoireEntries).ToList()).AsReadOnly();
         return new CatalogBuildResult(catalog, allSets, armoireItemIds);
+    }
+
+    private static List<GlamourSet> ApplySharedModelGroupSizes(List<GlamourSet> sets) {
+        var groupSizes = sets.GroupBy(s => s.ModelSignature).ToDictionary(g => g.Key, g => g.Count());
+        return [.. sets.Select(s => new GlamourSet {
+            ItemId = s.ItemId,
+            Name = s.Name,
+            Items = s.Items,
+            CategoryName = s.CategoryName,
+            IsUnobtainable = s.IsUnobtainable,
+            SortItemLevel = s.SortItemLevel,
+            SortPatchNo = s.SortPatchNo,
+            NonSetCabinetPiece = s.NonSetCabinetPiece,
+            IsIncompatible = s.IsIncompatible,
+            ModelSignature = s.ModelSignature,
+            SharedModelGroupSize = groupSizes[s.ModelSignature],
+        })];
     }
 }

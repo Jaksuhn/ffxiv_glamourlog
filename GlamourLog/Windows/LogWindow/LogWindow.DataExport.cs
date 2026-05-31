@@ -1,5 +1,6 @@
 using Dalamud.Bindings.ImGui;
 using GlamourLog.Services;
+using System.Text.Json;
 
 namespace GlamourLog;
 
@@ -8,7 +9,8 @@ internal partial class LogWindow {
         if (format is not GlamourDataExportFormat.LalaAchievements)
             return;
 
-        var json = GlamourDataExport.BuildLalaAchievementsJson(Svc.Get<OwnershipService>());
+        Svc.Get<OwnershipService>().GetLalaAchievementsExportBuckets(out var outfitsBySetId, out var armoireIds);
+        var json = JsonSerializer.Serialize(new { outfits = outfitsBySetId, armoires = armoireIds });
         ImGui.SetClipboardText(json);
     }
 }

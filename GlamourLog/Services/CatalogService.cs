@@ -11,6 +11,8 @@ internal sealed class CatalogService : IDisposable {
     internal ItemCostLookup CostsLookup { get; } = new();
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
     private HashSet<uint> _costCurrencyItemIds = [];
+    private Dictionary<SetModelSignature, List<GlamourSet>> _sharedModelGroups = [];
+    private Dictionary<ItemModelInfo, List<uint>> _sharedModelItemGroups = [];
 
     private readonly Lock _glamourDataLock = new();
     private readonly Lock _catalogRequestLock = new();
@@ -85,6 +87,14 @@ internal sealed class CatalogService : IDisposable {
                 GlamourSetsByCategory.Clear();
                 foreach (var group in GlamourSets.GroupBy(s => _catalog.BucketKey(new ClassifyResult(s.CategoryName, s.IsUnobtainable))))
                     GlamourSetsByCategory[group.Key] = [.. group];
+                _sharedModelGroups = GlamourSets
+                    .GroupBy(s => s.ModelSignature)
+                    .ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
+                _sharedModelItemGroups = GlamourSets
+                    .SelectMany(s => s.Items)
+                    .Distinct()
+                    .GroupBy(static itemId => (ItemModelInfo)itemId)
+                    .ToDictionary(g => g.Key, g => g.OrderBy(id => id).ToList());
                 LogMissingMirageSets();
                 DataVersion++;
                 _catalogBuilt = true;
@@ -192,6 +202,43 @@ internal sealed class CatalogService : IDisposable {
             }
         }
         return categoryName;
+    }
+
+    internal IReadOnlyList<GlamourSet> GetSharedModelSiblings(GlamourSet set) {
+        lock (_glamourDataLock) {
+            if (!_sharedModelGroups.TryGetValue(set.ModelSignature, out var group) || group.Count <= 1)
+                return [];
+            return [.. group.Where(s => s.ItemId != set.ItemId)];
+        }
+    }
+
+    internal IReadOnlyList<uint> GetSharedModelItemSiblings(uint itemId) {
+        lock (_glamourDataLock) {
+            var row = Item.GetRow(itemId);
+            var slot = row.EquipSlot;
+            ItemModelInfo model = itemId;
+            if (!_sharedModelItemGroups.TryGetValue(model, out var group) || group.Count <= 1)
+                return [];
+            return [.. group.Where(id => id != itemId && Item.GetRow(id).EquipSlot == slot)];
+        }
+    }
+
+    internal GlamourSet? FindCatalogSetForItem(uint itemId) {
+        lock (_glamourDataLock) {
+            foreach (var set in GlamourSets) {
+                if (set.NonSetCabinetPiece && set.ItemId == itemId)
+                    return set;
+            }
+            return GlamourSets
+                .Where(s => !s.NonSetCabinetPiece && s.Items.Contains(itemId))
+                .OrderBy(s => s.ItemId)
+                .FirstOrDefault();
+        }
+    }
+
+    internal string GetCategoryBucketKey(GlamourSet set) {
+        lock (_glamourDataLock)
+            return _catalog.BucketKey(new ClassifyResult(set.CategoryName, set.IsUnobtainable));
     }
 
     private HashSet<uint> BuildAllPrimaryCostCurrencyIds() {

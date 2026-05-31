@@ -60,24 +60,10 @@ internal unsafe partial class LogWindow {
         var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
         var rows = SetListFilterSort.Apply(searchTrimmed, CategoryRows(_selectedCategoryId), snap);
 
-        if (_selectedSet != null && !rows.Contains(_selectedSet)) {
-            _selectedSet = null;
-            _pendingClearSetSelection = true;
-        }
-
         _setListOptions.Clear();
         foreach (var set in rows) {
             try {
-                var setStorageState = Svc.Get<OwnershipService>().GetSetStorageState(set, snap);
-                _setListOptions.Add(new SetListRowData {
-                    Set = set,
-                    Title = set.Name,
-                    Subtitle = SetSublineText(set, snap),
-                    IsOwned = snap.OwnedSets.Contains(set),
-                    ShowStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire,
-                    ShowArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, snap),
-                    StorageIconPart = setStorageState == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,
-                });
+                _setListOptions.Add(BuildSetListRowData(set, snap));
             }
             catch (Exception ex) {
                 Svc.Log.Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
@@ -87,9 +73,116 @@ internal unsafe partial class LogWindow {
         _setListNode.OptionsList = [.. _setListOptions];
         if (_pendingClearSetSelection) {
             _pendingClearSetSelection = false;
-            // ktk ListNode: rebuild pool so internal scroll + selection can't reference wrong row after options clear
             _setListNode.FullRebuild();
         }
+
+        if (_pendingSelectSet is { } pendingSet) {
+            _pendingSelectSet = null;
+            ScrollSetListToSet(pendingSet);
+        }
+    }
+
+    private void ScrollSetListToSet(GlamourSet set) {
+        if (_setListNode is null)
+            return;
+
+        var index = _setListNode.OptionsList.FindIndex(r => r.Set.ItemId == set.ItemId);
+        if (index < 0)
+            return;
+
+        var stride = (int)(GlamourSetListItemNode.ItemHeight + _setListNode.ItemSpacing);
+        if (stride < 1)
+            return;
+
+        var nodeCount = Math.Max(1, (int)(_setListNode.Height / stride));
+        var maxScroll = Math.Max(0, _setListNode.OptionsList.Count - nodeCount);
+        var scroll = _setListNode.ScrollBarNode.ScrollPosition / stride;
+        if (index < scroll)
+            scroll = index;
+        else if (index >= scroll + nodeCount)
+            scroll = Math.Min(index - nodeCount + 1, maxScroll);
+
+        // ListNode wires this to OnScrollUpdate → PopulateNodes + scrollbar sync.
+        _setListNode.ScrollBarNode.OnValueChanged?.Invoke(scroll * stride);
+    }
+
+    private void ClearSetSearchIfActive() {
+        if (_gatheringNoteSearch is null)
+            return;
+        var current = _gatheringNoteSearch.Input.String.ToString();
+        if (string.IsNullOrWhiteSpace(current))
+            return;
+        _gatheringNoteSearch.Input.String = string.Empty;
+    }
+
+    private SetListRowData BuildSetListRowData(GlamourSet set, OwnershipSnapshot snap, bool appendNotInListSuffix = false) {
+        var setStorageState = Svc.Get<OwnershipService>().GetSetStorageState(set, snap);
+        var subtitle = SetSublineText(set, snap);
+        if (appendNotInListSuffix) {
+            var searchRaw = _gatheringNoteSearch?.Input.String.ToString() ?? string.Empty;
+            var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
+            if (C.HideSharedModels && !SetListFilterSort.IsVisibleInSetList(set, searchTrimmed, CategoryRows(_selectedCategoryId), snap))
+                subtitle += " · Not in list";
+        }
+
+        return new SetListRowData {
+            Set = set,
+            Title = set.Name,
+            Subtitle = subtitle,
+            IsOwned = snap.OwnedSets.Contains(set),
+            IsSelected = ReferenceEquals(_selectedSet, set),
+            ShowStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire,
+            ShowArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, snap),
+            StorageIconPart = setStorageState == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,
+        };
+    }
+
+    private SetListRowData BuildSharedModelItemRowData(uint itemId, OwnershipSnapshot snap) {
+        var catalog = Svc.Get<CatalogService>();
+        var set = catalog.FindCatalogSetForItem(itemId)
+            ?? new GlamourSet {
+                ItemId = itemId,
+                Name = Item.GetRow(itemId).Name.ToString(),
+                CategoryName = null,
+                IsUnobtainable = false,
+                Items = [itemId],
+                SortItemLevel = Item.GetRow(itemId).LevelItem.RowId,
+                SortPatchNo = 0m,
+                NonSetCabinetPiece = true,
+                IsIncompatible = false,
+                ModelSignature = SetModelSignature.ForMiscSingle(itemId),
+                SharedModelGroupSize = 1,
+            };
+
+        var ownedInStorage = snap.StorageOwnedItems.Contains(itemId);
+        var ownedAnywhere = snap.OwnedItems.Contains(itemId);
+        var subtitle = ownedInStorage ? "Obt. 1/1" : ownedAnywhere ? "In inventory" : "Obt. 0/1";
+
+        ItemStorageState storageState = ItemStorageState.None;
+        if (set.NonSetCabinetPiece)
+            storageState = Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, set, SetStorageState.None, snap);
+        else if (ownedInStorage)
+            storageState = snap.ArmoireOwnedItemIds.Contains(itemId) ? ItemStorageState.Armoire
+                : snap.DresserItemIds.Contains(set.ItemId) ? ItemStorageState.DresserSet
+                : ItemStorageState.DresserLoose;
+
+        var iconPart = storageState switch {
+            ItemStorageState.Armoire => GlamourIconNode.IconPart.Armoire,
+            ItemStorageState.DresserLoose => GlamourIconNode.IconPart.DresserFaded,
+            ItemStorageState.DresserSet => GlamourIconNode.IconPart.Dresser,
+            _ => GlamourIconNode.IconPart.Dresser,
+        };
+
+        return new SetListRowData {
+            Set = set,
+            Title = Item.GetRow(itemId).Name.ToString(),
+            Subtitle = subtitle,
+            IsOwned = ownedInStorage,
+            ShowStorage = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose or ItemStorageState.Armoire,
+            ShowArmoireWarning = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && snap.ArmoireCatalogItemIds.Contains(itemId),
+            StorageIconPart = iconPart,
+            IconItemId = itemId,
+        };
     }
 
     private void OnSetListSortModeSelected(GlamourSetSortMode mode) {

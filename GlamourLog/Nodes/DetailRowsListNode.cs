@@ -152,13 +152,13 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
                 var prevDataIndex = lastDataIndexBySlot[nodeIndex];
                 lastDataIndexBySlot[nodeIndex] = dataIndex;
 
-                // null first forces SetNodeData: same ref + same slot index skips in ListItemNode; piece needs every-frame refresh too
+                // null first forces SetNodeData: same ref + same slot index skips in ListItemNode; piece/shared-model rows need every-frame refresh too
                 var prevKind = node.ItemData?.Kind;
                 if (forceRebind
                     || !ReferenceEquals(node.ItemData, item)
                     || prevDataIndex != dataIndex
                     || prevKind != item.Kind
-                    || item.Kind == DetailRowKind.Piece)
+                    || item.Kind is DetailRowKind.Piece or DetailRowKind.SharedModelSet)
                     node.ItemData = null;
 
                 node.ItemData = item;

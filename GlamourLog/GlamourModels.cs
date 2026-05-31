@@ -14,6 +14,8 @@ internal sealed class GlamourSet {
     public required decimal SortPatchNo { get; init; }
     public bool NonSetCabinetPiece { get; init; }
     public required bool IsIncompatible { get; init; } // race/sex restricted items
+    public required SetModelSignature ModelSignature { get; init; }
+    public required int SharedModelGroupSize { get; init; }
 }
 
 internal enum ItemStorageState {

@@ -14,6 +14,7 @@ public class Configuration : IPluginConfiguration {
     public bool HideUnready { get; set; }
     public bool HideNoMarketboard { get; set; }
     public bool ShowOnlyMisplaced { get; set; }
+    public bool HideSharedModels { get; set; }
 
     public GlamourSetSortMode SetListSortMode { get; set; } = GlamourSetSortMode.Alphabetical;
     public ListSortDirection SetListSortDirection { get; set; } = ListSortDirection.Ascending;
