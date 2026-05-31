@@ -93,7 +93,7 @@ internal unsafe class FilterWindow : NativeAddon {
             c => c.HideUnready ^= true);
         AddCheckbox(
             "Hide shared models",
-            "Hide outfits the share the same models. Will still show any sets that are started or completed.",
+            "Hide outfits that share the same models. Will still show any sets that are started or completed.",
             c => c.HideSharedModels,
             c => c.HideSharedModels ^= true);
         AddCheckbox(
