@@ -16,6 +16,8 @@ internal sealed class GlamourSet {
     public required bool IsIncompatible { get; init; } // race/sex restricted items
     public required SetModelSignature ModelSignature { get; init; }
     public required int SharedModelGroupSize { get; init; }
+    /// <summary> Some but not all pieces share a model with items in other sets (full-set match uses <see cref="SharedModelGroupSize"/> instead). </summary>
+    public required bool HasPartialSharedModels { get; init; }
 }
 
 internal enum ItemStorageState {

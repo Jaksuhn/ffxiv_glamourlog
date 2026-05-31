@@ -47,6 +47,7 @@ internal static unsafe class CatalogBuilder {
                 IsIncompatible = x.Items.None(i => i.Value.EquipRestriction.Value.CanEquip),
                 ModelSignature = modelSignature,
                 SharedModelGroupSize = 1,
+                HasPartialSharedModels = false,
             };
         })
         .Where(g => g.Items.Count > 0 && !string.IsNullOrWhiteSpace(g.Name))
@@ -84,6 +85,7 @@ internal static unsafe class CatalogBuilder {
                 IsIncompatible = !row.EquipRestriction.Value.CanEquip,
                 ModelSignature = SetModelSignature.ForMiscSingle(itemId),
                 SharedModelGroupSize = 1,
+                HasPartialSharedModels = false,
             });
         }
 
@@ -95,24 +97,47 @@ internal static unsafe class CatalogBuilder {
         var armoireItemIds = LoadArmoireItemIds();
         var mirageSets = BuildClassifiedSets(catalog, costsLookup);
         var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets);
-        var allSets = ApplySharedModelGroupSizes(mirageSets.Concat(miscArmoireEntries).ToList()).AsReadOnly();
+        var allSets = ApplySharedModelMetadata(mirageSets.Concat(miscArmoireEntries).ToList()).AsReadOnly();
         return new CatalogBuildResult(catalog, allSets, armoireItemIds);
     }
 
-    private static List<GlamourSet> ApplySharedModelGroupSizes(List<GlamourSet> sets) {
+    internal static Dictionary<ItemModelInfo, List<uint>> BuildSharedModelItemGroups(IEnumerable<uint> itemIds)
+        => itemIds
+            .Distinct()
+            .GroupBy(static itemId => (ItemModelInfo)itemId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(id => id).ToList());
+
+    internal static bool PieceHasSharedModelSiblings(uint itemId, Dictionary<ItemModelInfo, List<uint>> itemGroups) {
+        ItemModelInfo model = itemId;
+        if (!itemGroups.TryGetValue(model, out var group) || group.Count <= 1)
+            return false;
+        var slot = Item.GetRow(itemId).EquipSlot;
+        return group.Exists(id => id != itemId && Item.GetRow(id).EquipSlot == slot);
+    }
+
+    private static List<GlamourSet> ApplySharedModelMetadata(List<GlamourSet> sets) {
         var groupSizes = sets.GroupBy(s => s.ModelSignature).ToDictionary(g => g.Key, g => g.Count());
-        return [.. sets.Select(s => new GlamourSet {
-            ItemId = s.ItemId,
-            Name = s.Name,
-            Items = s.Items,
-            CategoryName = s.CategoryName,
-            IsUnobtainable = s.IsUnobtainable,
-            SortItemLevel = s.SortItemLevel,
-            SortPatchNo = s.SortPatchNo,
-            NonSetCabinetPiece = s.NonSetCabinetPiece,
-            IsIncompatible = s.IsIncompatible,
-            ModelSignature = s.ModelSignature,
-            SharedModelGroupSize = groupSizes[s.ModelSignature],
+        var itemGroups = BuildSharedModelItemGroups(sets.SelectMany(s => s.Items));
+        return [.. sets.Select(s => {
+            var sharedModelGroupSize = groupSizes[s.ModelSignature];
+            var piecesWithSiblings = s.Items.Count(id => PieceHasSharedModelSiblings(id, itemGroups));
+            var hasPartialSharedModels = sharedModelGroupSize <= 1
+                && piecesWithSiblings > 0
+                && piecesWithSiblings < s.Items.Count;
+            return new GlamourSet {
+                ItemId = s.ItemId,
+                Name = s.Name,
+                Items = s.Items,
+                CategoryName = s.CategoryName,
+                IsUnobtainable = s.IsUnobtainable,
+                SortItemLevel = s.SortItemLevel,
+                SortPatchNo = s.SortPatchNo,
+                NonSetCabinetPiece = s.NonSetCabinetPiece,
+                IsIncompatible = s.IsIncompatible,
+                ModelSignature = s.ModelSignature,
+                SharedModelGroupSize = sharedModelGroupSize,
+                HasPartialSharedModels = hasPartialSharedModels,
+            };
         })];
     }
 }

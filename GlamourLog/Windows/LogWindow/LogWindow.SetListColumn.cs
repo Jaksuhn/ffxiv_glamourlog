@@ -152,6 +152,7 @@ internal unsafe partial class LogWindow {
                 IsIncompatible = false,
                 ModelSignature = SetModelSignature.ForMiscSingle(itemId),
                 SharedModelGroupSize = 1,
+                HasPartialSharedModels = false,
             };
 
         var ownedInStorage = snap.StorageOwnedItems.Contains(itemId);

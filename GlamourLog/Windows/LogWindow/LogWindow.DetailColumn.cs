@@ -95,8 +95,11 @@ internal unsafe partial class LogWindow {
             }
         }
 
-        _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources", IsTopLevelSection = true });
+        var sourcesStartIndex = _detailRowOptions.Count;
         SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions);
+        if (_detailRowOptions.Count > sourcesStartIndex) {
+            _detailRowOptions.Insert(sourcesStartIndex, new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources", IsTopLevelSection = true });
+        }
         AppendSharedModelsSection(snap);
         ApplyCollapsedDetailSections(_detailRowOptions);
         _detailRowsListNode.OptionsList = [.. _detailRowOptions];
@@ -229,6 +232,8 @@ internal unsafe partial class LogWindow {
         }
 
         var siblings = catalog.GetSharedModelSiblings(_selectedSet);
+        if (siblings.Count == 0)
+            siblings = catalog.GetPartialSharedModelSetSiblings(_selectedSet);
         if (siblings.Count == 0)
             return;
 

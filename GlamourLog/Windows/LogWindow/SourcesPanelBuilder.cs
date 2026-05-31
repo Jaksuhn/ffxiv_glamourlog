@@ -46,13 +46,8 @@ internal static class SourcesPanelBuilder {
     internal static void AppendSourceRows(CatalogService catalog, GlamourSet set, uint? pieceFilter, List<DetailListRowData> rows) {
         var scopeList = catalog.GetSourceScopeItemIds(set, pieceFilter);
         var scope = scopeList.ToHashSet();
-        if (scope.Count == 0) {
-            rows.Add(new DetailListRowData {
-                Kind = DetailRowKind.EmptyHint,
-                PrimaryText = Addon.GetRow(5494).Text.ToString(),
-            });
+        if (scope.Count == 0)
             return;
-        }
 
         var cache = Svc.SheetManager.ItemInfoCache;
         var sourcesByPiece = new Dictionary<uint, List<ItemSource>>();
@@ -64,20 +59,12 @@ internal static class SourcesPanelBuilder {
 
         var dutyChestRowIdsOrderedByCfc = BuildDutyChestRowIdsOrderedByCfc(catalog, set);
 
-        var any = false;
-        any |= AppendDuties(rows, sourcesByPiece, scope, dutyChestRowIdsOrderedByCfc);
-        any |= AppendFates(rows, sourcesByPiece, scope);
-        any |= AppendSupplemental(rows, sourcesByPiece, scope);
-        any |= AppendCraft(rows, sourcesByPiece, scope);
-        any |= AppendDesynthesis(rows, sourcesByPiece, scope);
-        any |= AppendQuests(rows, sourcesByPiece, scope);
-
-        if (!any) {
-            rows.Add(new DetailListRowData {
-                Kind = DetailRowKind.EmptyHint,
-                PrimaryText = Addon.GetRow(5494).Text.ToString(),
-            });
-        }
+        AppendDuties(rows, sourcesByPiece, scope, dutyChestRowIdsOrderedByCfc);
+        AppendFates(rows, sourcesByPiece, scope);
+        AppendSupplemental(rows, sourcesByPiece, scope);
+        AppendCraft(rows, sourcesByPiece, scope);
+        AppendDesynthesis(rows, sourcesByPiece, scope);
+        AppendQuests(rows, sourcesByPiece, scope);
     }
 
     /// <summary> Union of dungeon chest row ids per CFC across the whole set (no piece filter), sorted ascending. Chest labels use 1-based index in this list so filtering by one piece does not renumber chests. </summary>

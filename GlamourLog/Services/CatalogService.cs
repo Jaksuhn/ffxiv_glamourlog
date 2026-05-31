@@ -90,11 +90,7 @@ internal sealed class CatalogService : IDisposable {
                 _sharedModelGroups = GlamourSets
                     .GroupBy(s => s.ModelSignature)
                     .ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
-                _sharedModelItemGroups = GlamourSets
-                    .SelectMany(s => s.Items)
-                    .Distinct()
-                    .GroupBy(static itemId => (ItemModelInfo)itemId)
-                    .ToDictionary(g => g.Key, g => g.OrderBy(id => id).ToList());
+                _sharedModelItemGroups = CatalogBuilder.BuildSharedModelItemGroups(GlamourSets.SelectMany(s => s.Items));
                 LogMissingMirageSets();
                 DataVersion++;
                 _catalogBuilt = true;
@@ -213,27 +209,49 @@ internal sealed class CatalogService : IDisposable {
     }
 
     internal IReadOnlyList<uint> GetSharedModelItemSiblings(uint itemId) {
+        lock (_glamourDataLock)
+            return GetSharedModelItemSiblingsUnlocked(itemId, _sharedModelItemGroups);
+    }
+
+    internal IReadOnlyList<GlamourSet> GetPartialSharedModelSetSiblings(GlamourSet set) {
         lock (_glamourDataLock) {
-            var row = Item.GetRow(itemId);
-            var slot = row.EquipSlot;
-            ItemModelInfo model = itemId;
-            if (!_sharedModelItemGroups.TryGetValue(model, out var group) || group.Count <= 1)
-                return [];
-            return [.. group.Where(id => id != itemId && Item.GetRow(id).EquipSlot == slot)];
+            var results = new List<GlamourSet>();
+            var seen = new HashSet<GlamourSet>();
+            foreach (var pieceId in set.Items) {
+                foreach (var siblingId in GetSharedModelItemSiblingsUnlocked(pieceId, _sharedModelItemGroups)) {
+                    var siblingSet = FindCatalogSetForItemUnlocked(siblingId);
+                    if (siblingSet is null || ReferenceEquals(siblingSet, set) || !seen.Add(siblingSet))
+                        continue;
+                    results.Add(siblingSet);
+                }
+            }
+            return results;
         }
     }
 
+    private static IReadOnlyList<uint> GetSharedModelItemSiblingsUnlocked(uint itemId, Dictionary<ItemModelInfo, List<uint>> itemGroups) {
+        var row = Item.GetRow(itemId);
+        var slot = row.EquipSlot;
+        ItemModelInfo model = itemId;
+        if (!itemGroups.TryGetValue(model, out var group) || group.Count <= 1)
+            return [];
+        return [.. group.Where(id => id != itemId && Item.GetRow(id).EquipSlot == slot)];
+    }
+
     internal GlamourSet? FindCatalogSetForItem(uint itemId) {
-        lock (_glamourDataLock) {
-            foreach (var set in GlamourSets) {
-                if (set.NonSetCabinetPiece && set.ItemId == itemId)
-                    return set;
-            }
-            return GlamourSets
-                .Where(s => !s.NonSetCabinetPiece && s.Items.Contains(itemId))
-                .OrderBy(s => s.ItemId)
-                .FirstOrDefault();
+        lock (_glamourDataLock)
+            return FindCatalogSetForItemUnlocked(itemId);
+    }
+
+    private GlamourSet? FindCatalogSetForItemUnlocked(uint itemId) {
+        foreach (var set in GlamourSets) {
+            if (set.NonSetCabinetPiece && set.ItemId == itemId)
+                return set;
         }
+        return GlamourSets
+            .Where(s => !s.NonSetCabinetPiece && s.Items.Contains(itemId))
+            .OrderBy(s => s.ItemId)
+            .FirstOrDefault();
     }
 
     internal string GetCategoryBucketKey(GlamourSet set) {
