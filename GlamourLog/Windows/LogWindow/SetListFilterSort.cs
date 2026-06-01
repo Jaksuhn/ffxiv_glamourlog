@@ -12,7 +12,7 @@ internal static class SetListFilterSort {
             rows = [.. rows.Where(r => !snap.OwnedSets.Contains(r))];
 
         if (C.ShowOnlyCompleted)
-            rows = [.. rows.Where(r => snap.OwnedSets.Contains(r))];
+            rows = [.. rows.Where(snap.OwnedSets.Contains)];
 
         if (C.HideIncompatible)
             rows = [.. rows.Where(r => !r.IsIncompatible)];
