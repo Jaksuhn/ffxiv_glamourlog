@@ -34,6 +34,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private int _nativeAtkSlotCount;
     private int _nativeLoadAtkSlotCount;
     private int _filteredAtkSlotCount;
+    private AtkUnitBase* CrystallizeAddon;
 
     public CrystallizeListHandler() {
         _filters = [
@@ -78,6 +79,8 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             return;
         }
 
+        CrystallizeAddon = addon;
+
         if (!IsFilteringActive) {
             if (_categoryRows.Length > 0) {
                 RestoreFullCategory(data);
@@ -111,6 +114,8 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private void OnPostRefresh(AtkUnitBase* addon) {
         if (addon is null || _suppressPostRefreshFilter)
             return;
+
+        CrystallizeAddon = addon;
 
         var data = GetData();
         if (data is null)
@@ -257,6 +262,8 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         var data = GetData();
         if (addon is null || data is null || !IsFilteringActive || !HasValidCategorySnapshot(data))
             return;
+
+        CrystallizeAddon = addon;
 
         CachePristineAtk(addon->AtkValues, addon->AtkValuesCount, force: true);
         if (_pristineAtkValues.Length == 0)
@@ -480,17 +487,8 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             IncludeSectionHeaders);
     }
 
-    private void LoadAtkValuesDetour(
-        AtkComponentTreeList* thisPtr,
-        int atkValuesCount,
-        AtkValue* atkValues,
-        int uintValuesOffset,
-        int stringValuesOffset,
-        int uintValuesCountPerItem,
-        int stringValuesCountPerItem,
-        int itemCount,
-        ListComponentCallBackInterface* callBackInterface) {
-        if (IsFilteringActive && GetItemTreeList(Svc.GameGui.GetAddonByName<AtkUnitBase>(AddonName)) == thisPtr && _atkLayout.Length > 0) {
+    private void LoadAtkValuesDetour(AtkComponentTreeList* thisPtr, int atkValuesCount, AtkValue* atkValues, int uintValuesOffset, int stringValuesOffset, int uintValuesCountPerItem, int stringValuesCountPerItem, int itemCount, ListComponentCallBackInterface* callBackInterface) {
+        if (IsFilteringActive && _atkLayout.Length > 0 && IsCrystallizeTreeList(thisPtr)) {
             if (itemCount > 0)
                 _nativeLoadAtkSlotCount = itemCount;
 
@@ -522,19 +520,21 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
                 itemCount = filteredCount;
         }
 
-        _loadAtkValuesHook!.Original(
-            thisPtr,
-            atkValuesCount,
-            atkValues,
-            uintValuesOffset,
-            stringValuesOffset,
-            uintValuesCountPerItem,
-            stringValuesCountPerItem,
-            itemCount,
-            callBackInterface);
+        _loadAtkValuesHook!.Original(thisPtr, atkValuesCount, atkValues, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, itemCount, callBackInterface);
+    }
+
+    private bool IsCrystallizeTreeList(AtkComponentTreeList* treeList) {
+        if (CrystallizeAddon is null)
+            return false;
+
+        var node = treeList->GetAtkResNode();
+        return node is not null && node->OwnerAddon == CrystallizeAddon;
     }
 
     private static AtkComponentTreeList* GetItemTreeList(AtkUnitBase* addon) {
+        if (addon is null)
+            return null;
+
         var node = addon->GetNodeById(ItemTreeListNodeId);
         return node is null ? null : node->GetAsAtkComponentTreeList();
     }
@@ -615,5 +615,6 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         _nativeAtkSlotCount = 0;
         _nativeLoadAtkSlotCount = 0;
         _filteredAtkSlotCount = 0;
+        CrystallizeAddon = null;
     }
 }

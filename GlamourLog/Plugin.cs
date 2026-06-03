@@ -1,15 +1,10 @@
 using clib;
-using Dalamud.Hooking;
-using Dalamud.IoC;
 using Dalamud.Plugin;
-using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using GlamourLog.Features.Cabinet;
 using GlamourLog.Features.PrismBox;
 using GlamourLog.Services;
 using GlamourLog.Tweaks;
 using KamiToolKit;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
