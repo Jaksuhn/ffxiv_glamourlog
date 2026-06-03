@@ -40,17 +40,17 @@ internal class ChatAlerts : IDisposable {
         foreach (var set in sets) {
             if (OwnsAllPieces(set, ownedAfter) && !OwnsAllPieces(set, ownedBefore)) {
                 if (set.NonSetCabinetPiece) {
-                    Svc.Chat.Print(new SeStringBuilder().Append("[GlamourLog] Found misc armoire piece ").Append(SeString.CreateItemLink(set.ItemId)).Append("!").Build());
+                    message.Message.Append(" This item can go in your armoire!");
                 }
                 else {
-                    Svc.Chat.Print(new SeStringBuilder().Append("[GlamourLog] You found the final piece of ").Append(SeString.CreateItemLink(set.ItemId)).Append("!").Build());
+                    message.Message.Append(" The final piece of ").Append(SeString.CreateItemLink(set.ItemId)).Append("!");
                 }
                 return;
             }
         }
 
         if (catalog.FindCatalogSetForItem(row.RowId) is { } primarySet)
-            Svc.Chat.Print(new SeStringBuilder().Append("[GlamourLog] You found a piece of ").Append(SeString.CreateItemLink(primarySet.ItemId)).Build());
+            message.Message.Append(" Part of the set ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
     }
 
     private static bool OwnsAllPieces(GlamourSet set, HashSet<uint> owned)
