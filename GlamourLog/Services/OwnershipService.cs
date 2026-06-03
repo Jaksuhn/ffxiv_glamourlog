@@ -194,6 +194,13 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return baseId;
     }
 
+    /// <summary> True when the item can be stored in the armoire (Cabinet sheet), regardless of deposit state. </summary>
+    internal bool IsArmoireEligible(uint itemId) {
+        itemId = GetItemIdFromLookups(itemId);
+        itemId = ItemUtil.GetBaseId(itemId).ItemId;
+        return itemId != 0 && CabinetLookup.Value.ContainsKey(itemId);
+    }
+
     internal bool IsItemInArmoire(uint itemId) {
         itemId = GetItemIdFromLookups(itemId);
         if (itemId == 0)

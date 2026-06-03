@@ -10,6 +10,7 @@ internal sealed class CatalogService : IDisposable {
     internal Dictionary<string, List<GlamourSet>> GlamourSetsByCategory { get; } = [];
     internal ItemCostLookup CostsLookup { get; } = new();
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
+    internal HashSet<uint> MirageOutfitPieceIds { get; private set; } = [];
     private HashSet<uint> _costCurrencyItemIds = [];
     private Dictionary<SetModelSignature, List<GlamourSet>> _sharedModelGroups = [];
     private Dictionary<ItemModelInfo, List<uint>> _sharedModelItemGroups = [];
@@ -84,12 +85,11 @@ internal sealed class CatalogService : IDisposable {
                 _catalog = built.Catalog;
                 ArmoireItemIds = built.ArmoireItemIds;
                 GlamourSets = built.Sets;
+                MirageOutfitPieceIds = [.. GlamourSets.Where(s => !s.NonSetCabinetPiece).SelectMany(s => s.Items)];
                 GlamourSetsByCategory.Clear();
                 foreach (var group in GlamourSets.GroupBy(s => _catalog.BucketKey(new ClassifyResult(s.CategoryName, s.IsUnobtainable))))
                     GlamourSetsByCategory[group.Key] = [.. group];
-                _sharedModelGroups = GlamourSets
-                    .GroupBy(s => s.ModelSignature)
-                    .ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
+                _sharedModelGroups = GlamourSets.GroupBy(s => s.ModelSignature).ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
                 _sharedModelItemGroups = CatalogBuilder.BuildSharedModelItemGroups(GlamourSets.SelectMany(s => s.Items));
                 LogMissingMirageSets();
                 DataVersion++;
@@ -110,6 +110,9 @@ internal sealed class CatalogService : IDisposable {
     internal bool CatalogReady => _catalogBuilt;
 
     internal bool IsKnownCostCurrency(uint itemId) => itemId != 0 && _catalogBuilt && _costCurrencyItemIds.Contains(itemId);
+
+    internal bool IsMirageOutfitPiece(uint itemId)
+        => itemId != 0 && _catalogBuilt && MirageOutfitPieceIds.Contains(itemId);
 
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
 

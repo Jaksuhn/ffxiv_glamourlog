@@ -25,5 +25,9 @@ public class Configuration : IPluginConfiguration {
     public bool HideCabinetOwnedItems { get; set; }
     public bool HideCabinetGearsetItems { get; set; }
 
+    public bool HideCrystallizeOwnedItems { get; set; }
+    public bool HideCrystallizeArmoireEligibleItems { get; set; }
+    public bool HideCrystallizeNonOutfitItems { get; set; }
+
     public void Save() => Svc.Interface.SavePluginConfig(this);
 }

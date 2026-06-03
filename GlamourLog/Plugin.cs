@@ -1,8 +1,11 @@
 using clib;
 using Dalamud.Hooking;
+using Dalamud.IoC;
 using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using GlamourLog.Features.Cabinet;
+using GlamourLog.Features.PrismBox;
 using GlamourLog.Services;
 using GlamourLog.Tweaks;
 using KamiToolKit;
@@ -34,6 +37,7 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
         Svc.Register<CatalogService>();
         Svc.Register<OwnershipService>();
         Svc.Register<CabinetListHandler>();
+        Svc.Register<CrystallizeListHandler>();
         Svc.Register<AllaganToolsIpc>();
         Svc.Register<IpcProvider>();
         Svc.Register<ChatAlerts>();
