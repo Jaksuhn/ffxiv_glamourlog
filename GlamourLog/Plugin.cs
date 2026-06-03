@@ -38,10 +38,6 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
         Svc.Register<IpcProvider>();
         Svc.Register<ChatAlerts>();
 
-        // these are lazy-loaded so gotta call them here since they aren't called elsewhere
-        _ = Svc.Get<IpcProvider>();
-        _ = Svc.Get<ChatAlerts>();
-
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
         await Svc.Framework.RunOnFrameworkThread(Svc.Register<WindowsService>);
         Svc.Interface.UiBuilder.OpenMainUi += Svc.Get<WindowsService>().ToggleMainWindow;
