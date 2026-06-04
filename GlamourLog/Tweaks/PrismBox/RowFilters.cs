@@ -21,15 +21,5 @@ internal sealed class HideArmoireEligibleFilter : IPrismBoxRowFilter {
 
 internal sealed class HideNonOutfitItemsFilter : IPrismBoxRowFilter {
     public bool IsEnabled => C.HideCrystallizeNonOutfitItems;
-    public bool ShouldHide(uint itemId) {
-        itemId = ItemUtil.GetBaseId(itemId).ItemId;
-        if (itemId == 0)
-            return false;
-
-        var catalog = Svc.Get<CatalogService>();
-        if (!catalog.CatalogReady)
-            return false;
-
-        return !catalog.IsMirageOutfitPiece(itemId);
-    }
+    public bool ShouldHide(uint itemId) => !MirageStoreSetItemLookup.TryGetRow(itemId, out _);
 }

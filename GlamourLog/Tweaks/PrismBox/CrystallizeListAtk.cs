@@ -21,23 +21,28 @@ internal static unsafe class CrystallizeListAtk {
     }
 
     internal static int InferItemCount(AtkValue[] atkValues) {
-        var maxIndex = -1;
+        var slotCount = 0;
         for (var itemIndex = 0; itemIndex < 200; itemIndex++) {
             var baseIndex = UintValuesOffset + itemIndex * UintValuesPerItem;
-            if (baseIndex >= atkValues.Length)
+            if (baseIndex + UintValuesPerItem > atkValues.Length)
                 break;
 
-            for (var u = 0; u < UintValuesPerItem; u++) {
-                ref var value = ref atkValues[baseIndex + u];
-                if (value.Type != AtkValueType.UInt)
-                    continue;
+            if (!SlotHasItemData(atkValues, baseIndex))
+                break;
 
-                if (value.UInt < 200)
-                    maxIndex = Math.Max(maxIndex, (int)value.UInt);
-            }
+            slotCount = itemIndex + 1;
         }
 
-        return maxIndex >= 0 ? maxIndex + 1 : 0;
+        return slotCount;
+    }
+
+    private static bool SlotHasItemData(AtkValue[] atkValues, int baseIndex) {
+        for (var u = 0; u < UintValuesPerItem; u++) {
+            if (atkValues[baseIndex + u].Type != AtkValueType.Undefined)
+                return true;
+        }
+
+        return false;
     }
 
     internal static CrystallizeAtkSlot[] Parse(AtkValue[] atkValues, int itemCount, int categoryRowCount = 0) {
@@ -80,7 +85,18 @@ internal static unsafe class CrystallizeListAtk {
     internal static int CountVisibleSlots(CrystallizeAtkSlot[] layout, Func<int, bool> shouldHideSource, bool includeHeaders)
         => BuildKeepSlots(layout, shouldHideSource, layout.Length, includeHeaders).Count;
 
-    internal static int ApplyToBuffer(AtkValue[] atkValues, CrystallizeAtkSlot[] layout, Func<int, bool> shouldHideSource, int uintValuesOffset, int stringValuesOffset, int uintValuesPerItem, int stringValuesPerItem, int nativeItemCount, bool includeHeaders, int[]? atkSlotRemap) {
+    internal static int ApplyToBuffer(
+        AtkValue[] atkValues,
+        CrystallizeAtkSlot[] layout,
+        Func<int, bool> shouldHideSource,
+        int uintValuesOffset,
+        int stringValuesOffset,
+        int uintValuesPerItem,
+        int stringValuesPerItem,
+        int nativeItemCount,
+        bool includeHeaders,
+        int[]? atkSlotRemap) {
+
         if (layout.Length == 0)
             return 0;
 
@@ -94,29 +110,92 @@ internal static unsafe class CrystallizeListAtk {
             for (var outSlot = 0; outSlot < keepSlots.Count; outSlot++) {
                 var layoutSlot = keepSlots[outSlot];
                 var atkSrcSlot = ResolveRemap(layoutSlot, atkSlotRemap);
-                if (atkSrcSlot == outSlot)
-                    continue;
-
-                CopyItemBlocks(atkPtr, uintValuesOffset, stringValuesOffset, uintValuesPerItem, stringValuesPerItem,
-                    atkSrcSlot, outSlot, scratch);
+                if (atkSrcSlot != outSlot) {
+                    CopyItemBlocks(atkPtr, uintValuesOffset, stringValuesOffset, uintValuesPerItem, stringValuesPerItem,
+                        atkSrcSlot, outSlot, scratch);
+                }
             }
 
             var leafIndex = 0;
             for (var outSlot = 0; outSlot < keepSlots.Count; outSlot++) {
-                var srcSlot = keepSlots[outSlot];
-                if (!layout[srcSlot].IsLeaf)
+                var layoutSlot = keepSlots[outSlot];
+                ref readonly var entry = ref layout[layoutSlot];
+                if (!entry.IsLeaf)
                     continue;
 
-                WriteLeafIndex(atkPtr, uintValuesOffset, uintValuesPerItem, outSlot, layout[srcSlot], leafIndex++);
+                WriteLeafIndex(atkPtr, uintValuesOffset, uintValuesPerItem, outSlot, entry, leafIndex++);
             }
+
+            var clearThrough = Math.Max(slotLimit, layout.Length);
+            ClearTrailingSlots(atkPtr, uintValuesOffset, stringValuesOffset, uintValuesPerItem, stringValuesPerItem,
+                keepSlots.Count, clearThrough);
         }
 
         return keepSlots.Count;
     }
 
+    private static void ClearTrailingSlots(
+        AtkValue* atkValues,
+        int uintValuesOffset,
+        int stringValuesOffset,
+        int uintValuesPerItem,
+        int stringValuesPerItem,
+        int firstClearedSlot,
+        int lastSlot) {
+
+        var empty = default(AtkValue);
+        for (var slot = firstClearedSlot; slot < lastSlot; slot++) {
+            for (var u = 0; u < uintValuesPerItem; u++)
+                atkValues[uintValuesOffset + slot * uintValuesPerItem + u] = empty;
+        }
+    }
+
     internal static bool IsRealHeader(CrystallizeAtkSlot entry)
         => !entry.IsLeaf && entry.ItemType is AtkComponentTreeListItemType.GroupHeader
             or AtkComponentTreeListItemType.CollapsibleGroupHeader;
+
+    internal static bool IsHeaderType(uint value)
+        => value is (uint)AtkComponentTreeListItemType.GroupHeader
+            or (uint)AtkComponentTreeListItemType.CollapsibleGroupHeader;
+
+    internal static bool IsLeafType(uint value)
+        => value is (uint)AtkComponentTreeListItemType.Leaf
+            or (uint)AtkComponentTreeListItemType.LastLeafInGroup;
+
+    internal static void CopySlotToTreeItem(AtkValue[] atkValues, int slot, AtkComponentTreeListItem* item) {
+        var uintBase = UintValuesOffset + slot * UintValuesPerItem;
+        var uints = item->UIntValues;
+        for (var u = 0; u < UintValuesPerItem; u++) {
+            var value = ReadUIntAt(atkValues, uintBase + u);
+            if (value == uint.MaxValue)
+                continue;
+
+            if ((uint)u < (uint)uints.Count)
+                uints[u] = value;
+        }
+
+        var strIndex = StringValuesOffset + slot * StringValuesPerItem;
+        if ((uint)strIndex >= (uint)atkValues.Length)
+            return;
+
+        ref var atkString = ref atkValues[strIndex];
+        if (atkString.Type is not (AtkValueType.String or AtkValueType.ManagedString or AtkValueType.WideString or AtkValueType.ConstString))
+            return;
+
+        var strings = item->StringValues;
+        if (strings.Count == 0)
+            return;
+
+        strings[0] = atkString.String;
+    }
+
+    internal static uint ReadUIntAt(AtkValue[] atkValues, int index) {
+        if ((uint)index >= (uint)atkValues.Length)
+            return uint.MaxValue;
+
+        ref var value = ref atkValues[index];
+        return value.Type == AtkValueType.UInt ? value.UInt : uint.MaxValue;
+    }
 
     internal static void CopyItemBlocks(AtkValue* atkValues, int uintValuesOffset, int stringValuesOffset, int uintValuesPerItem, int stringValuesPerItem, int fromItem, int toItem, AtkValue[] scratch) {
         for (var i = 0; i < uintValuesPerItem; i++)
@@ -141,7 +220,7 @@ internal static unsafe class CrystallizeListAtk {
         for (var slot = 0; slot < slotLimit; slot++) {
             ref readonly var entry = ref layout[slot];
             if (IsRealHeader(entry)) {
-                if (includeHeaders)
+                if (includeHeaders && SectionHasVisibleLeaf(layout, slot, slotLimit, shouldHideSource))
                     keep.Add(slot);
                 continue;
             }
@@ -152,41 +231,39 @@ internal static unsafe class CrystallizeListAtk {
             keep.Add(slot);
         }
 
-        return includeHeaders ? PruneEmptyHeaders(keep, layout) : keep;
+        return keep;
     }
 
-    private static List<int> PruneEmptyHeaders(List<int> slots, CrystallizeAtkSlot[] layout) {
-        if (slots.Count == 0)
-            return slots;
+    private static bool SectionHasVisibleLeaf(
+        CrystallizeAtkSlot[] layout,
+        int headerIndex,
+        int slotLimit,
+        Func<int, bool> shouldHideSource) {
 
-        var pruned = new List<int>(slots.Count);
-        for (var i = 0; i < slots.Count; i++) {
-            var slot = slots[i];
-            if (!IsRealHeader(layout[slot])) {
-                pruned.Add(slot);
-                continue;
-            }
+        for (var i = headerIndex + 1; i < slotLimit; i++) {
+            ref readonly var entry = ref layout[i];
+            if (IsRealHeader(entry))
+                return false;
 
-            for (var j = i + 1; j < slots.Count; j++) {
-                if (IsRealHeader(layout[slots[j]]))
-                    break;
-
-                if (layout[slots[j]].IsLeaf) {
-                    pruned.Add(slot);
-                    break;
-                }
-            }
+            if (entry.IsLeaf && !shouldHideSource(entry.SourceIndex))
+                return true;
         }
 
-        return pruned;
+        return false;
     }
 
     private static void WriteLeafIndex(AtkValue* atkValues, int uintValuesOffset, int uintValuesPerItem, int outSlot, CrystallizeAtkSlot template, int displayLeafIndex) {
         var baseIndex = uintValuesOffset + outSlot * uintValuesPerItem;
-        if (IsTreeItemType(ReadUInt(atkValues, baseIndex)))
+        if (IsTreeItemType(ReadUInt(atkValues, baseIndex))) {
             atkValues[baseIndex + 1].UInt = (uint)displayLeafIndex;
-        else
-            atkValues[baseIndex].UInt = (uint)displayLeafIndex;
+            return;
+        }
+
+        // Flat rows store the source index in u0; rewrite as a tree leaf so u0 is never 2?4 (header types).
+        atkValues[baseIndex].Type = AtkValueType.UInt;
+        atkValues[baseIndex].UInt = (uint)AtkComponentTreeListItemType.Leaf;
+        atkValues[baseIndex + 1].Type = AtkValueType.UInt;
+        atkValues[baseIndex + 1].UInt = (uint)displayLeafIndex;
     }
 
     private static int ResolveRemap(int layoutSlot, int[]? remap)
