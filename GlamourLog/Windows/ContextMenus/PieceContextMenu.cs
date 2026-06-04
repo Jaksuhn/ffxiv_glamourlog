@@ -20,7 +20,7 @@ internal static unsafe class PieceContextMenu {
             AgentChatLog.Instance()->LinkItem(itemId);
         });
         menu.AddItem(Addon.GetRow(159).Text, () => ImGui.SetClipboardText(itemName));
-        menu.AddItem(Addon.GetRow(2426).Text, () => AgentTryon.TryOn(0, itemId));
+        menu.AddItem(Addon.GetRow(2426).Text, () => AgentTryon.Instance()->TryOnSilent(itemId));
 
         if (Recipe.FirstOrNull(r => r.RowId > 0 && r.ItemResult.RowId == itemId) is { RowId: var id }) {
             menu.AddItem(Addon.GetRow(1412).Text, () => AgentRecipeNote.Instance()->OpenRecipeByRecipeId(id));

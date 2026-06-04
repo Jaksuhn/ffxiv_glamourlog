@@ -9,8 +9,7 @@ internal static unsafe class SetContextMenu {
         GlamourLogAgentContext.AttachContextMenuTo(owner);
         menu.Clear();
         menu.AddItem($"{Addon.GetRow(2426).Text} ({Addon.GetRow(1043).Text})", () => {
-            AgentTryon.Instance()->SaveDeleteOutfit = true;
-            set.Items.ForEach(i => AgentTryon.TryOn(0, i));
+            AgentTryon.Instance()->TryOnSilent(set.Items.ToArray());
         });
         menu.Open();
     }
