@@ -29,6 +29,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private int _nativeCategoryItemCount;
     private int _crystallizeCategory = int.MinValue;
     private bool _needsCategorySnapshot;
+    private bool _needsPristineCapture;
     private bool _addonIsActive;
     private int _pendingFullListCount;
 
@@ -79,26 +80,34 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         }
 
         if (!IsFilteringActive) {
-            if (_categoryRows.Length > 0) {
+            if (_categoryRows.Length > 0)
                 RestoreFullCategory(data);
-                RepopulateTreeList(addon);
-            }
 
-            ClearFilterState();
+            if (_pristineAtkValues.Length > 0)
+                RestoreNativeTreeList(addon);
+
             _pendingFullListCount = _categoryRows.Length > 0 ? _categoryRows.Length : InferCategoryItemCount(data);
+            ResetFilterRuntime();
             addon->OnRefresh(0, null);
             return;
         }
 
-        if (!HasValidCategorySnapshot(data) && !TryCaptureCategorySnapshot(data))
+        if (!HasValidCategorySnapshot(data) && !TryCaptureCategorySnapshot(data)) {
+            _needsCategorySnapshot = true;
+            addon->OnRefresh(0, null);
             return;
+        }
 
-        TryApplyFilterPipeline(addon, data);
+        RebuildFilterMap();
+        if (_pristineAtkValues.Length > 0)
+            RestoreNativeTreeList(addon);
+        else
+            _needsPristineCapture = true;
+
         addon->OnRefresh(0, null);
     }
 
     private void OnPreRefresh(AtkUnitBase* addon) {
-        _ = addon;
         if (!IsFilteringActive)
             return;
 
@@ -106,17 +115,13 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         if (data is null)
             return;
 
-        if (data->CrystallizeCategory != _crystallizeCategory) {
-            _needsCategorySnapshot = true;
-            _atkLayout = [];
-            _nativeAtkSlotCount = 0;
-            _filteredAtkSlotCount = 0;
-        }
-
         EnsureCategoryTracked(data);
 
-        if (HasValidCategorySnapshot(data) && _displayToSource.Length > 0)
-            ProjectVisibleRows(data);
+        if (_pristineAtkValues.Length > 0)
+            RestoreNativeTreeList(addon);
+
+        if (_categoryRows.Length > 0)
+            RestoreFullCategory(data);
     }
 
     private void OnPostRefresh(AtkUnitBase* addon) {
@@ -128,8 +133,6 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         if (data is null)
             return;
 
-        CachePristineAtk(addon->AtkValues, addon->AtkValuesCount, force: true);
-
         if (!IsFilteringActive) {
             if (_pendingFullListCount > 0)
                 _pendingFullListCount = 0;
@@ -138,11 +141,19 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
 
         EnsureCategoryTracked(data);
 
-        if (_needsCategorySnapshot || !HasValidCategorySnapshot(data)) {
+        if (_needsCategorySnapshot) {
             if (!TryCaptureCategorySnapshot(data))
                 return;
-            ParseAtkLayout(addon, force: true);
         }
+
+        if (_needsPristineCapture) {
+            CachePristineAtk(addon->AtkValues, addon->AtkValuesCount, force: true);
+            ParseAtkLayout(addon, force: true);
+            _needsPristineCapture = false;
+        }
+
+        if (_pristineAtkValues.Length == 0 || _atkLayout.Length == 0)
+            return;
 
         TryApplyFilterPipeline(addon, data);
     }
@@ -151,7 +162,9 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         if (!_addonIsActive || !IsAddonUsable(addon) || _categoryRows.Length == 0)
             return false;
 
-        EnsureAtkCached(addon);
+        if (_pristineAtkValues.Length == 0 || _atkLayout.Length == 0)
+            return false;
+
         RebuildFilterMap();
 
         if (_displayToSource.Length == 0) {
@@ -206,6 +219,9 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             return;
 
         var list = (AtkComponentList*)tree;
+        if (list->CallBackInterface is null)
+            return;
+
         tree->LoadAtkValues(
             addon->AtkValuesCount,
             addon->AtkValues,
@@ -254,7 +270,6 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
 
     private bool HasValidCategorySnapshot(MiragePrismPrismBoxData* data)
         => data is not null
-           && !_needsCategorySnapshot
            && data->CrystallizeCategory == _crystallizeCategory
            && _categoryRows.Length > 0;
 
@@ -303,17 +318,6 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             IncludeSectionHeaders);
     }
 
-    private void EnsureAtkCached(AtkUnitBase* addon) {
-        if (_pristineAtkValues.Length == 0 && addon is not null)
-            CachePristineAtk(addon->AtkValues, addon->AtkValuesCount, force: true);
-
-        if (_pristineAtkValues.Length == 0)
-            return;
-
-        if (_atkLayout.Length == 0)
-            ParseAtkLayout(addon);
-    }
-
     private void ParseAtkLayout(AtkUnitBase* addon, bool force = false) {
         if (_pristineAtkValues.Length == 0) {
             _atkLayout = [];
@@ -324,15 +328,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
 
         if (force || _atkLayout.Length == 0) {
             _atkSlotRemap = [];
-            var inferred = CrystallizeListAtk.InferItemCount(_pristineAtkValues);
-            var treeSlots = 0;
-            if (addon is not null) {
-                var tree = GetItemTreeList(addon);
-                if (tree is not null)
-                    treeSlots = ((AtkComponentList*)tree)->GetItemCount();
-            }
-
-            _nativeAtkSlotCount = Math.Max(inferred, treeSlots);
+            _nativeAtkSlotCount = CrystallizeListAtk.InferItemCount(_pristineAtkValues);
             _atkLayout = CrystallizeListAtk.Parse(_pristineAtkValues, _nativeAtkSlotCount, _categoryRows.Length);
         }
     }
@@ -387,6 +383,9 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         CopyAtkValuesToAddon(addon, workingAtk);
 
         var list = (AtkComponentList*)tree;
+        if (list->CallBackInterface is null)
+            return;
+
         tree->LoadAtkValues(
             addon->AtkValuesCount,
             addon->AtkValues,
@@ -460,17 +459,40 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     }
 
     private void EnsureCategoryTracked(MiragePrismPrismBoxData* data) {
-        if (_crystallizeCategory == data->CrystallizeCategory && _nativeCategoryItemCount > 0)
+        if (data->CrystallizeCategory == _crystallizeCategory && _categoryRows.Length > 0)
             return;
 
-        _crystallizeCategory = data->CrystallizeCategory;
+        if (data->CrystallizeCategory != _crystallizeCategory) {
+            _crystallizeCategory = data->CrystallizeCategory;
+            _categoryRows = [];
+            _nativeCategoryItemCount = 0;
+            InvalidatePristineCache();
+            ClearFilterLogSignatures();
+            LogFilterDebug(nameof(EnsureCategoryTracked), $"category -> {_crystallizeCategory}");
+        }
+
+        if (_categoryRows.Length > 0)
+            return;
+
         _nativeCategoryItemCount = InferCategoryItemCount(data);
-        _needsCategorySnapshot = true;
+        if (_nativeCategoryItemCount > 0)
+            _needsCategorySnapshot = true;
+    }
+
+    private void InvalidatePristineCache() {
+        _needsPristineCapture = true;
+        _pristineAtkValues = [];
+        _atkLayout = [];
+        _nativeAtkSlotCount = 0;
+        _filteredAtkSlotCount = 0;
+    }
+
+    private void ClearFilterLogSignatures() {
         _lastFilterSummarySignature = null;
         _lastPreFilterSignature = null;
         _lastPostFilterSignature = null;
         _lastHiddenItemsSignature = null;
-        LogFilterDebug(nameof(EnsureCategoryTracked), $"category -> {_crystallizeCategory} nativeRows={_nativeCategoryItemCount}");
+        _lastApplyPipelineSignature = null;
     }
 
     private void CaptureCategorySnapshot(MiragePrismPrismBoxData* data) {
@@ -532,6 +554,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             RestoreFullCategory(data);
 
         _needsCategorySnapshot = true;
+        InvalidatePristineCache();
         addon->OnRefresh(0, null);
     }
 
@@ -550,6 +573,12 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         return true;
     }
 
+    private void ResetFilterRuntime() {
+        _displayToSource = [];
+        _filteredAtkSlotCount = 0;
+        ClearFilterLogSignatures();
+    }
+
     private void ClearFilterState() {
         _categoryRows = [];
         _displayToSource = [];
@@ -561,6 +590,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         _nativeCategoryItemCount = 0;
         _crystallizeCategory = int.MinValue;
         _needsCategorySnapshot = false;
+        _needsPristineCapture = false;
         _pendingFullListCount = 0;
         _addonIsActive = false;
         _prismBoxItemIdsInitialized = false;
