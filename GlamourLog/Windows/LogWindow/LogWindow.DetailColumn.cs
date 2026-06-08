@@ -276,7 +276,7 @@ internal unsafe partial class LogWindow {
         if (ReferenceEquals(_selectedSet, set))
             return;
 
-        var targetCategory = Svc.Get<CatalogService>().GetCategoryBucketKey(set);
+        var targetCategory = AllCategoryId;
         if (targetCategory != _selectedCategoryId) {
             _selectedCategoryId = targetCategory;
             ClearSetSearchIfActive();

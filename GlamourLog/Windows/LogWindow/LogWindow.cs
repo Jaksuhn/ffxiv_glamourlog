@@ -13,6 +13,7 @@ namespace GlamourLog;
 internal unsafe partial class LogWindow : NativeAddon {
     private readonly FilterWindow _filterWindow;
     private readonly List<string> _categoryPaneOrder = [];
+    private const string AllCategoryId = "All";
 
     private ResNode? _midListHeader;
     private SetListExportControlNode? _setListExportControl;
@@ -60,7 +61,7 @@ internal unsafe partial class LogWindow : NativeAddon {
 
     public LogWindow(FilterWindow filterWindow) {
         _filterWindow = filterWindow;
-        _selectedCategoryId = Svc.Get<CatalogService>().UncategorizedTab.Name;
+        _selectedCategoryId = AllCategoryId;
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
         _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
         DisableClose = C.DisableClose;

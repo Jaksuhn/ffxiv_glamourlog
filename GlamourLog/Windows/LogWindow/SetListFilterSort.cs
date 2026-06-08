@@ -6,7 +6,7 @@ namespace GlamourLog.Windows.LogWindow;
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {
     public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, OwnershipSnapshot snap) {
-        var rows = searchTrimmed.Length > 0 ? [.. Svc.Get<CatalogService>().GlamourSets] : categoryRows;
+        var rows = categoryRows;
 
         if (C.HideCompleted)
             rows = [.. rows.Where(r => !snap.OwnedSets.Contains(r))];

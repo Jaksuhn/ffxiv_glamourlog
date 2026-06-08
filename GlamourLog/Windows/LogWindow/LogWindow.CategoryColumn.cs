@@ -7,7 +7,7 @@ namespace GlamourLog;
 
 internal unsafe partial class LogWindow {
     private List<string> BuildOrderedCategoryPaneList() {
-        var r = new List<string> { Svc.Get<CatalogService>().UncategorizedTab.Name };
+        var r = new List<string> { AllCategoryId, Svc.Get<CatalogService>().UncategorizedTab.Name };
         foreach (var (category, _) in Svc.Get<CatalogService>().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
             r.Add(category.Name);
         r.Add(Svc.Get<CatalogService>().MiscArmoireTab.Name);
@@ -101,7 +101,9 @@ internal unsafe partial class LogWindow {
     }
 
     private List<GlamourSet> CategoryRows(string categoryId)
-        => Svc.Get<CatalogService>().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
+        => categoryId == AllCategoryId
+            ? [.. Svc.Get<CatalogService>().GlamourSets]
+            : Svc.Get<CatalogService>().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
 
     private void SyncCategoryPaneToDataVersion() {
         if (_categoryListNode is null)
