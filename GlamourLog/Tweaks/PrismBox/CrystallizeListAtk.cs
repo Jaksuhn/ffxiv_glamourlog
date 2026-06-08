@@ -1,6 +1,13 @@
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.PrismBox;
+
+// Low-level helpers for the MiragePrismPrismBoxCrystallize addon ATK value buffer.
+// The game's tree list (node 11) is backed by a flat AtkValue[] on the addon: uint blocks per slot
+// (type + source index + item fields) plus optional string blocks. CrystallizeListHandler snapshots
+// that buffer, parses slot structure here, compacts kept slots, and reloads via LoadAtkValues.
 
 internal readonly struct CrystallizeAtkSlot {
     internal bool IsLeaf { get; init; }
@@ -9,6 +16,7 @@ internal readonly struct CrystallizeAtkSlot {
 }
 
 internal static unsafe class CrystallizeListAtk {
+    // Offsets and strides match MiragePrismPrismBoxCrystallize. Do not guess ? wrong values corrupt slots.
     internal const int UintValuesOffset = 2;
     internal const int StringValuesOffset = 1682;
     internal const int UintValuesPerItem = 6;
@@ -36,6 +44,51 @@ internal static unsafe class CrystallizeListAtk {
         return slotCount;
     }
 
+    // InferItemCount scans until the first empty slot; when switching categories the addon buffer can still
+    // contain populated slots from the previous tab. Stop at the first leaf whose source index is out of range.
+    internal static int InferBoundedItemCount(AtkValue[] atkValues, int inferredCount, int categoryRowCount, bool includeHeaders) {
+        if (inferredCount <= 0 || categoryRowCount <= 0)
+            return inferredCount;
+
+        var validCount = 0;
+        for (var itemIndex = 0; itemIndex < inferredCount; itemIndex++) {
+            var baseIndex = UintValuesOffset + itemIndex * UintValuesPerItem;
+            if (baseIndex + UintValuesPerItem > atkValues.Length)
+                break;
+            if (!SlotHasItemData(atkValues, baseIndex))
+                break;
+
+            var u0 = ReadUInt(atkValues, baseIndex);
+            var u1 = ReadUInt(atkValues, baseIndex + 1);
+            if (IsTreeItemType(u0)) {
+                if (IsLeafType(u0)) {
+                    if (!IsValidSourceIndex((int)u1, categoryRowCount))
+                        break;
+                } else if (IsHeaderType(u0)) {
+                    if (!includeHeaders)
+                        break;
+                } else {
+                    break;
+                }
+            } else if (!IsValidSourceIndex((int)u0, categoryRowCount)) {
+                break;
+            }
+
+            validCount = itemIndex + 1;
+        }
+
+        return validCount > 0 ? validCount : inferredCount;
+    }
+
+    internal static void ClearSlots(AtkValue[] atkValues, int firstSlot, int lastSlot) {
+        if (firstSlot >= lastSlot)
+            return;
+        fixed (AtkValue* atkPtr = atkValues) {
+            ClearTrailingSlots(atkPtr, UintValuesOffset, StringValuesOffset, UintValuesPerItem, StringValuesPerItem,
+                firstSlot, lastSlot);
+        }
+    }
+
     private static bool SlotHasItemData(AtkValue[] atkValues, int baseIndex) {
         for (var u = 0; u < UintValuesPerItem; u++) {
             if (atkValues[baseIndex + u].Type != AtkValueType.Undefined)
@@ -45,6 +98,7 @@ internal static unsafe class CrystallizeListAtk {
         return false;
     }
 
+    // Each slot is either a tree row (u0 = AtkComponentTreeListItemType) or a legacy flat row (u0 = source index).
     internal static CrystallizeAtkSlot[] Parse(AtkValue[] atkValues, int itemCount, int categoryRowCount = 0) {
         if (itemCount <= 0)
             return [];
@@ -82,26 +136,29 @@ internal static unsafe class CrystallizeListAtk {
         return slots;
     }
 
-    internal static int CountVisibleSlots(CrystallizeAtkSlot[] layout, Func<int, bool> shouldHideSource, bool includeHeaders)
-        => BuildKeepSlots(layout, shouldHideSource, layout.Length, includeHeaders).Count;
-
+    // Remove hidden slots from a working copy of the addon ATK buffer. Returns the new slot count.
+    // Caller reloads the tree with LoadAtkValues using that count ? we do not patch the live addon buffer
+    // until the handler clones and passes the result to LoadTreeFromAtkSnapshot.
     internal static int ApplyToBuffer(
         AtkValue[] atkValues,
         CrystallizeAtkSlot[] layout,
-        Func<int, bool> shouldHideSource,
+        Func<int, bool> shouldHideLeaf,
         int uintValuesOffset,
         int stringValuesOffset,
         int uintValuesPerItem,
         int stringValuesPerItem,
         int nativeItemCount,
         bool includeHeaders,
-        int[]? atkSlotRemap) {
+        HashSet<int>? visibleSources = null,
+        Func<int, bool>? shouldExcludeSource = null) {
 
         if (layout.Length == 0)
             return 0;
 
         var slotLimit = nativeItemCount > 0 ? Math.Min(layout.Length, nativeItemCount) : layout.Length;
-        var keepSlots = BuildKeepSlots(layout, shouldHideSource, slotLimit, includeHeaders);
+        var keepSlots = BuildKeepSlots(layout, shouldHideLeaf, slotLimit, includeHeaders, visibleSources, shouldExcludeSource);
+        if (includeHeaders)
+            PruneEmptySectionHeaders(keepSlots, layout);
         if (keepSlots.Count == 0)
             return 0;
 
@@ -109,10 +166,9 @@ internal static unsafe class CrystallizeListAtk {
             var scratch = new AtkValue[Math.Max(uintValuesPerItem, stringValuesPerItem)];
             for (var outSlot = 0; outSlot < keepSlots.Count; outSlot++) {
                 var layoutSlot = keepSlots[outSlot];
-                var atkSrcSlot = ResolveRemap(layoutSlot, atkSlotRemap);
-                if (atkSrcSlot != outSlot) {
+                if (layoutSlot != outSlot) {
                     CopyItemBlocks(atkPtr, uintValuesOffset, stringValuesOffset, uintValuesPerItem, stringValuesPerItem,
-                        atkSrcSlot, outSlot, scratch);
+                        layoutSlot, outSlot, scratch);
                 }
             }
 
@@ -189,6 +245,99 @@ internal static unsafe class CrystallizeListAtk {
         strings[0] = atkString.String;
     }
 
+    internal static bool TryReadCategoryRow(
+        AtkValue[] atkValues,
+        int slot,
+        CrystallizeAtkSlot entry,
+        out PrismBoxCrystallizeItem row) {
+        row = default;
+        var baseIndex = UintValuesOffset + slot * UintValuesPerItem;
+        if (baseIndex + 5 >= atkValues.Length || !entry.IsLeaf)
+            return false;
+        if (!TryReadCategoryRowFields(atkValues, slot, IsTreeItemType(ReadUInt(atkValues, baseIndex)), out var inventory, out var itemSlot, out var itemId))
+            return false;
+        row = new PrismBoxCrystallizeItem {
+            Inventory = inventory,
+            Slot = itemSlot,
+            ItemId = itemId,
+        };
+        return true;
+    }
+
+    internal static bool TryReadCategoryRowFromTreeItem(
+        AtkComponentTreeListItem* item,
+        CrystallizeAtkSlot entry,
+        out PrismBoxCrystallizeItem row) {
+        row = default;
+        if (item is null || !entry.IsLeaf)
+            return false;
+        var uints = item->UIntValues;
+        if (uints.Count < 4)
+            return false;
+        var isTreeLeaf = IsLeafType(uints[0]);
+        if (!TryReadCategoryRowFieldsFromTreeItem(item, isTreeLeaf, out var inventory, out var itemSlot, out var itemId))
+            return false;
+        row = new PrismBoxCrystallizeItem {
+            Inventory = inventory,
+            Slot = itemSlot,
+            ItemId = itemId,
+        };
+        return true;
+    }
+
+    private static bool TryReadCategoryRowFields(AtkValue[] atkValues, int slot, bool isTreeLeaf, out InventoryType inventory, out int itemSlot, out uint itemId) {
+        inventory = default;
+        itemSlot = 0;
+        itemId = 0;
+        var baseIndex = UintValuesOffset + slot * UintValuesPerItem;
+        if (baseIndex + 5 >= atkValues.Length)
+            return false;
+        if (isTreeLeaf) {
+            inventory = (InventoryType)ReadUInt(atkValues, baseIndex + 2);
+            itemSlot = (int)ReadUInt(atkValues, baseIndex + 3);
+            itemId = ReadUInt(atkValues, baseIndex + 4);
+            if (itemId is 0 or uint.MaxValue)
+                itemId = ReadUInt(atkValues, baseIndex + 5);
+        } else {
+            inventory = (InventoryType)ReadUInt(atkValues, baseIndex + 1);
+            itemSlot = (int)ReadUInt(atkValues, baseIndex + 2);
+            itemId = ReadUInt(atkValues, baseIndex + 3);
+            if (itemId is 0 or uint.MaxValue)
+                itemId = ReadUInt(atkValues, baseIndex + 4);
+        }
+        return itemId is not (0 or uint.MaxValue);
+    }
+
+    private static bool TryReadCategoryRowFieldsFromTreeItem(
+        AtkComponentTreeListItem* item,
+        bool isTreeLeaf,
+        out InventoryType inventory,
+        out int itemSlot,
+        out uint itemId) {
+        inventory = default;
+        itemSlot = 0;
+        itemId = 0;
+        var uints = item->UIntValues;
+        if (uints.Count < 4)
+            return false;
+        if (isTreeLeaf) {
+            if (uints.Count < 5)
+                return false;
+            inventory = (InventoryType)uints[2];
+            itemSlot = (int)uints[3];
+            itemId = uints[4];
+            if (itemId == 0 && uints.Count > 5)
+                itemId = uints[5];
+        } else {
+            inventory = (InventoryType)uints[1];
+            itemSlot = (int)uints[2];
+            itemId = uints[3];
+            if (itemId == 0 && uints.Count > 4)
+                itemId = uints[4];
+        }
+        return itemId != 0;
+    }
+
     internal static uint ReadUIntAt(AtkValue[] atkValues, int index) {
         if ((uint)index >= (uint)atkValues.Length)
             return uint.MaxValue;
@@ -212,20 +361,31 @@ internal static unsafe class CrystallizeListAtk {
             atkValues[stringValuesOffset + toItem * stringValuesPerItem + i] = scratch[i];
     }
 
-    private static List<int> BuildKeepSlots(CrystallizeAtkSlot[] layout, Func<int, bool> shouldHideSource, int slotLimit, bool includeHeaders) {
+    // Walk layout in slot order. Headers are kept only when includeHeaders and the section still has a
+    // visible leaf (checked via visibleSources + shouldExcludeSource, not shouldHideLeaf ? see handler).
+    private static List<int> BuildKeepSlots(
+        CrystallizeAtkSlot[] layout,
+        Func<int, bool> shouldHideLeaf,
+        int slotLimit,
+        bool includeHeaders,
+        HashSet<int>? visibleSources,
+        Func<int, bool>? shouldExcludeSource) {
         if (slotLimit <= 0)
             slotLimit = layout.Length;
+
+        visibleSources ??= [];
+        shouldExcludeSource ??= _ => false;
 
         var keep = new List<int>(layout.Length);
         for (var slot = 0; slot < slotLimit; slot++) {
             ref readonly var entry = ref layout[slot];
             if (IsRealHeader(entry)) {
-                if (includeHeaders && SectionHasVisibleLeaf(layout, slot, slotLimit, shouldHideSource))
+                if (includeHeaders && SectionHasVisibleLeaf(layout, slot, slotLimit, visibleSources, shouldExcludeSource))
                     keep.Add(slot);
                 continue;
             }
 
-            if (!entry.IsLeaf || shouldHideSource(entry.SourceIndex))
+            if (!entry.IsLeaf || shouldHideLeaf(entry.SourceIndex))
                 continue;
 
             keep.Add(slot);
@@ -234,24 +394,51 @@ internal static unsafe class CrystallizeListAtk {
         return keep;
     }
 
+    // Drop section headers that ended up with no kept leaves after filtering (e.g. whole Hands section hidden).
+    internal static List<int> PruneEmptySectionHeaders(List<int> keep, CrystallizeAtkSlot[] layout) {
+        for (var i = keep.Count - 1; i >= 0; i--) {
+            var slot = keep[i];
+            if (!IsRealHeader(layout[slot]))
+                continue;
+            var hasLeaf = false;
+            for (var j = i + 1; j < keep.Count; j++) {
+                if (IsRealHeader(layout[keep[j]]))
+                    break;
+                if (layout[keep[j]].IsLeaf) {
+                    hasLeaf = true;
+                    break;
+                }
+            }
+            if (!hasLeaf)
+                keep.RemoveAt(i);
+        }
+        return keep;
+    }
+
+    // Look ahead from a header for any leaf whose source index is in the visible set and not excluded.
+    // Intentionally does not call shouldHideLeaf ? duplicate suppression must not run during header checks.
     private static bool SectionHasVisibleLeaf(
         CrystallizeAtkSlot[] layout,
         int headerIndex,
         int slotLimit,
-        Func<int, bool> shouldHideSource) {
+        HashSet<int> visibleSources,
+        Func<int, bool> shouldExcludeSource) {
 
         for (var i = headerIndex + 1; i < slotLimit; i++) {
             ref readonly var entry = ref layout[i];
             if (IsRealHeader(entry))
                 return false;
 
-            if (entry.IsLeaf && !shouldHideSource(entry.SourceIndex))
+            if (entry.IsLeaf
+                && visibleSources.Contains(entry.SourceIndex)
+                && !shouldExcludeSource(entry.SourceIndex))
                 return true;
         }
 
         return false;
     }
 
+    // After compaction, leaf u1 values become 0..N-1 display indices for the shortened list.
     private static void WriteLeafIndex(AtkValue* atkValues, int uintValuesOffset, int uintValuesPerItem, int outSlot, CrystallizeAtkSlot template, int displayLeafIndex) {
         var baseIndex = uintValuesOffset + outSlot * uintValuesPerItem;
         if (IsTreeItemType(ReadUInt(atkValues, baseIndex))) {
@@ -265,9 +452,6 @@ internal static unsafe class CrystallizeListAtk {
         atkValues[baseIndex + 1].Type = AtkValueType.UInt;
         atkValues[baseIndex + 1].UInt = (uint)displayLeafIndex;
     }
-
-    private static int ResolveRemap(int layoutSlot, int[]? remap)
-        => remap is { Length: > 0 } r && (uint)layoutSlot < (uint)r.Length ? r[layoutSlot] : layoutSlot;
 
     private static bool IsValidSourceIndex(int sourceIndex, int categoryRowCount)
         => sourceIndex >= 0 && (categoryRowCount <= 0 || sourceIndex < categoryRowCount);

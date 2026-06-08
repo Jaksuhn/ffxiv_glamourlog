@@ -6,38 +6,79 @@ using System.Text;
 
 namespace GlamourLog.Features.PrismBox;
 
+// GlamourLog row filters for the Prism Box crystallize picker (MiragePrismPrismBoxCrystallize).
+//
+// The game builds the list from AgentMiragePrismPrismBox data and renders it on native tree node 11.
+// We cannot replace that UI wholesale: row callbacks, scroll behaviour, and the in-game gearset filter
+// (CrystallizeFilterFlags on the agent) all assume that tree and those agent indices stay wired up.
+//
+// So we keep a pristine category snapshot (_categoryRows), decide which source indices survive our filters
+// (_displayToSource), rewrite the agent buffer to only those rows (ProjectVisibleRows), then compact the
+// native ATK slot buffer and reload node 11 in place (RepopulateDisplayTreeList + CrystallizeListAtk).
+//
+// Refresh is hook-driven (KTK AddonController):
+//   OnPreRefresh  — restore full category only when the agent still holds our filtered projection;
+//                   skip restore after crystallize / PrismBoxItemIds changes so we never resurrect removed rows
+//   native refresh — game rebuilds ATK + tree from agent (respects CrystallizeFilterFlags)
+//   OnPostRefresh — capture that native output, optionally refresh _categoryRows, apply our filters
+//
+// We do not drive a separate duplicate tree for display anymore. Duplicate-tree helpers remain for
+// callback wiring experiments, but SetFilteredTreeActive always leaves node 11 visible and filtered.
 internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private const string AddonName = "MiragePrismPrismBoxCrystallize";
     private const int MaxCategoryItems = 140;
     private const uint ItemTreeListNodeId = 11;
-    private const int InventoryCategory = 0;
+    private const uint FilteredTreeNodeIdOffset = 10_000;
     private const int MaxHiddenItemLogLines = 48;
     private const int PrismBoxItemIdCount = 800;
 
     private readonly IPrismBoxRowFilter[] _filters;
-    private readonly uint[] _prismBoxItemIdsSnapshot = new uint[PrismBoxItemIdCount];
-    private bool _prismBoxItemIdsInitialized;
-    private string? _lastFilterSummarySignature;
-    private string? _lastPreFilterSignature;
-    private string? _lastPostFilterSignature;
-    private string? _lastHiddenItemsSignature;
-    private string? _lastApplyPipelineSignature;
     private readonly AddonController<AtkUnitBase> _addonController;
+    private readonly uint[] _prismBoxItemIdsSnapshot = new uint[PrismBoxItemIdCount];
 
-    private PrismBoxCrystallizeItem[] _categoryRows = [];
-    private int[] _displayToSource = [];
-    private int _nativeCategoryItemCount;
-    private int _crystallizeCategory = int.MinValue;
-    private bool _needsCategorySnapshot;
-    private bool _needsPristineCapture;
-    private bool _addonIsActive;
-    private int _pendingFullListCount;
+    // --- category snapshot (source of truth for filter decisions) ---
+    // Indices in _categoryRows match agent CrystallizeItems[] slots for the current category tab.
+    // _displayToSource lists which of those indices should appear after GlamourLog filters run.
 
-    private AtkValue[] _pristineAtkValues = [];
-    private CrystallizeAtkSlot[] _atkLayout = [];
-    private int[] _atkSlotRemap = [];
-    private int _nativeAtkSlotCount;
-    private int _filteredAtkSlotCount;
+    // --- native ATK mirror (source of truth for tree layout) ---
+    // Parsed layout (_atkLayout) maps each ATK slot to header vs leaf and leaf -> source index.
+    // Filtering compacts slots in a clone, then LoadTreeFromAtkSnapshot pushes into node 11.
+
+    // --- in-game gearset filter (CrystallizeFilterFlags) ---
+    // Tracked separately from our filters. When it toggles, row count and ATK layout change;
+    // we recapture _categoryRows from native output instead of restoring the old snapshot first.
+
+    // --- duplicate tree (legacy; not used for final display) ---
+
+    private bool _prismBoxItemIdsInitialized; // first MirageManager.PrismBoxItemIds baseline captured
+    private byte _crystallizeFilterFlagsSnapshot = byte.MaxValue; // last seen agent CrystallizeFilterFlags (gearset filter)
+    private string? _lastFilterSummarySignature; // log dedupe: RebuildFilterMap summary
+    private string? _lastPreFilterSignature; // log dedupe: full snapshot item list
+    private string? _lastPostFilterSignature; // log dedupe: visible item list
+    private string? _lastHiddenItemsSignature; // log dedupe: per-row hide reasons
+    private string? _lastApplyPipelineSignature; // log dedupe: post-apply slot counts
+    private string? _lastFilterOffStateSignature; // log dedupe: filters-disabled tree state
+    private string? _lastFilterOnStateSignature; // log dedupe: filters-enabled tree state
+    private PrismBoxCrystallizeItem[] _categoryRows = []; // full tab snapshot; index = agent source slot
+    private int[] _displayToSource = []; // filtered source indices that should appear
+    private int _nativeCategoryItemCount; // row count inferred at category track time
+    private int _crystallizeCategory = int.MinValue; // agent CrystallizeCategory tab id
+    private bool _needsCategorySnapshot; // recapture _categoryRows on next PostRefresh
+    private bool _crystallizeFilterFlagsChangedThisRefresh; // gearset filter toggled this refresh cycle
+    private int _refreshRecursionDepth; // guard against re-entrant OnRefresh during filter repair
+    private AtkValue[] _nativeAtkSnapshot = []; // copy of addon ATK buffer after native refresh
+    private CrystallizeAtkSlot[] _atkLayout = []; // parsed header/leaf + source index per ATK slot
+    private int _nativeAtkSlotCount; // populated slot count in _nativeAtkSnapshot
+    private int _filteredAtkSlotCount; // slot count after ApplyToBuffer compaction
+    private short _nativeListItemHeight; // cached row height from native list (for duplicate tree sync)
+    private short _nativeListHeight; // cached viewport height from native list
+    private AtkResNode* _nativeTreeResNode; // node 11 — the tree we filter in place
+    private AtkComponentTreeList* _nativeTreeList;
+    private AtkResNode* _filteredTreeResNode; // duplicated node (legacy; not shown)
+    private AtkComponentTreeList* _filteredTreeList;
+    private bool _filteredTreeReady; // duplicate tree node exists and is wired
+    private bool _filteredTreeDisplayed; // unused; display always stays on native
+    private uint _duplicateTreeNodeId; // cached node id for duplicate tree lookup
 
     public CrystallizeListHandler() {
         _filters = [
@@ -45,9 +86,9 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             new HideArmoireEligibleFilter(),
             new HideNonOutfitItemsFilter(),
         ];
-
         _addonController = new AddonController<AtkUnitBase> {
             AddonName = AddonName,
+            OnSetup = OnSetup,
             OnPreRefresh = OnPreRefresh,
             OnRefresh = OnPostRefresh,
             OnUpdate = OnAddonUpdate,
@@ -57,20 +98,21 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     }
 
     public void Dispose() {
-        _addonIsActive = false;
         _addonController.Dispose();
         ClearFilterState();
     }
 
     private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
 
-    private bool IncludeSectionHeaders
-        => _crystallizeCategory != InventoryCategory && _displayToSource.Length > 0;
+    private bool IncludeSectionHeaders => _displayToSource.Length > 0;
 
     internal void OnConfigChanged() {
         Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
     }
 
+    // User toggled a GlamourLog filter in settings. Always restore the full agent category and invalidate
+    // cached ATK so the next refresh rebuilds from an unfiltered native tree — applying on a truncated
+    // filtered tree leaves listLength << snapshot and breaks toggles / dresser updates.
     private void ApplyConfigChange() {
         var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(AddonName);
         var data = GetData();
@@ -78,194 +120,649 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             ClearFilterState();
             return;
         }
-
         if (!IsFilteringActive) {
-            if (_categoryRows.Length > 0)
+            var agentCountBefore = data->CrystallizeItemCount;
+            var snapshotCount = _categoryRows.Length;
+            if (snapshotCount > 0)
                 RestoreFullCategory(data);
-
-            if (_pristineAtkValues.Length > 0)
-                RestoreNativeTreeList(addon);
-
-            _pendingFullListCount = _categoryRows.Length > 0 ? _categoryRows.Length : InferCategoryItemCount(data);
-            ResetFilterRuntime();
+            LogFilterDebug(nameof(ApplyConfigChange),
+                $"filters disabled snapshot={snapshotCount} agentCountBefore={agentCountBefore} agentCountAfter={data->CrystallizeItemCount} restored={(snapshotCount > 0)}");
+            _displayToSource = [];
+            _filteredAtkSlotCount = 0;
+            ClearFilterLogSignatures();
             addon->OnRefresh(0, null);
             return;
         }
-
         if (!HasValidCategorySnapshot(data) && !TryCaptureCategorySnapshot(data)) {
             _needsCategorySnapshot = true;
+            LogFilterDebug(nameof(ApplyConfigChange),
+                $"filters enabled, awaiting category snapshot category={data->CrystallizeCategory} snapshot={_categoryRows.Length}");
             addon->OnRefresh(0, null);
             return;
         }
-
-        RebuildFilterMap();
-        if (_pristineAtkValues.Length > 0)
-            RestoreNativeTreeList(addon);
-        else
-            _needsPristineCapture = true;
-
+        if (_categoryRows.Length > 0)
+            RestoreFullCategory(data);
+        InvalidateNativeAtkCache();
+        _needsCategorySnapshot = _categoryRows.Length > 0;
+        ClearFilterLogSignatures();
+        LogFilterDebug(nameof(ApplyConfigChange),
+            $"filters enabled category={_crystallizeCategory} snapshot={_categoryRows.Length} needsSnapshot={_needsCategorySnapshot}");
         addon->OnRefresh(0, null);
     }
 
-    private void OnPreRefresh(AtkUnitBase* addon) {
-        if (!IsFilteringActive)
-            return;
+    private void OnSetup(AtkUnitBase* addon) {
+        ReleaseFilteredTree(addon);
+        SetFilteredTreeActive(addon, active: false);
+    }
 
+    // Runs before the game's crystallize addon refresh. Our filtered state shrinks CrystallizeItemCount;
+    // unless we put the full snapshot back now, native refresh rebuilds a truncated list and ATK capture
+    // will be wrong on the next filter toggle.
+    private void OnPreRefresh(AtkUnitBase* addon) {
         var data = GetData();
         if (data is null)
             return;
 
-        EnsureCategoryTracked(data);
+        _crystallizeFilterFlagsChangedThisRefresh = false;
+        if (IsFilteringActive) {
+            SetFilteredTreeActive(addon, active: false);
+            EnsureCategoryTracked(data);
+            if (TryDetectCrystallizeFilterFlagsChange(data, nameof(OnPreRefresh))) {
+                InvalidateNativeAtkCache();
+                _needsCategorySnapshot = true;
+                _nativeCategoryItemCount = 0;
+            }
+        }
 
-        if (_pristineAtkValues.Length > 0)
-            RestoreNativeTreeList(addon);
+        if (_categoryRows.Length > 0 && !_crystallizeFilterFlagsChangedThisRefresh) {
+            if (ShouldRestoreFullCategoryBeforeNativeRefresh(data)) {
+                var agentCountBefore = data->CrystallizeItemCount;
+                RestoreFullCategory(data);
+                if (!IsFilteringActive) {
+                    LogFilterDebug(nameof(OnPreRefresh),
+                        $"restored full category before native refresh snapshot={_categoryRows.Length} agentCountBefore={agentCountBefore} agentCountAfter={data->CrystallizeItemCount}");
+                }
+            }
+            return;
+        }
 
-        if (_categoryRows.Length > 0)
-            RestoreFullCategory(data);
+        // CrystallizeFilterFlags just changed (in-game gearset filter). The agent already holds the new
+        // row set; restoring our old snapshot would fight native and desync ATK source indices.
+        if (_categoryRows.Length > 0 && _crystallizeFilterFlagsChangedThisRefresh) {
+            LogFilterDebug(nameof(OnPreRefresh),
+                $"skipped restore (filter flags changed) snapshot={_categoryRows.Length} agentCount={data->CrystallizeItemCount} filterFlags={data->CrystallizeFilterFlags}");
+            return;
+        }
+
+        if (!IsFilteringActive) {
+            LogFilterDebug(nameof(OnPreRefresh),
+                $"no category snapshot to restore agentCount={data->CrystallizeItemCount} inferred={InferCategoryItemCount(data)}");
+        }
     }
 
+    // Runs after native refresh. Capture what the game built, then optionally replace it with our filter.
     private void OnPostRefresh(AtkUnitBase* addon) {
         if (!IsAddonUsable(addon))
             return;
 
-        _addonIsActive = true;
         var data = GetData();
         if (data is null)
             return;
 
-        if (!IsFilteringActive) {
-            if (_pendingFullListCount > 0)
-                _pendingFullListCount = 0;
-            return;
+        _refreshRecursionDepth++;
+        try {
+            OnPostRefreshCore(addon, data);
+        } finally {
+            _refreshRecursionDepth--;
         }
-
-        EnsureCategoryTracked(data);
-
-        if (_needsCategorySnapshot) {
-            if (!TryCaptureCategorySnapshot(data))
-                return;
-        }
-
-        if (_needsPristineCapture) {
-            CachePristineAtk(addon->AtkValues, addon->AtkValuesCount, force: true);
-            ParseAtkLayout(addon, force: true);
-            _needsPristineCapture = false;
-        }
-
-        if (_pristineAtkValues.Length == 0 || _atkLayout.Length == 0)
-            return;
-
-        TryApplyFilterPipeline(addon, data);
     }
 
-    private bool TryApplyFilterPipeline(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
-        if (!_addonIsActive || !IsAddonUsable(addon) || _categoryRows.Length == 0)
-            return false;
+    private void OnPostRefreshCore(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        if (!IsFilteringActive) {
+            ResolveNativeTree(addon);
+            if (_nativeTreeList is not null)
+                RestoreNativeTreeFromSnapshot(addon);
+            SetFilteredTreeActive(addon, active: false);
+            LogFilterOffState(nameof(OnPostRefresh), addon, data);
+            return;
+        }
 
-        if (_pristineAtkValues.Length == 0 || _atkLayout.Length == 0)
-            return false;
+        ResolveNativeTree(addon);
+        EnsureCategoryTracked(data);
+        TryDetectCrystallizeFilterFlagsChange(data, nameof(OnPostRefresh));
+        SetFilteredTreeActive(addon, active: false);
+        CaptureNativeAtkSnapshot(addon);
+        if (_needsCategorySnapshot || _crystallizeFilterFlagsChangedThisRefresh) {
+            if (!TryCaptureCategorySnapshotAfterNative(data)) {
+                LogFilterDebug(nameof(OnPostRefresh), "filter enable aborted (category snapshot unavailable after native refresh)");
+                return;
+            }
+        } else {
+            ParseAtkLayout(force: true);
+        }
+        if (_nativeAtkSnapshot.Length == 0 || _atkLayout.Length == 0 || _categoryRows.Length == 0) {
+            LogFilterDebug(nameof(OnPostRefresh),
+                $"filter enable aborted (nativeAtk={_nativeAtkSnapshot.Length} layout={_atkLayout.Length} snapshot={_categoryRows.Length})");
+            return;
+        }
+        if (IsNativeTreeTruncatedVersusSnapshot(data)) {
+            RestoreFullCategory(data);
+            var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)0;
+            LogFilterDebug(nameof(OnPostRefresh),
+                $"native tree truncated vs snapshot (listLength={listLength} snapshot={_categoryRows.Length}) — requesting refresh");
+            RequestAddonRefresh(addon);
+            return;
+        }
+        ApplyFilterAfterNativeRefresh(addon, data);
+        LogFilterOnState(nameof(OnPostRefresh), addon, data);
+    }
+
+    private void PrepareFilteredTreeForPopulation() {
+        PrepareDuplicateTreeCallbacks();
+    }
+
+    // Core apply path: map -> agent projection -> ATK compact -> reload native tree.
+    private void ApplyFilterAfterNativeRefresh(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        if (_nativeTreeList is null)
+            return;
 
         RebuildFilterMap();
-
         if (_displayToSource.Length == 0) {
-            LogFilterDebug(nameof(TryApplyFilterPipeline), "applying empty category");
+            LogFilterDebug(nameof(ApplyFilterAfterNativeRefresh), "applying empty category");
             ApplyEmptyCategory(data);
-            RepopulateTreeList(addon);
-            return true;
+            RepopulateDisplayTreeList(addon);
+            return;
         }
 
         ProjectVisibleRows(data);
-        RepopulateTreeList(addon);
+        RepopulateDisplayTreeList(addon);
 
-        var tree = GetItemTreeList(addon);
-        var itemsCount = tree is null ? 0 : tree->Items.Count;
-        var listLength = tree is null ? 0 : ((AtkComponentList*)tree)->ListLength;
-        var getItemCount = tree is null ? 0 : ((AtkComponentList*)tree)->GetItemCount();
+        var tree = _nativeTreeList;
+        var itemsCount = tree->Items.Count;
+        var listLength = ((AtkComponentList*)tree)->ListLength;
+        var getItemCount = ((AtkComponentList*)tree)->GetItemCount();
         var applySummary =
-            $"leaves={_displayToSource.Length} nativeAtkSlots={_nativeAtkSlotCount} filteredAtkSlots={_filteredAtkSlotCount} items.Count={itemsCount} listLength={listLength} getItemCount={getItemCount} agentCount={data->CrystallizeItemCount}";
+            $"leaves={_displayToSource.Length} nativeAtkSlots={_nativeAtkSlotCount} filteredAtkSlots={_filteredAtkSlotCount} items.Count={itemsCount} listLength={listLength} getItemCount={getItemCount} agentCount={data->CrystallizeItemCount} filterFlags={_crystallizeFilterFlagsSnapshot} flagsChangedThisRefresh={_crystallizeFilterFlagsChangedThisRefresh}";
         if (applySummary != _lastApplyPipelineSignature) {
             _lastApplyPipelineSignature = applySummary;
-            LogFilterDebug(nameof(TryApplyFilterPipeline), $"applied {applySummary}");
+            LogFilterDebug(nameof(ApplyFilterAfterNativeRefresh), $"applied {applySummary}");
         }
-
-        return true;
     }
 
     private void OnFinalize(AtkUnitBase* addon) {
-        _addonIsActive = false;
         if (addon is not null) {
-            RestoreNativeTreeList(addon);
-
+            SetFilteredTreeActive(addon, active: false);
             var data = GetData();
             if (data is not null && _categoryRows.Length > 0)
                 RestoreFullCategory(data);
         }
-
+        ReleaseFilteredTree(addon);
         ClearFilterState();
     }
 
-    private void RestoreNativeTreeList(AtkUnitBase* addon) {
-        if (_pristineAtkValues.Length == 0 || addon->AtkValues is null)
+    // --- duplicate tree infrastructure (not used for display; kept for callback / layout experiments) ---
+
+    private bool EnsureFilteredTreeList(AtkUnitBase* addon) {
+        ResolveNativeTree(addon);
+        if (_nativeTreeList is null || _nativeTreeResNode is null) {
+            LogFilterDebug(nameof(EnsureFilteredTreeList), "aborted (native tree missing)");
+            return false;
+        }
+        if (_filteredTreeReady && IsCachedFilteredTreeValid())
+            return true;
+        if (_filteredTreeReady && TryResolveFilteredTree(addon, null))
+            return true;
+        if (_filteredTreeReady) {
+            LogFilterDebug(nameof(EnsureFilteredTreeList), "duplicate missing after ready flag, recreating");
+            _filteredTreeReady = false;
+        }
+        if (addon->UldManager.LoadedState != AtkLoadState.Loaded) {
+            LogFilterDebug(nameof(EnsureFilteredTreeList), "aborted (uld not loaded)");
+            return false;
+        }
+        AtkResNode* createdNode = null;
+        if (!TryResolveFilteredTree(addon, null)) {
+            var existing = FindExistingDuplicateTreeNode(addon);
+            if (existing is not null && TryAssignFilteredTreeNode(existing)) {
+                LogFilterDebug(nameof(EnsureFilteredTreeList),
+                    $"reused existing duplicate nodeId={existing->NodeId}");
+            }
+            else {
+                createdNode = addon->UldManager.DuplicateComponentNode(ItemTreeListNodeId, 1, FilteredTreeNodeIdOffset);
+                addon->UldManager.UpdateDrawNodeList();
+                ResolveNativeTree(addon);
+                if (!TryResolveFilteredTree(addon, createdNode)) {
+                    LogFilterDebug(nameof(EnsureFilteredTreeList),
+                        "aborted (duplicate node missing after DuplicateComponentNode)");
+                    return false;
+                }
+            }
+        }
+        if (_nativeTreeResNode != _filteredTreeResNode) {
+            LinkDuplicateOverNative(_nativeTreeResNode, _filteredTreeResNode);
+            PrepareDuplicateTreeCallbacks();
+        }
+        _filteredTreeReady = true;
+        if (_filteredTreeResNode is not null)
+            _duplicateTreeNodeId = _filteredTreeResNode->NodeId;
+        var duplicateBaseId = _filteredTreeResNode is not null ? _filteredTreeResNode->GetBaseNodeId() : 0u;
+        LogFilterDebug(nameof(EnsureFilteredTreeList),
+            $"duplicate ready nativeNodeId={_nativeTreeResNode->NodeId} duplicateNodeId={_filteredTreeResNode->NodeId} duplicateBaseId={duplicateBaseId} sameNode={_nativeTreeResNode == _filteredTreeResNode}");
+        return _filteredTreeResNode != _nativeTreeResNode;
+    }
+
+    private void PrepareDuplicateTreeCallbacks() {
+        if (_filteredTreeList is null || _nativeTreeList is null || _filteredTreeList == _nativeTreeList)
             return;
+        var filteredList = (AtkComponentList*)_filteredTreeList;
+        var nativeList = (AtkComponentList*)_nativeTreeList;
+        if (filteredList->CallBackInterface is null && nativeList->CallBackInterface is not null)
+            filteredList->CallBackInterface = nativeList->CallBackInterface;
+    }
 
-        CopyAtkValuesToAddon(addon, _pristineAtkValues);
+    private bool IsCachedFilteredTreeValid() {
+        if (_filteredTreeResNode is null || _filteredTreeList is null || _nativeTreeResNode is null)
+            return false;
+        if (_filteredTreeResNode == _nativeTreeResNode)
+            return false;
+        return _filteredTreeResNode->GetAsAtkComponentTreeList() is not null;
+    }
 
-        var tree = GetItemTreeList(addon);
+    private void InvalidateTreeNodeCache() {
+        _nativeTreeResNode = null;
+        _nativeTreeList = null;
+        _filteredTreeResNode = null;
+        _filteredTreeList = null;
+    }
+
+    private void RefreshFilteredTreePointers(AtkUnitBase* addon) {
+        if (IsCachedFilteredTreeValid())
+            return;
+        ResolveNativeTree(addon);
+        if (_duplicateTreeNodeId != 0) {
+            var byId = addon->UldManager.SearchNodeById(_duplicateTreeNodeId);
+            if (TryAssignFilteredTreeNode(byId))
+                return;
+        }
+        var existing = FindExistingDuplicateTreeNode(addon);
+        if (TryAssignFilteredTreeNode(existing))
+            return;
+        TryResolveFilteredTree(addon, null);
+    }
+
+    private bool TryAssignFilteredTreeNode(AtkResNode* node) {
+        if (node is null || node == _nativeTreeResNode)
+            return false;
+        var tree = node->GetAsAtkComponentTreeList();
+        if (tree is null)
+            return false;
+        _filteredTreeResNode = node;
+        _filteredTreeList = tree;
+        return true;
+    }
+
+    private void ResolveNativeTree(AtkUnitBase* addon) {
+        var nativeNode = addon->GetNodeById(ItemTreeListNodeId);
+        if (nativeNode is null)
+            return;
+        _nativeTreeResNode = nativeNode;
+        _nativeTreeList = nativeNode->GetAsAtkComponentTreeList();
+    }
+
+    private bool TryResolveFilteredTree(AtkUnitBase* addon, AtkResNode* createdNode) {
+        if (IsCachedFilteredTreeValid())
+            return true;
+
+        ResolveNativeTree(addon);
+        if (_nativeTreeResNode is null)
+            return false;
+
+        if (TryAssignFilteredTreeNode(createdNode))
+            return true;
+
+        if (_duplicateTreeNodeId != 0) {
+            var byCachedId = addon->UldManager.SearchNodeById(_duplicateTreeNodeId);
+            if (TryAssignFilteredTreeNode(byCachedId))
+                return true;
+        }
+
+        var duplicated = addon->UldManager.GetDuplicatedNode(ItemTreeListNodeId, 0, FilteredTreeNodeIdOffset);
+        if (TryAssignFilteredTreeNode(duplicated))
+            return true;
+
+        var byOffsetId = addon->UldManager.SearchNodeById(ItemTreeListNodeId + FilteredTreeNodeIdOffset);
+        if (TryAssignFilteredTreeNode(byOffsetId))
+            return true;
+
+        duplicated = addon->UldManager.GetDuplicatedNode(ItemTreeListNodeId, 0, 1);
+        if (TryAssignFilteredTreeNode(duplicated))
+            return true;
+
+        var existing = FindExistingDuplicateTreeNode(addon);
+        if (TryAssignFilteredTreeNode(existing))
+            return true;
+
+        return IsCachedFilteredTreeValid();
+    }
+
+    private AtkResNode* FindExistingDuplicateTreeNode(AtkUnitBase* addon) {
+        ResolveNativeTree(addon);
+        if (_nativeTreeResNode is null)
+            return null;
+
+        if (_duplicateTreeNodeId != 0) {
+            var byId = addon->UldManager.SearchNodeById(_duplicateTreeNodeId);
+            if (byId is not null && byId != _nativeTreeResNode && byId->GetAsAtkComponentTreeList() is not null)
+                return byId;
+        }
+
+        AtkResNode* best = null;
+        foreach (var nodePtr in addon->UldManager.Nodes) {
+            var node = nodePtr.Value;
+            if (node is null || node == _nativeTreeResNode || !node->IsDuplicatedNode())
+                continue;
+            if (node->GetAsAtkComponentTreeList() is null)
+                continue;
+            if (best is null || node->NodeId > best->NodeId)
+                best = node;
+        }
+        return best;
+    }
+
+    private bool UsesDistinctDuplicateTree
+        => _filteredTreeList is not null && _nativeTreeList is not null && _filteredTreeList != _nativeTreeList;
+
+    private static void LinkDuplicateOverNative(AtkResNode* nativeNode, AtkResNode* duplicateNode) {
+        duplicateNode->X = nativeNode->X;
+        duplicateNode->Y = nativeNode->Y;
+        duplicateNode->ScaleX = nativeNode->ScaleX;
+        duplicateNode->ScaleY = nativeNode->ScaleY;
+        duplicateNode->Width = nativeNode->Width;
+        duplicateNode->Height = nativeNode->Height;
+        duplicateNode->OriginX = nativeNode->OriginX;
+        duplicateNode->OriginY = nativeNode->OriginY;
+        duplicateNode->SetPriority((ushort)(nativeNode->GetPriority() + 1));
+        if (duplicateNode->ParentNode != nativeNode->ParentNode && nativeNode->ParentNode is not null) {
+            duplicateNode->ParentNode = nativeNode->ParentNode;
+            duplicateNode->PrevSiblingNode = nativeNode;
+            duplicateNode->NextSiblingNode = nativeNode->NextSiblingNode;
+            if (nativeNode->NextSiblingNode is not null)
+                nativeNode->NextSiblingNode->PrevSiblingNode = duplicateNode;
+            nativeNode->NextSiblingNode = duplicateNode;
+        }
+    }
+
+    private void SyncFilteredTreePlacement(AtkUnitBase* addon) {
+        if (_nativeTreeResNode is null || _filteredTreeResNode is null)
+            return;
+        LinkDuplicateOverNative(_nativeTreeResNode, _filteredTreeResNode);
+        SyncFilteredTreeListMetrics();
+        addon->UldManager.UpdateDrawNodeList();
+    }
+
+    private void SyncFilteredTreeListMetrics() {
+        if (_filteredTreeList is null || _nativeTreeList is null)
+            return;
+        var filteredList = (AtkComponentList*)_filteredTreeList;
+        var nativeList = (AtkComponentList*)_nativeTreeList;
+        filteredList->ListWidth = nativeList->ListWidth;
+        filteredList->ListHeight = nativeList->ListHeight;
+        filteredList->ItemWidth = nativeList->ItemWidth;
+        filteredList->ItemHeight = nativeList->ItemHeight;
+        filteredList->RowStepY = nativeList->RowStepY;
+        filteredList->VisibleRowCount = nativeList->VisibleRowCount;
+        filteredList->NumVisibleRows = nativeList->NumVisibleRows;
+        filteredList->NumVisibleColumns = nativeList->NumVisibleColumns;
+        filteredList->IsVerticalScroll = nativeList->IsVerticalScroll;
+        filteredList->IsScrollBarEnabled = nativeList->IsScrollBarEnabled;
+        filteredList->IsScrollBarVisible = nativeList->IsScrollBarVisible;
+        if (filteredList->ListHeight <= 0 && _filteredTreeResNode is not null)
+            filteredList->ListHeight = (short)_filteredTreeResNode->Height;
+        if (filteredList->ItemHeight <= 1 && nativeList->ItemHeight > 1)
+            filteredList->ItemHeight = nativeList->ItemHeight;
+        else if (filteredList->ItemHeight <= 1 && nativeList->RowStepY > 1)
+            filteredList->ItemHeight = nativeList->RowStepY;
+        else if (filteredList->ItemHeight <= 1 && _nativeListItemHeight > 1)
+            filteredList->ItemHeight = _nativeListItemHeight;
+        if (filteredList->RowStepY <= 1 && nativeList->RowStepY > 1)
+            filteredList->RowStepY = nativeList->RowStepY;
+        if (filteredList->ListHeight <= 0 && _nativeListHeight > 0)
+            filteredList->ListHeight = _nativeListHeight;
+        if (filteredList->ItemHeight <= 1 && filteredList->RowStepY > 1)
+            filteredList->ItemHeight = filteredList->RowStepY;
+        if (filteredList->NumVisibleRows <= 0 && filteredList->ItemHeight > 1 && filteredList->ListHeight > 0)
+            filteredList->NumVisibleRows = (short)(filteredList->ListHeight / filteredList->ItemHeight);
+        if (filteredList->NumVisibleItems <= 0 && filteredList->NumVisibleRows > 0)
+            filteredList->NumVisibleItems = (short)(filteredList->NumVisibleColumns > 0
+                ? filteredList->NumVisibleColumns * filteredList->NumVisibleRows
+                : filteredList->NumVisibleRows);
+    }
+
+    // Always show native node 11. The active parameter is ignored — we filter in place on the native tree.
+    private void SetFilteredTreeActive(AtkUnitBase* addon, bool active) {
+        ResolveNativeTree(addon);
+        _filteredTreeDisplayed = false;
+        ApplyItemTreeVisibility(addon, _nativeTreeResNode);
+        _ = active;
+    }
+
+    private void ApplyItemTreeVisibility(AtkUnitBase* addon, AtkResNode* activeNode) {
+        ResolveNativeTree(addon);
+        foreach (var nodePtr in addon->UldManager.Nodes) {
+            var node = nodePtr.Value;
+            var tree = node is not null ? node->GetAsAtkComponentTreeList() : null;
+            if (tree is null)
+                continue;
+            if (node != _nativeTreeResNode && !node->IsDuplicatedNode())
+                continue;
+            var visible = activeNode is not null && node == activeNode;
+            SetNodeVisible(node, visible);
+            SetTreeScrollBarVisible(tree, visible);
+            SetTreeInteractionEnabled(tree, visible);
+        }
+        addon->UldManager.UpdateDrawNodeList();
+    }
+
+    private static void SetNodeVisible(AtkResNode* node, bool visible) {
+        if (node is null)
+            return;
+        node->ToggleVisibility(visible);
+    }
+
+    private static void SetTreeInteractionEnabled(AtkComponentTreeList* tree, bool enabled) {
         if (tree is null)
             return;
+        ((AtkComponentList*)tree)->IsItemInteractionEnabled = enabled;
+    }
 
-        var nativeCount = CrystallizeListAtk.InferItemCount(_pristineAtkValues);
-        if (nativeCount <= 0)
+    private static void SetTreeScrollBarVisible(AtkComponentTreeList* tree, bool visible) {
+        if (tree is null)
             return;
+        var scrollBar = ((AtkComponentList*)tree)->ScrollBarComponent;
+        if (scrollBar is null)
+            return;
+        SetNodeVisible((AtkResNode*)scrollBar->OwnerNode, visible);
+    }
 
+    private void RestoreNativeTreeFromSnapshot(AtkUnitBase* addon) {
+        var tree = _nativeTreeList;
+        if (tree is null || _nativeAtkSnapshot.Length == 0 || _nativeAtkSlotCount <= 0)
+            return;
+        LoadTreeFromAtkSnapshot(tree, _nativeAtkSnapshot, _nativeAtkSlotCount, _nativeTreeList);
+        LogFilterDebug(nameof(RestoreNativeTreeFromSnapshot),
+            $"restored native tree slots={_nativeAtkSlotCount} items.Count={tree->Items.Count}");
+        _ = addon;
+    }
+
+    private void ReseedFilteredTreeFromNative() {
+        if (_filteredTreeList is null || _nativeTreeList is null || _nativeAtkSnapshot.Length == 0 || _nativeAtkSlotCount <= 0)
+            return;
+        LoadTreeFromAtkSnapshot(_filteredTreeList, _nativeAtkSnapshot, _nativeAtkSlotCount, _nativeTreeList);
+        LogFilterDebug(nameof(ReseedFilteredTreeFromNative),
+            $"reseeded duplicate slots={_nativeAtkSlotCount} items.Count={_filteredTreeList->Items.Count}");
+    }
+
+    private static void ResetFilteredTreeScroll(AtkComponentTreeList* tree) {
+        if (tree is null)
+            return;
         var list = (AtkComponentList*)tree;
-        if (list->CallBackInterface is null)
-            return;
+        list->FirstVisibleItemIndex = 0;
+        list->PendingFirstVisibleItemIndex = 0;
+        list->ScrollOffset = 0;
+        list->ScrollToItem(0);
+        var scrollBar = list->ScrollBarComponent;
+        if (scrollBar is not null)
+            scrollBar->SetScrollPosition(0);
+    }
 
-        tree->LoadAtkValues(
-            addon->AtkValuesCount,
-            addon->AtkValues,
-            CrystallizeListAtk.UintValuesOffset,
-            CrystallizeListAtk.StringValuesOffset,
-            CrystallizeListAtk.UintValuesPerItem,
-            CrystallizeListAtk.StringValuesPerItem,
-            nativeCount,
-            list->CallBackInterface);
+    private static void ClearFilteredTreeDisplay(AtkComponentTreeList* tree) {
+        if (tree is null)
+            return;
+        var list = (AtkComponentList*)tree;
+        list->SetItemCount(0);
+        ResetFilteredTreeScroll(tree);
+        RefreshTreeListLayout(tree);
+    }
+
+    private static void LoadTreeFromAtkSnapshot(
+        AtkComponentTreeList* tree,
+        AtkValue[] atkSnapshot,
+        int slotCount,
+        AtkComponentTreeList* callbackSource = null) {
+        var list = (AtkComponentList*)tree;
+        var callback = list->CallBackInterface;
+        if (callback is null && callbackSource is not null)
+            callback = ((AtkComponentList*)callbackSource)->CallBackInterface;
+        if (callback is null)
+            return;
+        fixed (AtkValue* snapshotPtr = atkSnapshot) {
+            tree->LoadAtkValues(
+                atkSnapshot.Length,
+                snapshotPtr,
+                CrystallizeListAtk.UintValuesOffset,
+                CrystallizeListAtk.StringValuesOffset,
+                CrystallizeListAtk.UintValuesPerItem,
+                CrystallizeListAtk.StringValuesPerItem,
+                slotCount,
+                callback);
+        }
+        SyncTreeItemsFromAtk(tree, atkSnapshot, slotCount);
+        RefreshTreeListLayout(tree);
+    }
+
+    private void ReleaseFilteredTree(AtkUnitBase* addon) {
+        InvalidateTreeNodeCache();
+        _filteredTreeReady = false;
+        _filteredTreeDisplayed = false;
+        _duplicateTreeNodeId = 0;
+        _ = addon;
     }
 
     private void ApplyEmptyCategory(MiragePrismPrismBoxData* data) {
         _displayToSource = [];
         _filteredAtkSlotCount = 0;
         data->CrystallizeItemCount = 0;
+        data->CrystallizeItemIndex = 0;
         for (var i = 0; i < MaxCategoryItems; i++)
             data->CrystallizeItems[i] = default;
     }
 
+    // Rewrite agent CrystallizeItems[] so display index 0..N-1 maps to filtered source rows.
+    // Native callbacks use these indices after we reload the tree; they must stay consistent with ATK u1.
     private void ProjectVisibleRows(MiragePrismPrismBoxData* data) {
         var visible = _displayToSource.Length;
+        var selectedItemId = data->CrystallizeSelectedItem.ItemId;
         for (var displayIndex = 0; displayIndex < visible; displayIndex++) {
             var sourceIndex = _displayToSource[displayIndex];
             if ((uint)sourceIndex >= (uint)_categoryRows.Length)
                 continue;
-
             data->CrystallizeItems[displayIndex] = _categoryRows[sourceIndex];
         }
-
         data->CrystallizeItemCount = (ushort)visible;
         for (var i = visible; i < MaxCategoryItems; i++)
             data->CrystallizeItems[i] = default;
+        ClampCrystallizeSelection(data, selectedItemId);
     }
 
+    // Inverse of ProjectVisibleRows — used in OnPreRefresh so native refresh sees the full tab again.
     private void RestoreFullCategory(MiragePrismPrismBoxData* data) {
         var count = _categoryRows.Length;
         for (var i = 0; i < count; i++)
             data->CrystallizeItems[i] = _categoryRows[i];
-
         data->CrystallizeItemCount = (ushort)count;
         for (var i = count; i < MaxCategoryItems; i++)
             data->CrystallizeItems[i] = default;
-
         _displayToSource = [.. Enumerable.Range(0, count)];
+    }
+
+    private static void ClampCrystallizeSelection(MiragePrismPrismBoxData* data, uint previousSelectedItemId) {
+        var count = data->CrystallizeItemCount;
+        if (count == 0) {
+            data->CrystallizeItemIndex = 0;
+            return;
+        }
+        if (previousSelectedItemId != 0) {
+            for (ushort i = 0; i < count; i++) {
+                if (data->CrystallizeItems[i].ItemId == previousSelectedItemId) {
+                    data->CrystallizeItemIndex = i;
+                    return;
+                }
+            }
+        }
+        if (data->CrystallizeItemIndex >= count)
+            data->CrystallizeItemIndex = (ushort)(count - 1);
+    }
+
+    // Only restore our snapshot when the agent still holds our filtered projection. After crystallize or
+    // other glamour mutations the game updates the agent first — restoring stale rows causes crashes.
+    private bool ShouldRestoreFullCategoryBeforeNativeRefresh(MiragePrismPrismBoxData* data) {
+        if (_needsCategorySnapshot || _categoryRows.Length == 0)
+            return false;
+        if (MatchesFilteredProjection(data))
+            return true;
+        if (AgentMatchesCategorySnapshot(data))
+            return false;
+        MarkCategorySnapshotStale(data, "agent diverged from category snapshot");
+        return false;
+    }
+
+    private bool MatchesFilteredProjection(MiragePrismPrismBoxData* data) {
+        var agentCount = data->CrystallizeItemCount;
+        if (_displayToSource.Length == 0 || agentCount != _displayToSource.Length)
+            return false;
+        for (var i = 0; i < agentCount; i++) {
+            var sourceIndex = _displayToSource[i];
+            if ((uint)sourceIndex >= (uint)_categoryRows.Length)
+                return false;
+            if (data->CrystallizeItems[i].ItemId != _categoryRows[sourceIndex].ItemId)
+                return false;
+        }
+        return true;
+    }
+
+    private bool AgentMatchesCategorySnapshot(MiragePrismPrismBoxData* data) {
+        var agentCount = InferPopulatedCategoryItemCount(data);
+        if (agentCount != _categoryRows.Length)
+            return false;
+        for (var i = 0; i < agentCount; i++) {
+            if (data->CrystallizeItems[i].ItemId != _categoryRows[i].ItemId)
+                return false;
+        }
+        return true;
+    }
+
+    private void MarkCategorySnapshotStale(MiragePrismPrismBoxData* data, string reason) {
+        if (_needsCategorySnapshot)
+            return;
+        _needsCategorySnapshot = true;
+        LogFilterDebug(nameof(MarkCategorySnapshotStale),
+            $"{reason} category={data->CrystallizeCategory} agentCount={data->CrystallizeItemCount} snapshot={_categoryRows.Length}");
+    }
+
+    private void RequestAddonRefresh(AtkUnitBase* addon) {
+        if (_refreshRecursionDepth > 1)
+            return;
+        addon->OnRefresh(0, null);
     }
 
     private bool HasValidCategorySnapshot(MiragePrismPrismBoxData* data)
@@ -273,6 +770,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
            && data->CrystallizeCategory == _crystallizeCategory
            && _categoryRows.Length > 0;
 
+    // Decide which _categoryRows indices pass GlamourLog filters. Does not touch ATK or the agent yet.
     private void RebuildFilterMap() {
         if (_categoryRows.Length == 0) {
             _displayToSource = [];
@@ -280,15 +778,12 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             LogFilterDebug("RebuildFilterMap", "skipped (empty category snapshot)");
             return;
         }
-
         var visible = new List<int>(_categoryRows.Length);
         for (var i = 0; i < _categoryRows.Length; i++) {
             if (_categoryRows[i].ItemId != 0 && !ShouldExcludeLeaf(_categoryRows[i].ItemId))
                 visible.Add(i);
         }
-
         _displayToSource = [.. visible];
-        UpdateFilteredAtkSlotCount();
         LogFilterRebuildSummary();
     }
 
@@ -298,149 +793,228 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private bool ShouldExcludeSourceIndex(int sourceIndex)
         => (uint)sourceIndex >= (uint)_categoryRows.Length || ShouldExcludeLeaf(_categoryRows[sourceIndex].ItemId);
 
-    private Func<int, bool> BuildAtkHidePredicate()
-        => _displayToSource.Length > 0 ? src => !_displayToSource.Contains(src) : ShouldExcludeSourceIndex;
+    // Predicate for CrystallizeListAtk.BuildKeepSlots leaf pass only.
+    // Duplicate source indices can appear in the ATK layout when CrystallizeFilterFlags is on; keep the
+    // first leaf slot per source index. Header visibility uses a separate path without seenSources —
+    // sharing the predicate caused headers to "consume" a source and hide the real leaf row.
+    private Func<int, bool> BuildShouldHideLeafPredicate(HashSet<int> visibleSources) {
+        var seenSources = new HashSet<int>();
 
-    private void UpdateFilteredAtkSlotCount() {
-        if (_displayToSource.Length == 0) {
-            _filteredAtkSlotCount = 0;
-            return;
-        }
-
-        if (_atkLayout.Length == 0) {
-            _filteredAtkSlotCount = _displayToSource.Length;
-            return;
-        }
-
-        _filteredAtkSlotCount = CrystallizeListAtk.CountVisibleSlots(
-            _atkLayout,
-            BuildAtkHidePredicate(),
-            IncludeSectionHeaders);
+        return sourceIndex => {
+            if (!visibleSources.Contains(sourceIndex))
+                return true;
+            if (ShouldExcludeSourceIndex(sourceIndex))
+                return true;
+            if (!seenSources.Add(sourceIndex))
+                return true;
+            return false;
+        };
     }
 
-    private void ParseAtkLayout(AtkUnitBase* addon, bool force = false) {
-        if (_pristineAtkValues.Length == 0) {
+    private void ParseAtkLayout(bool force = false, int? categoryRowCount = null) {
+        if (_nativeAtkSnapshot.Length == 0) {
             _atkLayout = [];
-            _atkSlotRemap = [];
             _nativeAtkSlotCount = 0;
             return;
         }
-
+        var rowCount = categoryRowCount ?? _categoryRows.Length;
         if (force || _atkLayout.Length == 0) {
-            _atkSlotRemap = [];
-            _nativeAtkSlotCount = CrystallizeListAtk.InferItemCount(_pristineAtkValues);
-            _atkLayout = CrystallizeListAtk.Parse(_pristineAtkValues, _nativeAtkSlotCount, _categoryRows.Length);
+            var inferred = CrystallizeListAtk.InferItemCount(_nativeAtkSnapshot);
+            var includeHeaders = rowCount > 0;
+            _nativeAtkSlotCount = rowCount > 0
+                ? CrystallizeListAtk.InferBoundedItemCount(_nativeAtkSnapshot, inferred, rowCount, includeHeaders)
+                : inferred;
+            _atkLayout = CrystallizeListAtk.Parse(_nativeAtkSnapshot, _nativeAtkSlotCount, rowCount);
         }
     }
 
-    private void CachePristineAtk(AtkValue* source, int count, bool force = false) {
-        if (source is null || count <= 0)
-            return;
-
-        if (!force && _pristineAtkValues.Length > 0 && !_needsCategorySnapshot)
-            return;
-
-        var copy = new AtkValue[count];
-        for (var i = 0; i < count; i++)
-            copy[i] = source[i];
-
-        _pristineAtkValues = copy;
+    // Agent holds the full category but the tree still reflects our last filtered projection.
+    private bool IsNativeTreeTruncatedVersusSnapshot(MiragePrismPrismBoxData* data) {
+        if (_categoryRows.Length <= 0)
+            return false;
+        var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)0;
+        if (listLength <= 0)
+            return false;
+        var agentCount = InferPopulatedCategoryItemCount(data);
+        return agentCount >= _categoryRows.Length && listLength < agentCount;
     }
 
-    private void RepopulateTreeList(AtkUnitBase* addon) {
+    private int GetLayoutMaxSourceIndex() {
+        var maxSource = -1;
+        for (var i = 0; i < _atkLayout.Length; i++) {
+            if (!_atkLayout[i].IsLeaf)
+                continue;
+            if (_atkLayout[i].SourceIndex > maxSource)
+                maxSource = _atkLayout[i].SourceIndex;
+        }
+        return maxSource >= 0 ? maxSource + 1 : 0;
+    }
+
+    // Build or refresh _categoryRows from agent + native ATK after the game has refreshed the list.
+    // Row count is derived from populated agent slots, tree listLength, and (when gearset filter is off)
+    // the highest source index in the layout — gearset-on layouts can carry stale high indices we ignore.
+    private bool TryCaptureCategorySnapshotAfterNative(MiragePrismPrismBoxData* data) {
+        if (_nativeAtkSnapshot.Length == 0)
+            return false;
+
+        // Parse without categoryRowCount cap first so layoutMax reflects all leaf u1 values in the buffer.
+        ParseAtkLayout(force: true, categoryRowCount: 0);
+        if (_atkLayout.Length == 0)
+            return false;
+
+        var layoutMaxSource = GetLayoutMaxSourceIndex();
+        var scannedCount = InferPopulatedCategoryItemCount(data);
+        var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)0;
+        var rowCount = Math.Max(scannedCount, listLength);
+        // Gearset filter off: native list can be sparse but ATK leaves still reference high source indices.
+        // Gearset filter on: trust agent + listLength only — layoutMax often reflects a stale full-size buffer.
+        if (_crystallizeFilterFlagsSnapshot == 0)
+            rowCount = Math.Max(rowCount, layoutMaxSource);
+        if (rowCount <= 0)
+            return false;
+
+        _categoryRows = new PrismBoxCrystallizeItem[rowCount];
+        var populatedFromAgent = Math.Min(scannedCount, rowCount);
+        for (var i = 0; i < populatedFromAgent; i++)
+            _categoryRows[i] = data->CrystallizeItems[i];
+
+        FillMissingCategoryRowsFromNative(data);
+        _nativeCategoryItemCount = rowCount;
+        _needsCategorySnapshot = false;
+        _crystallizeCategory = data->CrystallizeCategory;
+        LogFilterDebug(nameof(TryCaptureCategorySnapshotAfterNative),
+            $"category={_crystallizeCategory} agentRows={rowCount} scanned={scannedCount} layoutMax={layoutMaxSource} listLength={listLength} filterFlags={data->CrystallizeFilterFlags}");
+        ParseAtkLayout(force: true);
+        return _categoryRows.Any(row => row.ItemId != 0);
+    }
+
+    // Agent slots can be empty for rows the game only materialized in ATK/tree (common after gearset toggles).
+    private void FillMissingCategoryRowsFromNative(MiragePrismPrismBoxData* data) {
+        for (var slot = 0; slot < _atkLayout.Length; slot++) {
+            ref readonly var entry = ref _atkLayout[slot];
+            if (!entry.IsLeaf)
+                continue;
+            var sourceIndex = entry.SourceIndex;
+            if (sourceIndex < 0 || sourceIndex >= _categoryRows.Length)
+                continue;
+            if (_categoryRows[sourceIndex].ItemId != 0)
+                continue;
+            if (data->CrystallizeItems[sourceIndex].ItemId != 0) {
+                _categoryRows[sourceIndex] = data->CrystallizeItems[sourceIndex];
+                continue;
+            }
+            if (CrystallizeListAtk.TryReadCategoryRow(_nativeAtkSnapshot, slot, entry, out var row))
+                _categoryRows[sourceIndex] = row;
+            else if (_nativeTreeList is not null
+                     && CrystallizeListAtk.TryReadCategoryRowFromTreeItem(_nativeTreeList->GetItem(slot), entry, out row))
+                _categoryRows[sourceIndex] = row;
+        }
+    }
+
+    private void CaptureNativeAtkSnapshot(AtkUnitBase* addon) {
+        if (addon->AtkValues is null || addon->AtkValuesCount <= 0) {
+            _nativeAtkSnapshot = [];
+            return;
+        }
+        var copy = new AtkValue[addon->AtkValuesCount];
+        for (var i = 0; i < addon->AtkValuesCount; i++)
+            copy[i] = addon->AtkValues[i];
+        _nativeAtkSnapshot = copy;
+        CaptureNativeListMetrics(addon);
+    }
+
+    private void CaptureNativeListMetrics(AtkUnitBase* addon) {
         if (addon is null)
             return;
+        ResolveNativeTree(addon);
+        if (_nativeTreeList is null)
+            return;
+        var list = (AtkComponentList*)_nativeTreeList;
+        if (list->ItemHeight > 1)
+            _nativeListItemHeight = list->ItemHeight;
+        else if (list->RowStepY > 1)
+            _nativeListItemHeight = (short)list->RowStepY;
+        if (list->ListHeight > 0)
+            _nativeListHeight = list->ListHeight;
+        LogFilterDebug(nameof(CaptureNativeListMetrics),
+            $"native itemHeight={list->ItemHeight} rowStepY={list->RowStepY} listHeight={list->ListHeight} numVisible={list->NumVisibleItems} numVisibleRows={list->NumVisibleRows} listLength={list->ListLength}");
+    }
 
-        var tree = GetItemTreeList(addon);
-        if (tree is null || _pristineAtkValues.Length == 0 || _atkLayout.Length == 0) {
-            ApplyFilteredListLayout(addon);
+    // Compact the captured native ATK buffer to kept slots, then LoadAtkValues into node 11.
+    // We clone before ApplyToBuffer because it mutates slot order in the array.
+    private void RepopulateDisplayTreeList(AtkUnitBase* addon) {
+        var tree = _nativeTreeList;
+        if (tree is null) {
             return;
         }
-
-        var workingAtk = CrystallizeListAtk.Clone(_pristineAtkValues);
+        if (_nativeAtkSnapshot.Length == 0 || _atkLayout.Length == 0) {
+            ClearFilteredTreeDisplay(tree);
+            return;
+        }
+        var workingAtk = CrystallizeListAtk.Clone(_nativeAtkSnapshot);
         if (IsFilteringActive) {
+            var visibleSources = new HashSet<int>(_displayToSource);
             _filteredAtkSlotCount = CrystallizeListAtk.ApplyToBuffer(
                 workingAtk,
                 _atkLayout,
-                BuildAtkHidePredicate(),
+                BuildShouldHideLeafPredicate(visibleSources),
                 CrystallizeListAtk.UintValuesOffset,
                 CrystallizeListAtk.StringValuesOffset,
                 CrystallizeListAtk.UintValuesPerItem,
                 CrystallizeListAtk.StringValuesPerItem,
                 _nativeAtkSlotCount,
                 IncludeSectionHeaders,
-                _atkSlotRemap);
+                visibleSources,
+                ShouldExcludeSourceIndex);
         }
-
         if (_filteredAtkSlotCount <= 0) {
-            ApplyFilteredListLayout(addon);
+            var clearedAtk = CrystallizeListAtk.Clone(_nativeAtkSnapshot);
+            var clearThrough = Math.Max(_nativeAtkSlotCount, 1);
+            CrystallizeListAtk.ClearSlots(clearedAtk, 0, clearThrough);
+            LoadTreeFromAtkSnapshot(tree, clearedAtk, 0, _nativeTreeList);
+            ResetFilteredTreeScroll(tree);
+            LogFilterDebug(nameof(RepopulateDisplayTreeList),
+                $"cleared native tree (no filtered slots) clearedSlots={clearThrough} items.Count={tree->Items.Count}");
             return;
         }
-
-        if (addon->AtkValues is null)
-            return;
-
-        CopyAtkValuesToAddon(addon, workingAtk);
-
+        LoadTreeFromAtkSnapshot(tree, workingAtk, _filteredAtkSlotCount, _nativeTreeList);
+        ResetFilteredTreeScroll(tree);
+        RefreshTreeListLayout(tree);
         var list = (AtkComponentList*)tree;
-        if (list->CallBackInterface is null)
-            return;
-
-        tree->LoadAtkValues(
-            addon->AtkValuesCount,
-            addon->AtkValues,
-            CrystallizeListAtk.UintValuesOffset,
-            CrystallizeListAtk.StringValuesOffset,
-            CrystallizeListAtk.UintValuesPerItem,
-            CrystallizeListAtk.StringValuesPerItem,
-            _filteredAtkSlotCount,
-            list->CallBackInterface);
-
-        SyncTreeItemsFromAtk(tree, workingAtk, _filteredAtkSlotCount);
-        RefreshTreeListLayout(addon);
+        LogFilterDebug(nameof(RepopulateDisplayTreeList),
+            $"loaded native filtered slots={_filteredAtkSlotCount} items.Count={tree->Items.Count} listLength={list->ListLength} numVisible={list->NumVisibleItems} itemHeight={list->ItemHeight} listHeight={list->ListHeight} hasRenderer={(nint)list->FirstAtkComponentListItemRenderer != 0} hasScrollBar={(nint)list->ScrollBarComponent != 0}");
+        _ = addon;
     }
 
     private static void SyncTreeItemsFromAtk(AtkComponentTreeList* tree, AtkValue[] atkValues, int slotCount) {
         if (slotCount <= 0)
             return;
-
         var itemCount = Math.Min(slotCount, tree->Items.Count);
         for (var slot = 0; slot < itemCount; slot++) {
             var item = tree->GetItem(slot);
             if (item is null)
                 continue;
-
             CrystallizeListAtk.CopySlotToTreeItem(atkValues, slot, item);
         }
     }
 
-    private static void CopyAtkValuesToAddon(AtkUnitBase* addon, AtkValue[] source) {
-        var count = Math.Min(addon->AtkValuesCount, source.Length);
-        for (var i = 0; i < count; i++)
-            addon->AtkValues[i] = source[i];
-    }
-
-    private void ApplyFilteredListLayout(AtkUnitBase* addon) {
-        var tree = GetItemTreeList(addon);
+    private static void ApplyFilteredListLayout(AtkComponentTreeList* tree) {
         if (tree is null)
             return;
-
         var list = (AtkComponentList*)tree;
-        var count = (short)(_filteredAtkSlotCount > 0 ? _filteredAtkSlotCount : tree->Items.Count);
-        _filteredAtkSlotCount = count;
-        if (count <= 0)
+        var count = (short)(tree->Items.Count > 0 ? tree->Items.Count : list->ListLength);
+        if (count <= 0) {
+            list->SetItemCount(0);
             return;
-
+        }
         list->SetItemCount(0);
         list->SetItemCount(count);
-        RefreshTreeListLayout(addon);
+        RefreshTreeListLayout(tree);
     }
 
-    private static void RefreshTreeListLayout(AtkUnitBase* addon) {
-        var tree = GetItemTreeList(addon);
+    private static void RefreshTreeListLayout(AtkComponentTreeList* tree) {
         if (tree is null)
             return;
-
         var list = (AtkComponentList*)tree;
         list->UpdateListItems();
         list->RecalculateVisibleItems(true);
@@ -453,7 +1027,6 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         EnsureCategoryTracked(data);
         if (InferCategoryItemCount(data) <= 0)
             return false;
-
         CaptureCategorySnapshot(data);
         return true;
     }
@@ -461,27 +1034,23 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private void EnsureCategoryTracked(MiragePrismPrismBoxData* data) {
         if (data->CrystallizeCategory == _crystallizeCategory && _categoryRows.Length > 0)
             return;
-
         if (data->CrystallizeCategory != _crystallizeCategory) {
             _crystallizeCategory = data->CrystallizeCategory;
             _categoryRows = [];
             _nativeCategoryItemCount = 0;
-            InvalidatePristineCache();
+            InvalidateNativeAtkCache();
             ClearFilterLogSignatures();
             LogFilterDebug(nameof(EnsureCategoryTracked), $"category -> {_crystallizeCategory}");
         }
-
         if (_categoryRows.Length > 0)
             return;
-
         _nativeCategoryItemCount = InferCategoryItemCount(data);
         if (_nativeCategoryItemCount > 0)
             _needsCategorySnapshot = true;
     }
 
-    private void InvalidatePristineCache() {
-        _needsPristineCapture = true;
-        _pristineAtkValues = [];
+    private void InvalidateNativeAtkCache() {
+        _nativeAtkSnapshot = [];
         _atkLayout = [];
         _nativeAtkSlotCount = 0;
         _filteredAtkSlotCount = 0;
@@ -493,8 +1062,60 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         _lastPostFilterSignature = null;
         _lastHiddenItemsSignature = null;
         _lastApplyPipelineSignature = null;
+        _lastFilterOffStateSignature = null;
+        _lastFilterOnStateSignature = null;
     }
 
+    private void LogFilterOnState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        ResolveNativeTree(addon);
+        var displayTree = _nativeTreeList;
+        var displayNode = _nativeTreeResNode;
+        var nativeVisible = _nativeTreeResNode is not null && _nativeTreeResNode->IsVisible();
+        var filteredItems = displayTree is not null ? displayTree->Items.Count : -1;
+        var filteredListLength = displayTree is not null ? ((AtkComponentList*)displayTree)->ListLength : -1;
+        var filteredNumVisible = displayTree is not null ? ((AtkComponentList*)displayTree)->NumVisibleItems : (short)-1;
+        var filteredItemHeight = displayTree is not null ? ((AtkComponentList*)displayTree)->ItemHeight : (short)-1;
+        var filteredListHeight = displayTree is not null ? ((AtkComponentList*)displayTree)->ListHeight : (short)-1;
+        var filteredHasRenderer = displayTree is not null && ((AtkComponentList*)displayTree)->FirstAtkComponentListItemRenderer is not null;
+        var filteredHasScrollBar = displayTree is not null && ((AtkComponentList*)displayTree)->ScrollBarComponent is not null;
+        var summary =
+            $"leaves={_displayToSource.Length} agentCount={data->CrystallizeItemCount} " +
+            $"nativeNodeId={(_nativeTreeResNode is not null ? _nativeTreeResNode->NodeId : 0u)} nativeVisible={nativeVisible} " +
+            $"nativeItems={filteredItems} nativeListLength={filteredListLength} nativeNumVisible={filteredNumVisible} " +
+            $"itemHeight={filteredItemHeight} listHeight={filteredListHeight} hasRenderer={filteredHasRenderer} hasScrollBar={filteredHasScrollBar} " +
+            $"displayTarget=native filteredTreeDisplayed={_filteredTreeDisplayed}";
+        if (summary == _lastFilterOnStateSignature)
+            return;
+        _lastFilterOnStateSignature = summary;
+        LogFilterDebug(phase, summary);
+    }
+
+    private void LogFilterOffState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        ResolveNativeTree(addon);
+        RefreshFilteredTreePointers(addon);
+        var sameNode = _nativeTreeResNode is not null && _nativeTreeResNode == _filteredTreeResNode;
+        var nativeVisible = _nativeTreeResNode is not null && _nativeTreeResNode->IsVisible();
+        var filteredVisible = _filteredTreeResNode is not null && _filteredTreeResNode->IsVisible();
+        var nativeItems = _nativeTreeList is not null ? _nativeTreeList->Items.Count : -1;
+        var nativeListLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)-1;
+        var nativeGetItemCount = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->GetItemCount() : -1;
+        var filteredItems = _filteredTreeList is not null ? _filteredTreeList->Items.Count : -1;
+        var filteredListLength = _filteredTreeList is not null ? ((AtkComponentList*)_filteredTreeList)->ListLength : (short)-1;
+        var filteredGetItemCount = _filteredTreeList is not null ? ((AtkComponentList*)_filteredTreeList)->GetItemCount() : -1;
+        var summary =
+            $"snapshot={_categoryRows.Length} agentCount={data->CrystallizeItemCount} inferred={InferCategoryItemCount(data)} " +
+            $"nativeNodeId={(_nativeTreeResNode is not null ? _nativeTreeResNode->NodeId : 0u)} filteredNodeId={(_filteredTreeResNode is not null ? _filteredTreeResNode->NodeId : 0u)} sameNode={sameNode} filteredTreeDisplayed={_filteredTreeDisplayed} " +
+            $"nativeVisible={nativeVisible} nativeItems={nativeItems} nativeListLength={nativeListLength} nativeGetItemCount={nativeGetItemCount} " +
+            $"filteredVisible={filteredVisible} filteredItems={filteredItems} filteredListLength={filteredListLength} filteredGetItemCount={filteredGetItemCount} " +
+            $"nativeAtkSlots={_nativeAtkSlotCount} filteredTreeReady={_filteredTreeReady} addonAtkValues={addon->AtkValuesCount}";
+        if (summary == _lastFilterOffStateSignature)
+            return;
+        _lastFilterOffStateSignature = summary;
+        LogFilterDebug(phase, summary);
+    }
+
+    // Fallback snapshot when PostRefresh has not run yet (e.g. first enable). Prefer
+    // TryCaptureCategorySnapshotAfterNative when native ATK is available — it fills gaps from the tree.
     private void CaptureCategorySnapshot(MiragePrismPrismBoxData* data) {
         var agentCount = _nativeCategoryItemCount > 0 ? _nativeCategoryItemCount : InferCategoryItemCount(data);
         if (agentCount <= 0) {
@@ -503,24 +1124,74 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             _needsCategorySnapshot = false;
             return;
         }
-
-        if (IsFilteringActive && _categoryRows.Length > 0 && agentCount < _categoryRows.Length) {
+        // Agent is already filtered (CrystallizeItemCount < snapshot) — do not overwrite a good snapshot
+        // with a truncated agent read; wait for PreRefresh restore + native refresh instead.
+        if (IsFilteringActive && _categoryRows.Length > 0 && agentCount < _categoryRows.Length && !_needsCategorySnapshot) {
             _needsCategorySnapshot = false;
             LogFilterDebug(nameof(CaptureCategorySnapshot),
                 $"skipped (agentCount={agentCount} < snapshot={_categoryRows.Length})");
             return;
         }
-
         _nativeCategoryItemCount = agentCount;
         _categoryRows = new PrismBoxCrystallizeItem[agentCount];
         for (var i = 0; i < agentCount; i++)
             _categoryRows[i] = data->CrystallizeItems[i];
-
         _crystallizeCategory = data->CrystallizeCategory;
         _needsCategorySnapshot = false;
-
+        SyncCrystallizeFilterFlagsSnapshot(data);
         LogFilterDebug(nameof(CaptureCategorySnapshot),
-            $"category={_crystallizeCategory} agentRows={agentCount}");
+            $"category={_crystallizeCategory} agentRows={agentCount} filterFlags={data->CrystallizeFilterFlags}");
+    }
+
+    private void SyncCrystallizeFilterFlagsSnapshot(MiragePrismPrismBoxData* data) {
+        _crystallizeFilterFlagsSnapshot = data->CrystallizeFilterFlags;
+    }
+
+    private bool TryDetectCrystallizeFilterFlagsChange(MiragePrismPrismBoxData* data, string phase) {
+        if (_crystallizeFilterFlagsSnapshot == byte.MaxValue) {
+            SyncCrystallizeFilterFlagsSnapshot(data);
+            return false;
+        }
+        if (data->CrystallizeFilterFlags == _crystallizeFilterFlagsSnapshot)
+            return false;
+        var previous = _crystallizeFilterFlagsSnapshot;
+        SyncCrystallizeFilterFlagsSnapshot(data);
+        _crystallizeFilterFlagsChangedThisRefresh = true;
+        LogFilterDebug(phase, $"CrystallizeFilterFlags changed {previous} -> {data->CrystallizeFilterFlags}");
+        return true;
+    }
+
+    private bool TryHandleCrystallizeFilterFlagsChange(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        if (!TryDetectCrystallizeFilterFlagsChange(data, nameof(OnAddonUpdate)))
+            return false;
+        ApplyFilterAfterFlagsChange(addon, data);
+        return true;
+    }
+
+    // Gearset filter toggled mid-frame — recapture from current native output and refilter immediately
+    // instead of waiting for the next Pre/Post refresh pair.
+    private void ApplyFilterAfterFlagsChange(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        if (!IsAddonUsable(addon) || !IsFilteringActive)
+            return;
+
+        ResolveNativeTree(addon);
+        SetFilteredTreeActive(addon, active: false);
+        _needsCategorySnapshot = true;
+        _nativeCategoryItemCount = 0;
+        CaptureNativeAtkSnapshot(addon);
+        if (!TryCaptureCategorySnapshotAfterNative(data)) {
+            LogFilterDebug(nameof(ApplyFilterAfterFlagsChange), "aborted (category snapshot unavailable)");
+            RequestAddonRefresh(addon);
+            return;
+        }
+        if (_nativeAtkSnapshot.Length == 0 || _atkLayout.Length == 0) {
+            LogFilterDebug(nameof(ApplyFilterAfterFlagsChange), "aborted (native capture unavailable)");
+            return;
+        }
+
+        ApplyFilterAfterNativeRefresh(addon, data);
+        LogFilterDebug(nameof(ApplyFilterAfterFlagsChange),
+            $"refiltered after flags change nativeAtkSlots={_nativeAtkSlotCount} filteredAtkSlots={_filteredAtkSlotCount} snapshot={_categoryRows.Length} filterFlags={_crystallizeFilterFlagsSnapshot}");
     }
 
     private static MiragePrismPrismBoxData* GetData() {
@@ -529,33 +1200,41 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     }
 
     private static int InferCategoryItemCount(MiragePrismPrismBoxData* data) {
-        if (data->CrystallizeItemCount > 0)
-            return data->CrystallizeItemCount;
+        var populated = InferPopulatedCategoryItemCount(data);
+        if (populated > 0)
+            return populated;
+        return data->CrystallizeItemCount > 0 ? data->CrystallizeItemCount : 0;
+    }
 
+    // Scan for the last non-empty slot — CrystallizeItemCount alone is not reliable while we filter.
+    private static int InferPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
         var lastIndex = -1;
         for (var i = 0; i < MaxCategoryItems; i++) {
             if (data->CrystallizeItems[i].ItemId != 0)
                 lastIndex = i;
         }
-
         return lastIndex >= 0 ? lastIndex + 1 : 0;
     }
 
+    // CrystallizeFilterFlags can change outside refresh; PrismBoxItemIds changes when glamour data updates.
     private void OnAddonUpdate(AtkUnitBase* addon) {
-        if (!_addonIsActive || !IsAddonUsable(addon) || !IsFilteringActive)
+        if (!IsAddonUsable(addon) || !IsFilteringActive)
+            return;
+
+        var data = GetData();
+        if (data is null)
+            return;
+
+        if (TryHandleCrystallizeFilterFlagsChange(addon, data))
             return;
 
         var mirage = MirageManager.Instance();
         if (mirage is null || !TryDetectPrismBoxItemIdsChange(mirage))
             return;
-
-        var data = GetData();
-        if (data is not null && _categoryRows.Length > 0)
-            RestoreFullCategory(data);
-
-        _needsCategorySnapshot = true;
-        InvalidatePristineCache();
-        addon->OnRefresh(0, null);
+        MarkCategorySnapshotStale(data, "PrismBoxItemIds changed");
+        InvalidateNativeAtkCache();
+        ClearFilterLogSignatures();
+        RequestAddonRefresh(addon);
     }
 
     private bool TryDetectPrismBoxItemIdsChange(MirageManager* mirage) {
@@ -565,62 +1244,53 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             _prismBoxItemIdsInitialized = true;
             return false;
         }
-
         if (current.SequenceEqual(_prismBoxItemIdsSnapshot))
             return false;
-
         current.CopyTo(_prismBoxItemIdsSnapshot);
         return true;
-    }
-
-    private void ResetFilterRuntime() {
-        _displayToSource = [];
-        _filteredAtkSlotCount = 0;
-        ClearFilterLogSignatures();
     }
 
     private void ClearFilterState() {
         _categoryRows = [];
         _displayToSource = [];
-        _pristineAtkValues = [];
+        _nativeAtkSnapshot = [];
         _atkLayout = [];
-        _atkSlotRemap = [];
         _nativeAtkSlotCount = 0;
         _filteredAtkSlotCount = 0;
         _nativeCategoryItemCount = 0;
         _crystallizeCategory = int.MinValue;
         _needsCategorySnapshot = false;
-        _needsPristineCapture = false;
-        _pendingFullListCount = 0;
-        _addonIsActive = false;
+        _filteredTreeList = null;
+        _filteredTreeResNode = null;
+        _nativeTreeList = null;
+        _nativeTreeResNode = null;
+        _filteredTreeReady = false;
+        _filteredTreeDisplayed = false;
+        _duplicateTreeNodeId = 0;
         _prismBoxItemIdsInitialized = false;
+        _crystallizeFilterFlagsSnapshot = byte.MaxValue;
         _lastFilterSummarySignature = null;
         _lastPreFilterSignature = null;
         _lastPostFilterSignature = null;
         _lastHiddenItemsSignature = null;
         _lastApplyPipelineSignature = null;
+        _lastFilterOffStateSignature = null;
+        _lastFilterOnStateSignature = null;
     }
 
     private static bool IsAddonUsable(AtkUnitBase* addon)
         => addon is not null && addon->IsVisible;
 
-    private static AtkComponentTreeList* GetItemTreeList(AtkUnitBase* addon) {
-        if (addon is null)
-            return null;
-
-        var node = addon->GetNodeById(ItemTreeListNodeId);
-        return node is null ? null : node->GetAsAtkComponentTreeList();
-    }
-
     private static void LogFilterDebug(string phase, string message)
         => Svc.Log.Information($"[{nameof(CrystallizeListHandler)}.{phase}] {message}");
+
+    // --- debug logging (signature-gated to avoid spamming identical state every frame) ---
 
     private void LogFilterRebuildSummary() {
         var hiddenCount = _categoryRows.Length - _displayToSource.Length;
         var summary = new StringBuilder();
         summary.Append($"category={_crystallizeCategory} snapshot={_categoryRows.Length} visible={_displayToSource.Length} hidden={hiddenCount}");
         summary.Append($" filters=[{DescribeEnabledFilters()}]");
-
         var signature = summary.ToString();
         if (signature != _lastFilterSummarySignature) {
             _lastFilterSummarySignature = signature;
@@ -628,7 +1298,6 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             if (hiddenCount > 0)
                 LogHiddenItemDecisions();
         }
-
         LogPrePostFilterItemSets();
     }
 
@@ -638,7 +1307,6 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             _lastPreFilterSignature = pre;
             LogFilterDebug("pre-filter", pre);
         }
-
         var post = FormatIndexedItemSet(_displayToSource);
         if (post != _lastPostFilterSignature) {
             _lastPostFilterSignature = post;
@@ -651,10 +1319,8 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         foreach (var index in sourceIndices) {
             if ((uint)index >= (uint)_categoryRows.Length)
                 continue;
-
             parts.Add(FormatFilterRow(index, _categoryRows[index].ItemId));
         }
-
         return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
 
@@ -664,20 +1330,15 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             var itemId = _categoryRows[i].ItemId;
             if (!ShouldExcludeLeaf(itemId))
                 continue;
-
             lines.Add($"{FormatFilterRow(i, itemId)} => {DescribeHideReasons(itemId)}");
         }
-
         var signature = string.Join('\n', lines);
         if (signature == _lastHiddenItemsSignature)
             return;
-
         _lastHiddenItemsSignature = signature;
-
         var logCount = Math.Min(lines.Count, MaxHiddenItemLogLines);
         for (var i = 0; i < logCount; i++)
             LogFilterDebug("hidden", lines[i]);
-
         if (lines.Count > logCount)
             LogFilterDebug("hidden", $"... and {lines.Count - logCount} more hidden row(s)");
     }
@@ -697,25 +1358,20 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private string DescribeHideReasons(uint rawItemId) {
         if (rawItemId == 0)
             return "empty slot";
-
         var baseId = ItemUtil.GetBaseId(rawItemId).ItemId;
         var reasons = new List<string>();
         foreach (var filter in _filters) {
             if (!filter.IsEnabled || !filter.ShouldHide(baseId))
                 continue;
-
             reasons.Add(FilterDebugLabel(filter));
         }
-
         if (reasons.Count == 0)
             reasons.Add("no matching filter (unexpected)");
-
         return string.Join(", ", reasons);
     }
 
     private static string FormatFilterRow(int index, uint rawItemId) {
         var ids = FormatItemIds(rawItemId);
-
         try {
             var baseId = ItemUtil.GetBaseId(rawItemId).ItemId;
             var name = Item.GetRow(baseId).Name.ToString().Trim();
