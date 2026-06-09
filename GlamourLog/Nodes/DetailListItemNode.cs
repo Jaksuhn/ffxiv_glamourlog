@@ -4,6 +4,7 @@ using KamiToolKit.Classes;
 using KamiToolKit.Enums;
 using KamiToolKit.Extensions;
 using KamiToolKit.Nodes;
+using Lumina.Text.ReadOnly;
 
 namespace GlamourLog.Nodes;
 
@@ -46,12 +47,17 @@ internal sealed class DetailListRowData {
     public bool IsTopLevelSection { get; init; }
     public SetListRowData? SharedModelRow { get; init; }
     public uint SharedModelItemId { get; init; } // shared model row represents this id for piece filter scope
+    public float SourceChestLabelColumnWidth { get; init; } // duty-wide label column for aligned icon strips; 0 = per-row
 }
 
 internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
     public static float ItemHeight => 30f;
     private const float PieceIconSize = 22f;
     private const float PieceTextBoxHeight = 19f; // ellipsis needs extra height vs line size
+    private const float DutyChestLabelX = 6f;
+    private const float DutyChestLabelPadding = 4f;
+    private const float DutyChestLabelIconGap = 16f;
+    private const float DutyChestLabelMinWidth = 36f;
     private static float PieceIconY => (ItemHeight - PieceIconSize) * 0.5f;
 
     public static Action<uint>? OnPieceLeftClick { get; set; }
@@ -238,10 +244,18 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 float iconOriginX;
                 if (data.SourceIconsOnly)
                     iconOriginX = 4f;
-                else if (data.PrimaryText.Length > 0 && data.SecondaryText.Length == 0) {
-                    const float dutyChestLabelWidth = 56f;
-                    _primary.Size = new Vector2(Math.Min(dutyChestLabelWidth, Math.Max(36f, Width - 72f)), 14f);
-                    iconOriginX = 6f + dutyChestLabelWidth;
+                else if (data.PrimaryText.Length > 0) {
+                    var hasChestType = data.SecondaryText.Length > 0;
+                    var labelWidth = MeasureDutyChestLabelWidth(
+                        data.PrimaryText,
+                        hasChestType ? data.SecondaryText : string.Empty);
+                    var labelColumnWidth = data.SourceChestLabelColumnWidth > 0f
+                        ? data.SourceChestLabelColumnWidth
+                        : labelWidth;
+                    _primary.Size = new Vector2(labelWidth, hasChestType ? 12f : 14f);
+                    if (hasChestType)
+                        _secondary.Size = new Vector2(labelWidth, 12f);
+                    iconOriginX = DutyChestLabelX + labelColumnWidth + DutyChestLabelIconGap;
                 }
                 else {
                     var hasSourceSecondary = data.SecondaryText.Length > 0;
@@ -405,14 +419,26 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                     _primary.IsVisible = false;
                     _secondary.IsVisible = false;
                 }
-                else if (itemData.PrimaryText.Length > 0 && itemData.SecondaryText.Length == 0) {
+                else if (itemData.PrimaryText.Length > 0) {
                     _primary.String = itemData.PrimaryText;
                     _primary.IsVisible = true;
-                    _primary.Position = new Vector2(6f, (ItemHeight - 12f) * 0.5f);
                     _primary.FontSize = 12;
                     _primary.LineSpacing = 12;
                     _primary.TextColor = ImGuiColors.DalamudWhite;
-                    _secondary.IsVisible = false;
+                    _primary.RemoveTextFlags(TextFlags.Ellipsis);
+                    _secondary.RemoveTextFlags(TextFlags.Ellipsis);
+                    if (itemData.SecondaryText.Length == 0) {
+                        _primary.Position = new Vector2(DutyChestLabelX, (ItemHeight - 12f) * 0.5f);
+                        _secondary.IsVisible = false;
+                    }
+                    else {
+                        _primary.Position = new Vector2(DutyChestLabelX, 2f);
+                        _secondary.IsVisible = true;
+                        _secondary.Position = new Vector2(DutyChestLabelX, 16f);
+                        _secondary.FontSize = 12;
+                        _secondary.LineSpacing = 12;
+                        _secondary.TextColor = new Vector4(0.65f, 0.65f, 0.65f, 1f);
+                    }
                 }
                 else {
                     var hasSourceSecondary = itemData.SecondaryText.Length > 0;
@@ -468,6 +494,24 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
     private static readonly Vector4 TwoLineSubtitleColor = new(157f / 255f, 131f / 255f, 91f / 255f, 1f);
 
+    private static TextNode? _dutyChestMeasureNode;
+
+    internal static float MeasureDutyChestLabelColumnWidth(string primaryText, string secondaryText) {
+        _dutyChestMeasureNode ??= new TextNode {
+            FontSize = 12,
+            LineSpacing = 12,
+            FontType = FontType.Axis,
+        };
+        _dutyChestMeasureNode.RemoveTextFlags(TextFlags.Emboss);
+        var width = _dutyChestMeasureNode.GetTextDrawSize((ReadOnlySeString)primaryText).X;
+        if (secondaryText.Length > 0)
+            width = Math.Max(width, _dutyChestMeasureNode.GetTextDrawSize((ReadOnlySeString)secondaryText).X);
+        return Math.Max(DutyChestLabelMinWidth, MathF.Ceiling(width) + DutyChestLabelPadding);
+    }
+
+    private float MeasureDutyChestLabelWidth(string primaryText, string secondaryText)
+        => MeasureDutyChestLabelColumnWidth(primaryText, secondaryText);
+
     private void ApplyIconTwoLineTextLayout(string primaryText, string secondaryText) {
         _primary.String = primaryText;
         _primary.Position = new Vector2(30f, 1f);
@@ -486,7 +530,12 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
     // atk caches ellipsis metrics until string is toggled after a native draw pass
     private void NudgeTextLayoutIfNeeded(DetailRowKind kind) {
-        if (kind is not (DetailRowKind.Cost or DetailRowKind.Piece or DetailRowKind.EmptyHint))
+        var shouldNudge = kind switch {
+            DetailRowKind.Cost or DetailRowKind.Piece or DetailRowKind.EmptyHint => true,
+            DetailRowKind.SourceChest => ItemData is { SourceIconsOnly: false, PrimaryText.Length: > 0 },
+            _ => false,
+        };
+        if (!shouldNudge)
             return;
         NudgeTextNode(_primary);
         if (_secondary.IsVisible)

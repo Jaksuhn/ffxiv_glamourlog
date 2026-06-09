@@ -7,11 +7,24 @@ using AllaganLib.GameSheets.Sheets.Rows;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using Lumina.Excel;
+using LuminaSupplemental.Excel.Services;
+using SupplementalDungeonChest = LuminaSupplemental.Excel.Model.DungeonChest;
 
 namespace GlamourLog.Windows.LogWindow;
 
 internal static class SourcesPanelBuilder {
     private const int MaxSourceIconsVisible = 10;
+    private const uint TreasureSgbRegularChest = 1596;
+    private const uint TreasureSgbBossChest = 1597;
+    private const uint TreasureSgbFinalBossChest = 1598;
+
+    private enum DungeonChestType {
+        Regular,
+        Boss,
+        FinalBoss,
+    }
+
+    private static Dictionary<uint, SupplementalDungeonChest>? _dungeonChestByRowId;
 
     private static DutyBuckets GetDutyBucket(Dictionary<uint, DutyBuckets> duties, uint cfcId) {
         if (!duties.TryGetValue(cfcId, out var b)) {
@@ -146,6 +159,9 @@ internal static class SourcesPanelBuilder {
 
             var chestKeysThisDuty = b.Chests.Keys.OrderBy(x => x).ToList();
             dutyChestRowIdsOrderedByCfc.TryGetValue(cfcId, out var fullChestOrder);
+            var chestOrderForLabelWidth = fullChestOrder is { Count: > 0 } ? fullChestOrder : chestKeysThisDuty;
+            var dutyChestTypes = ClassifyDutyChestTypes(chestOrderForLabelWidth);
+            var maxDutyChestLabelWidth = ComputeMaxDutyChestLabelColumnWidth(chestOrderForLabelWidth, dutyChestTypes);
             foreach (var ck in chestKeysThisDuty) {
                 var chestNum = 0;
                 if (fullChestOrder is { Count: > 0 }) {
@@ -156,7 +172,7 @@ internal static class SourcesPanelBuilder {
 
                 if (chestNum == 0)
                     chestNum = chestKeysThisDuty.IndexOf(ck) + 1;
-                AppendIconStripRow(rows, $"Chest {chestNum}", b.Chests[ck], scope, iconOnly: false);
+                AppendIconStripRow(rows, $"Chest {chestNum}", FormatDungeonChestTypeLabel(ck, dutyChestTypes), b.Chests[ck], scope, iconOnly: false, sourceChestLabelColumnWidth: maxDutyChestLabelWidth);
             }
         }
 
@@ -167,6 +183,84 @@ internal static class SourcesPanelBuilder {
         => ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true, Value.NameFormatted: var n }
             ? n.ToString()
             : string.Empty;
+
+    private static SupplementalDungeonChest? TryGetDungeonChest(uint dungeonChestRowId) {
+        if (dungeonChestRowId == 0)
+            return null;
+        _dungeonChestByRowId ??= Svc.Data.GetSupplemental<SupplementalDungeonChest>(CsvLoader.DungeonChestResourceName)
+            .ToDictionary(chest => chest.RowId);
+        return _dungeonChestByRowId.GetValueOrDefault(dungeonChestRowId);
+    }
+
+    private static float ComputeMaxDutyChestLabelColumnWidth(IReadOnlyList<uint> chestOrder, IReadOnlyDictionary<uint, DungeonChestType> dutyChestTypes) {
+        var max = 0f;
+        for (var i = 0; i < chestOrder.Count; i++) {
+            var width = DetailListItemNode.MeasureDutyChestLabelColumnWidth(
+                $"Chest {i + 1}",
+                FormatDungeonChestTypeLabel(chestOrder[i], dutyChestTypes));
+            if (width > max)
+                max = width;
+        }
+
+        return max;
+    }
+
+    private static Dictionary<uint, DungeonChestType> ClassifyDutyChestTypes(IReadOnlyList<uint> chestOrder) {
+        var chestsBySgb = new Dictionary<uint, List<uint>>();
+        foreach (var chestRowId in chestOrder) {
+            if (TryGetChestSgbRowId(chestRowId) is not { } sgbRowId)
+                continue;
+            if (!chestsBySgb.TryGetValue(sgbRowId, out var chests)) {
+                chests = [];
+                chestsBySgb[sgbRowId] = chests;
+            }
+
+            chests.Add(chestRowId);
+        }
+
+        var result = new Dictionary<uint, DungeonChestType>();
+        foreach (var (sgbRowId, chests) in chestsBySgb) {
+            var type = TryGetKnownChestType(sgbRowId) ?? InferChestTypeFromModelCount(chests.Count);
+            foreach (var chestRowId in chests)
+                result[chestRowId] = type;
+        }
+
+        return result;
+    }
+
+    private static DungeonChestType? TryGetKnownChestType(uint sgbRowId)
+        => sgbRowId switch {
+            TreasureSgbRegularChest => DungeonChestType.Regular,
+            TreasureSgbBossChest => DungeonChestType.Boss,
+            TreasureSgbFinalBossChest => DungeonChestType.FinalBoss,
+            _ => null,
+        };
+
+    private static DungeonChestType InferChestTypeFromModelCount(int count)
+        => count switch {
+            1 => DungeonChestType.FinalBoss,
+            2 => DungeonChestType.Boss,
+            _ => DungeonChestType.Regular,
+        };
+
+    private static uint? TryGetChestSgbRowId(uint dungeonChestRowId) {
+        if (TryGetDungeonChest(dungeonChestRowId) is not { ChestId: var chestId } || chestId == 0)
+            return null;
+        if (!Treasure.TryGetRow(chestId, out var treasure))
+            return null;
+        return treasure.SGB.RowId;
+    }
+
+    private static string FormatDungeonChestTypeLabel(uint dungeonChestRowId, IReadOnlyDictionary<uint, DungeonChestType> dutyChestTypes)
+        => dutyChestTypes.TryGetValue(dungeonChestRowId, out var type) ? FormatDungeonChestTypeLabel(type) : string.Empty;
+
+    private static string FormatDungeonChestTypeLabel(DungeonChestType type)
+        => type switch {
+            DungeonChestType.Regular => "Regular",
+            DungeonChestType.Boss => "Boss",
+            DungeonChestType.FinalBoss => "Final Boss",
+            _ => string.Empty,
+        };
 
     private sealed class DutyBuckets {
         internal HashSet<uint> General { get; } = [];
@@ -463,7 +557,7 @@ internal static class SourcesPanelBuilder {
         return enpcRow is null ? null : TryNavigateTargetFromNpc(enpcRow);
     }
 
-    private static void AppendIconStripRow(List<DetailListRowData> rows, string label, IEnumerable<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal) {
+    private static void AppendIconStripRow(List<DetailListRowData> rows, string label, string secondaryLabel, IEnumerable<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal, float sourceChestLabelColumnWidth = 0f) {
         var ordered = itemIds.Where(id => id != 0).Distinct().OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
         if (ordered.Count == 0)
             return;
@@ -473,16 +567,20 @@ internal static class SourcesPanelBuilder {
         rows.Add(new DetailListRowData {
             Kind = DetailRowKind.SourceChest,
             PrimaryText = label,
-            SecondaryText = string.Empty,
+            SecondaryText = secondaryLabel,
             SourceItemIds = visible,
             SourceIconsOnly = iconOnly || string.IsNullOrEmpty(label),
             SourceIconOverflow = overflow,
             SourcePresentation = presentation,
+            SourceChestLabelColumnWidth = sourceChestLabelColumnWidth,
         });
     }
 
+    private static void AppendIconStripRow(List<DetailListRowData> rows, string label, IEnumerable<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal)
+        => AppendIconStripRow(rows, label, string.Empty, itemIds, scope, iconOnly, presentation);
+
     private static void AppendIconStripRow(List<DetailListRowData> rows, string label, HashSet<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal)
-        => AppendIconStripRow(rows, label, (IEnumerable<uint>)itemIds, scope, iconOnly, presentation);
+        => AppendIconStripRow(rows, label, string.Empty, (IEnumerable<uint>)itemIds, scope, iconOnly, presentation);
 
     /// <summary> One-line "left → arrow → right" row for catalyst-style sources (desynth / lootbox key + contents). </summary>
     private static void AppendArrowFlowRow(List<DetailListRowData> rows, IReadOnlyList<uint> leftIds, IEnumerable<uint> rightIds) {
