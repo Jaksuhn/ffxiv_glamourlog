@@ -119,19 +119,20 @@ internal static class SourcesPanelBuilder {
         foreach (var (pieceId, list) in sourcesByPiece) {
             foreach (var src in list) {
                 switch (src) {
-                    case ItemDungeonChestSource chest when chest.ContentFinderCondition.RowId != 0: {
-                            var cfc = chest.ContentFinderCondition.RowId;
-                            var b = GetDutyBucket(duties, cfc);
-                            var ck = chest.DungeonChest.RowId;
-                            if (!b.Chests.TryGetValue(ck, out var set)) {
-                                set = [];
-                                b.Chests[ck] = set;
-                            }
-                            set.Add(pieceId);
-                            break;
+                    case ItemDungeonChestSource chest when chest.ContentFinderCondition.RowId != 0:
+                        var cfc = chest.ContentFinderCondition.RowId;
+                        var b = GetDutyBucket(duties, cfc);
+                        var ck = chest.DungeonChest.RowId;
+                        if (!b.Chests.TryGetValue(ck, out var set)) {
+                            set = [];
+                            b.Chests[ck] = set;
                         }
+                        set.Add(pieceId);
+                        break;
                     case ItemDungeonDropSource drop when drop.ContentFinderCondition.RowId != 0:
-                        GetDutyBucket(duties, drop.ContentFinderCondition.RowId).General.Add(pieceId);
+                        var dropCfc = drop.ContentFinderCondition.RowId;
+                        if (ContentFinderCondition.GetRowRef(dropCfc) is { IsValid: true, Value.ContentType.RowId: not 9 }) // exclude treasure dungeons
+                            GetDutyBucket(duties, dropCfc).General.Add(pieceId);
                         break;
                 }
             }
@@ -154,14 +155,22 @@ internal static class SourcesPanelBuilder {
                 ContentFinderConditionId = cfcId,
             });
 
-            if (b.General.Count > 0)
-                AppendIconStripRow(rows, string.Empty, b.General, scope, iconOnly: true);
-
             var chestKeysThisDuty = b.Chests.Keys.OrderBy(x => x).ToList();
+            var hasGeneral = b.General.Count > 0;
+            var hasChests = chestKeysThisDuty.Count > 0;
+
             dutyChestRowIdsOrderedByCfc.TryGetValue(cfcId, out var fullChestOrder);
             var chestOrderForLabelWidth = fullChestOrder is { Count: > 0 } ? fullChestOrder : chestKeysThisDuty;
             var dutyChestTypes = ClassifyDutyChestTypes(chestOrderForLabelWidth);
-            var maxDutyChestLabelWidth = ComputeMaxDutyChestLabelColumnWidth(chestOrderForLabelWidth, dutyChestTypes);
+            var maxDutyChestLabelWidth = ComputeMaxDutyChestLabelColumnWidth(chestOrderForLabelWidth, dutyChestTypes, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
+
+            if (hasGeneral) {
+                if (hasChests)
+                    AppendIconStripRow(rows, "General", string.Empty, b.General, scope, iconOnly: false, sourceChestLabelColumnWidth: maxDutyChestLabelWidth);
+                else
+                    AppendIconStripRow(rows, string.Empty, b.General, scope, iconOnly: true);
+            }
+
             foreach (var ck in chestKeysThisDuty) {
                 var chestNum = 0;
                 if (fullChestOrder is { Count: > 0 }) {
@@ -192,8 +201,13 @@ internal static class SourcesPanelBuilder {
         return _dungeonChestByRowId.GetValueOrDefault(dungeonChestRowId);
     }
 
-    private static float ComputeMaxDutyChestLabelColumnWidth(IReadOnlyList<uint> chestOrder, IReadOnlyDictionary<uint, DungeonChestType> dutyChestTypes) {
+    private static float ComputeMaxDutyChestLabelColumnWidth(
+        IReadOnlyList<uint> chestOrder,
+        IReadOnlyDictionary<uint, DungeonChestType> dutyChestTypes,
+        string? extraPrimaryLabel = null) {
         var max = 0f;
+        if (extraPrimaryLabel is { Length: > 0 })
+            max = DetailListItemNode.MeasureDutyChestLabelColumnWidth(extraPrimaryLabel, string.Empty);
         for (var i = 0; i < chestOrder.Count; i++) {
             var width = DetailListItemNode.MeasureDutyChestLabelColumnWidth(
                 $"Chest {i + 1}",
@@ -580,7 +594,7 @@ internal static class SourcesPanelBuilder {
         => AppendIconStripRow(rows, label, string.Empty, itemIds, scope, iconOnly, presentation);
 
     private static void AppendIconStripRow(List<DetailListRowData> rows, string label, HashSet<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal)
-        => AppendIconStripRow(rows, label, string.Empty, (IEnumerable<uint>)itemIds, scope, iconOnly, presentation);
+        => AppendIconStripRow(rows, label, string.Empty, itemIds, scope, iconOnly, presentation);
 
     /// <summary> One-line "left → arrow → right" row for catalyst-style sources (desynth / lootbox key + contents). </summary>
     private static void AppendArrowFlowRow(List<DetailListRowData> rows, IReadOnlyList<uint> leftIds, IEnumerable<uint> rightIds) {
