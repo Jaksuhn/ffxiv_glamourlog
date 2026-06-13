@@ -1,3 +1,4 @@
+using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -34,6 +35,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
 
     private readonly IPrismBoxRowFilter[] _filters;
     private readonly AddonController<AtkUnitBase> _addonController;
+    private readonly Hook<AtkComponentTreeList.Delegates.LoadAtkValues>? _loadAtkValuesHook;
     private readonly uint[] _prismBoxItemIdsSnapshot = new uint[PrismBoxItemIdCount];
 
     // --- category snapshot (source of truth for filter decisions) ---
@@ -79,6 +81,9 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private bool _filteredTreeReady; // duplicate tree node exists and is wired
     private bool _filteredTreeDisplayed; // unused; display always stays on native
     private uint _duplicateTreeNodeId; // cached node id for duplicate tree lookup
+    private CrystallizeAtkBufferLayout _atkBufferLayout;
+
+    private bool HasAtkBufferLayout => _atkBufferLayout.IsValid;
 
     public CrystallizeListHandler() {
         _filters = [
@@ -86,6 +91,11 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             new HideArmoireEligibleFilter(),
             new HideNonOutfitItemsFilter(),
         ];
+        _loadAtkValuesHook = Svc.Hook.HookFromAddress<AtkComponentTreeList.Delegates.LoadAtkValues>(
+            (nint)AtkComponentTreeList.MemberFunctionPointers.LoadAtkValues,
+            LoadAtkValuesDetour);
+        _loadAtkValuesHook.Enable();
+
         _addonController = new AddonController<AtkUnitBase> {
             AddonName = AddonName,
             OnSetup = OnSetup,
@@ -99,6 +109,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
 
     public void Dispose() {
         _addonController.Dispose();
+        _loadAtkValuesHook?.Dispose();
         ClearFilterState();
     }
 
@@ -240,9 +251,9 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         } else {
             ParseAtkLayout(force: true);
         }
-        if (_nativeAtkSnapshot.Length == 0 || _atkLayout.Length == 0 || _categoryRows.Length == 0) {
+        if (!HasAtkBufferLayout || _nativeAtkSnapshot.Length == 0 || _atkLayout.Length == 0 || _categoryRows.Length == 0) {
             LogFilterDebug(nameof(OnPostRefresh),
-                $"filter enable aborted (nativeAtk={_nativeAtkSnapshot.Length} layout={_atkLayout.Length} snapshot={_categoryRows.Length})");
+                $"filter enable aborted (atkBufferLayout={HasAtkBufferLayout} nativeAtk={_nativeAtkSnapshot.Length} layout={_atkLayout.Length} snapshot={_categoryRows.Length})");
             return;
         }
         if (IsNativeTreeTruncatedVersusSnapshot(data)) {
@@ -586,18 +597,18 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
 
     private void RestoreNativeTreeFromSnapshot(AtkUnitBase* addon) {
         var tree = _nativeTreeList;
-        if (tree is null || _nativeAtkSnapshot.Length == 0 || _nativeAtkSlotCount <= 0)
+        if (tree is null || !HasAtkBufferLayout || _nativeAtkSnapshot.Length == 0 || _nativeAtkSlotCount <= 0)
             return;
-        LoadTreeFromAtkSnapshot(tree, _nativeAtkSnapshot, _nativeAtkSlotCount, _nativeTreeList);
+        LoadTreeFromAtkSnapshot(tree, _nativeAtkSnapshot, _nativeAtkSlotCount, _atkBufferLayout, _nativeTreeList);
         LogFilterDebug(nameof(RestoreNativeTreeFromSnapshot),
             $"restored native tree slots={_nativeAtkSlotCount} items.Count={tree->Items.Count}");
         _ = addon;
     }
 
     private void ReseedFilteredTreeFromNative() {
-        if (_filteredTreeList is null || _nativeTreeList is null || _nativeAtkSnapshot.Length == 0 || _nativeAtkSlotCount <= 0)
+        if (_filteredTreeList is null || _nativeTreeList is null || !HasAtkBufferLayout || _nativeAtkSnapshot.Length == 0 || _nativeAtkSlotCount <= 0)
             return;
-        LoadTreeFromAtkSnapshot(_filteredTreeList, _nativeAtkSnapshot, _nativeAtkSlotCount, _nativeTreeList);
+        LoadTreeFromAtkSnapshot(_filteredTreeList, _nativeAtkSnapshot, _nativeAtkSlotCount, _atkBufferLayout, _nativeTreeList);
         LogFilterDebug(nameof(ReseedFilteredTreeFromNative),
             $"reseeded duplicate slots={_nativeAtkSlotCount} items.Count={_filteredTreeList->Items.Count}");
     }
@@ -628,25 +639,26 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         AtkComponentTreeList* tree,
         AtkValue[] atkSnapshot,
         int slotCount,
+        CrystallizeAtkBufferLayout layout,
         AtkComponentTreeList* callbackSource = null) {
         var list = (AtkComponentList*)tree;
         var callback = list->CallBackInterface;
         if (callback is null && callbackSource is not null)
             callback = ((AtkComponentList*)callbackSource)->CallBackInterface;
-        if (callback is null)
+        if (callback is null || !layout.IsValid)
             return;
         fixed (AtkValue* snapshotPtr = atkSnapshot) {
             tree->LoadAtkValues(
                 atkSnapshot.Length,
                 snapshotPtr,
-                CrystallizeListAtk.UintValuesOffset,
-                CrystallizeListAtk.StringValuesOffset,
-                CrystallizeListAtk.UintValuesPerItem,
-                CrystallizeListAtk.StringValuesPerItem,
+                layout.UintValuesOffset,
+                layout.StringValuesOffset,
+                layout.UintValuesPerItem,
+                layout.StringValuesPerItem,
                 slotCount,
                 callback);
         }
-        SyncTreeItemsFromAtk(tree, atkSnapshot, slotCount);
+        SyncTreeItemsFromAtk(tree, atkSnapshot, slotCount, layout);
         RefreshTreeListLayout(tree);
     }
 
@@ -812,19 +824,19 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     }
 
     private void ParseAtkLayout(bool force = false, int? categoryRowCount = null) {
-        if (_nativeAtkSnapshot.Length == 0) {
+        if (!HasAtkBufferLayout || _nativeAtkSnapshot.Length == 0) {
             _atkLayout = [];
             _nativeAtkSlotCount = 0;
             return;
         }
         var rowCount = categoryRowCount ?? _categoryRows.Length;
         if (force || _atkLayout.Length == 0) {
-            var inferred = CrystallizeListAtk.InferItemCount(_nativeAtkSnapshot);
+            var inferred = CrystallizeListAtk.InferItemCount(_nativeAtkSnapshot, _atkBufferLayout);
             var includeHeaders = rowCount > 0;
             _nativeAtkSlotCount = rowCount > 0
-                ? CrystallizeListAtk.InferBoundedItemCount(_nativeAtkSnapshot, inferred, rowCount, includeHeaders)
+                ? CrystallizeListAtk.InferBoundedItemCount(_nativeAtkSnapshot, inferred, rowCount, includeHeaders, _atkBufferLayout)
                 : inferred;
-            _atkLayout = CrystallizeListAtk.Parse(_nativeAtkSnapshot, _nativeAtkSlotCount, rowCount);
+            _atkLayout = CrystallizeListAtk.Parse(_nativeAtkSnapshot, _nativeAtkSlotCount, _atkBufferLayout, rowCount);
         }
     }
 
@@ -903,7 +915,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
                 _categoryRows[sourceIndex] = data->CrystallizeItems[sourceIndex];
                 continue;
             }
-            if (CrystallizeListAtk.TryReadCategoryRow(_nativeAtkSnapshot, slot, entry, out var row))
+            if (CrystallizeListAtk.TryReadCategoryRow(_nativeAtkSnapshot, slot, entry, _atkBufferLayout, out var row))
                 _categoryRows[sourceIndex] = row;
             else if (_nativeTreeList is not null
                      && CrystallizeListAtk.TryReadCategoryRowFromTreeItem(_nativeTreeList->GetItem(slot), entry, out row))
@@ -944,7 +956,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     // We clone before ApplyToBuffer because it mutates slot order in the array.
     private void RepopulateDisplayTreeList(AtkUnitBase* addon) {
         var tree = _nativeTreeList;
-        if (tree is null) {
+        if (tree is null || !HasAtkBufferLayout) {
             return;
         }
         if (_nativeAtkSnapshot.Length == 0 || _atkLayout.Length == 0) {
@@ -958,10 +970,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
                 workingAtk,
                 _atkLayout,
                 BuildShouldHideLeafPredicate(visibleSources),
-                CrystallizeListAtk.UintValuesOffset,
-                CrystallizeListAtk.StringValuesOffset,
-                CrystallizeListAtk.UintValuesPerItem,
-                CrystallizeListAtk.StringValuesPerItem,
+                _atkBufferLayout,
                 _nativeAtkSlotCount,
                 IncludeSectionHeaders,
                 visibleSources,
@@ -970,14 +979,14 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         if (_filteredAtkSlotCount <= 0) {
             var clearedAtk = CrystallizeListAtk.Clone(_nativeAtkSnapshot);
             var clearThrough = Math.Max(_nativeAtkSlotCount, 1);
-            CrystallizeListAtk.ClearSlots(clearedAtk, 0, clearThrough);
-            LoadTreeFromAtkSnapshot(tree, clearedAtk, 0, _nativeTreeList);
+            CrystallizeListAtk.ClearSlots(clearedAtk, 0, clearThrough, _atkBufferLayout);
+            LoadTreeFromAtkSnapshot(tree, clearedAtk, 0, _atkBufferLayout, _nativeTreeList);
             ResetFilteredTreeScroll(tree);
             LogFilterDebug(nameof(RepopulateDisplayTreeList),
                 $"cleared native tree (no filtered slots) clearedSlots={clearThrough} items.Count={tree->Items.Count}");
             return;
         }
-        LoadTreeFromAtkSnapshot(tree, workingAtk, _filteredAtkSlotCount, _nativeTreeList);
+        LoadTreeFromAtkSnapshot(tree, workingAtk, _filteredAtkSlotCount, _atkBufferLayout, _nativeTreeList);
         ResetFilteredTreeScroll(tree);
         RefreshTreeListLayout(tree);
         var list = (AtkComponentList*)tree;
@@ -986,7 +995,7 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         _ = addon;
     }
 
-    private static void SyncTreeItemsFromAtk(AtkComponentTreeList* tree, AtkValue[] atkValues, int slotCount) {
+    private static void SyncTreeItemsFromAtk(AtkComponentTreeList* tree, AtkValue[] atkValues, int slotCount, CrystallizeAtkBufferLayout layout) {
         if (slotCount <= 0)
             return;
         var itemCount = Math.Min(slotCount, tree->Items.Count);
@@ -994,8 +1003,75 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             var item = tree->GetItem(slot);
             if (item is null)
                 continue;
-            CrystallizeListAtk.CopySlotToTreeItem(atkValues, slot, item);
+            CrystallizeListAtk.CopySlotToTreeItem(atkValues, slot, item, layout);
         }
+    }
+
+    private void LoadAtkValuesDetour(
+        AtkComponentTreeList* thisPtr,
+        int atkValuesCount,
+        AtkValue* atkValues,
+        int uintValuesOffset,
+        int stringValuesOffset,
+        int uintValuesCountPerItem,
+        int stringValuesCountPerItem,
+        int itemCount,
+        ListComponentCallBackInterface* callBackInterface) {
+        if (itemCount > 0)
+            TryCaptureAtkBufferLayout(thisPtr, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, atkValuesCount);
+
+        _loadAtkValuesHook!.Original(
+            thisPtr,
+            atkValuesCount,
+            atkValues,
+            uintValuesOffset,
+            stringValuesOffset,
+            uintValuesCountPerItem,
+            stringValuesCountPerItem,
+            itemCount,
+            callBackInterface);
+    }
+
+    private bool TryCaptureAtkBufferLayout(
+        AtkComponentTreeList* tree,
+        int uintValuesOffset,
+        int stringValuesOffset,
+        int uintValuesPerItem,
+        int stringValuesPerItem,
+        int atkValuesCount) {
+        var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(AddonName);
+        if (addon is null)
+            return false;
+
+        var node = addon->GetNodeById(ItemTreeListNodeId);
+        if (node is null)
+            return false;
+
+        var nativeTree = node->GetAsAtkComponentTreeList();
+        if (nativeTree != tree)
+            return false;
+
+        var candidate = new CrystallizeAtkBufferLayout {
+            UintValuesOffset = uintValuesOffset,
+            StringValuesOffset = stringValuesOffset,
+            UintValuesPerItem = uintValuesPerItem,
+            StringValuesPerItem = stringValuesPerItem,
+        };
+        if (!candidate.IsValid)
+            return false;
+
+        if (atkValuesCount > 0
+            && stringValuesOffset + stringValuesPerItem > atkValuesCount)
+            return false;
+
+        if (_atkBufferLayout.Matches(candidate))
+            return true;
+
+        _atkBufferLayout = candidate;
+        LogFilterDebug(nameof(TryCaptureAtkBufferLayout),
+            $"captured uintOffset={candidate.UintValuesOffset} stringOffset={candidate.StringValuesOffset} uintPerItem={candidate.UintValuesPerItem} stringPerItem={candidate.StringValuesPerItem} atkValuesCount={atkValuesCount}");
+
+        return true;
     }
 
     private static void ApplyFilteredListLayout(AtkComponentTreeList* tree) {

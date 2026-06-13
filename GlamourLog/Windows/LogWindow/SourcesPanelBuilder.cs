@@ -7,24 +7,11 @@ using AllaganLib.GameSheets.Sheets.Rows;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using Lumina.Excel;
-using LuminaSupplemental.Excel.Services;
-using SupplementalDungeonChest = LuminaSupplemental.Excel.Model.DungeonChest;
 
 namespace GlamourLog.Windows.LogWindow;
 
 internal static class SourcesPanelBuilder {
     private const int MaxSourceIconsVisible = 10;
-    private const uint TreasureSgbRegularChest = 1596;
-    private const uint TreasureSgbBossChest = 1597;
-    private const uint TreasureSgbFinalBossChest = 1598;
-
-    private enum DungeonChestType {
-        Regular,
-        Boss,
-        FinalBoss,
-    }
-
-    private static Dictionary<uint, SupplementalDungeonChest>? _dungeonChestByRowId;
 
     private static DutyBuckets GetDutyBucket(Dictionary<uint, DutyBuckets> duties, uint cfcId) {
         if (!duties.TryGetValue(cfcId, out var b)) {
@@ -70,7 +57,7 @@ internal static class SourcesPanelBuilder {
                 sourcesByPiece[itemId] = [.. list];
         }
 
-        var dutyChestRowIdsOrderedByCfc = BuildDutyChestRowIdsOrderedByCfc(catalog, set);
+        var dutyChestRowIdsOrderedByCfc = DungeonChestOrderIndex.Instance.BuildDutyChestRowIdsOrderedByCfc(catalog, set);
 
         AppendDuties(rows, sourcesByPiece, scope, dutyChestRowIdsOrderedByCfc);
         AppendFates(rows, sourcesByPiece, scope);
@@ -78,36 +65,6 @@ internal static class SourcesPanelBuilder {
         AppendCraft(rows, sourcesByPiece, scope);
         AppendDesynthesis(rows, sourcesByPiece, scope);
         AppendQuests(rows, sourcesByPiece, scope);
-    }
-
-    /// <summary> Union of dungeon chest row ids per CFC across the whole set (no piece filter), sorted ascending. Chest labels use 1-based index in this list so filtering by one piece does not renumber chests. </summary>
-    private static Dictionary<uint, List<uint>> BuildDutyChestRowIdsOrderedByCfc(CatalogService catalog, GlamourSet set) {
-        var cache = Svc.SheetManager.ItemInfoCache;
-        var fullScope = catalog.GetSourceScopeItemIds(set, costScopePieceItemId: null).ToHashSet();
-        var byCfc = new Dictionary<uint, HashSet<uint>>();
-        foreach (var itemId in fullScope) {
-            if (cache.GetItemSources(itemId) is not { Count: > 0 } list)
-                continue;
-            foreach (var src in list) {
-                if (src is not ItemDungeonChestSource chest || chest.ContentFinderCondition.RowId == 0)
-                    continue;
-                var cfc = chest.ContentFinderCondition.RowId;
-                var ck = chest.DungeonChest.RowId;
-                if (ck == 0)
-                    continue;
-                if (!byCfc.TryGetValue(cfc, out var keySet)) {
-                    keySet = [];
-                    byCfc[cfc] = keySet;
-                }
-
-                keySet.Add(ck);
-            }
-        }
-
-        var result = new Dictionary<uint, List<uint>>();
-        foreach (var (cfc, keys) in byCfc)
-            result[cfc] = [.. keys.OrderBy(x => x)];
-        return result;
     }
 
     private static bool AppendDuties(
@@ -155,14 +112,16 @@ internal static class SourcesPanelBuilder {
                 ContentFinderConditionId = cfcId,
             });
 
-            var chestKeysThisDuty = b.Chests.Keys.OrderBy(x => x).ToList();
+            var chestIndex = DungeonChestOrderIndex.Instance;
+            dutyChestRowIdsOrderedByCfc.TryGetValue(cfcId, out var fullChestOrder);
+            var chestKeysThisDuty = fullChestOrder is { Count: > 0 }
+                ? [.. fullChestOrder.Where(b.Chests.ContainsKey)]
+                : chestIndex.OrderChestRowIds(cfcId, b.Chests.Keys);
             var hasGeneral = b.General.Count > 0;
             var hasChests = chestKeysThisDuty.Count > 0;
 
-            dutyChestRowIdsOrderedByCfc.TryGetValue(cfcId, out var fullChestOrder);
             var chestOrderForLabelWidth = fullChestOrder is { Count: > 0 } ? fullChestOrder : chestKeysThisDuty;
-            var dutyChestTypes = ClassifyDutyChestTypes(chestOrderForLabelWidth);
-            var maxDutyChestLabelWidth = ComputeMaxDutyChestLabelColumnWidth(chestOrderForLabelWidth, dutyChestTypes, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
+            var maxDutyChestLabelWidth = chestIndex.ComputeMaxLabelColumnWidth(cfcId, chestOrderForLabelWidth, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
 
             if (hasGeneral) {
                 if (hasChests)
@@ -181,7 +140,7 @@ internal static class SourcesPanelBuilder {
 
                 if (chestNum == 0)
                     chestNum = chestKeysThisDuty.IndexOf(ck) + 1;
-                AppendIconStripRow(rows, $"Chest {chestNum}", FormatDungeonChestTypeLabel(ck, dutyChestTypes), b.Chests[ck], scope, iconOnly: false, sourceChestLabelColumnWidth: maxDutyChestLabelWidth);
+                AppendIconStripRow(rows, $"Chest {chestNum}", chestIndex.FormatSecondaryLabel(ck), b.Chests[ck], scope, iconOnly: false, sourceChestLabelColumnWidth: maxDutyChestLabelWidth);
             }
         }
 
@@ -192,89 +151,6 @@ internal static class SourcesPanelBuilder {
         => ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true, Value.NameFormatted: var n }
             ? n.ToString()
             : string.Empty;
-
-    private static SupplementalDungeonChest? TryGetDungeonChest(uint dungeonChestRowId) {
-        if (dungeonChestRowId == 0)
-            return null;
-        _dungeonChestByRowId ??= Svc.Data.GetSupplemental<SupplementalDungeonChest>(CsvLoader.DungeonChestResourceName)
-            .ToDictionary(chest => chest.RowId);
-        return _dungeonChestByRowId.GetValueOrDefault(dungeonChestRowId);
-    }
-
-    private static float ComputeMaxDutyChestLabelColumnWidth(
-        IReadOnlyList<uint> chestOrder,
-        IReadOnlyDictionary<uint, DungeonChestType> dutyChestTypes,
-        string? extraPrimaryLabel = null) {
-        var max = 0f;
-        if (extraPrimaryLabel is { Length: > 0 })
-            max = DetailListItemNode.MeasureDutyChestLabelColumnWidth(extraPrimaryLabel, string.Empty);
-        for (var i = 0; i < chestOrder.Count; i++) {
-            var width = DetailListItemNode.MeasureDutyChestLabelColumnWidth(
-                $"Chest {i + 1}",
-                FormatDungeonChestTypeLabel(chestOrder[i], dutyChestTypes));
-            if (width > max)
-                max = width;
-        }
-
-        return max;
-    }
-
-    private static Dictionary<uint, DungeonChestType> ClassifyDutyChestTypes(IReadOnlyList<uint> chestOrder) {
-        var chestsBySgb = new Dictionary<uint, List<uint>>();
-        foreach (var chestRowId in chestOrder) {
-            if (TryGetChestSgbRowId(chestRowId) is not { } sgbRowId)
-                continue;
-            if (!chestsBySgb.TryGetValue(sgbRowId, out var chests)) {
-                chests = [];
-                chestsBySgb[sgbRowId] = chests;
-            }
-
-            chests.Add(chestRowId);
-        }
-
-        var result = new Dictionary<uint, DungeonChestType>();
-        foreach (var (sgbRowId, chests) in chestsBySgb) {
-            var type = TryGetKnownChestType(sgbRowId) ?? InferChestTypeFromModelCount(chests.Count);
-            foreach (var chestRowId in chests)
-                result[chestRowId] = type;
-        }
-
-        return result;
-    }
-
-    private static DungeonChestType? TryGetKnownChestType(uint sgbRowId)
-        => sgbRowId switch {
-            TreasureSgbRegularChest => DungeonChestType.Regular,
-            TreasureSgbBossChest => DungeonChestType.Boss,
-            TreasureSgbFinalBossChest => DungeonChestType.FinalBoss,
-            _ => null,
-        };
-
-    private static DungeonChestType InferChestTypeFromModelCount(int count)
-        => count switch {
-            1 => DungeonChestType.FinalBoss,
-            2 => DungeonChestType.Boss,
-            _ => DungeonChestType.Regular,
-        };
-
-    private static uint? TryGetChestSgbRowId(uint dungeonChestRowId) {
-        if (TryGetDungeonChest(dungeonChestRowId) is not { ChestId: var chestId } || chestId == 0)
-            return null;
-        if (!Treasure.TryGetRow(chestId, out var treasure))
-            return null;
-        return treasure.SGB.RowId;
-    }
-
-    private static string FormatDungeonChestTypeLabel(uint dungeonChestRowId, IReadOnlyDictionary<uint, DungeonChestType> dutyChestTypes)
-        => dutyChestTypes.TryGetValue(dungeonChestRowId, out var type) ? FormatDungeonChestTypeLabel(type) : string.Empty;
-
-    private static string FormatDungeonChestTypeLabel(DungeonChestType type)
-        => type switch {
-            DungeonChestType.Regular => "Regular",
-            DungeonChestType.Boss => "Boss",
-            DungeonChestType.FinalBoss => "Final Boss",
-            _ => string.Empty,
-        };
 
     private sealed class DutyBuckets {
         internal HashSet<uint> General { get; } = [];

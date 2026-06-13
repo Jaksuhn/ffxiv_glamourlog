@@ -6,8 +6,9 @@ namespace GlamourLog.Features.PrismBox;
 
 // Low-level helpers for the MiragePrismPrismBoxCrystallize addon ATK value buffer.
 // The game's tree list (node 11) is backed by a flat AtkValue[] on the addon: uint blocks per slot
-// (type + source index + item fields) plus optional string blocks. CrystallizeListHandler snapshots
-// that buffer, parses slot structure here, compacts kept slots, and reloads via LoadAtkValues.
+// (type + source index + item fields) plus optional string blocks. CrystallizeListHandler captures
+// CrystallizeAtkBufferLayout from the game's LoadAtkValues call, snapshots that buffer, parses slot
+// structure here, compacts kept slots, and reloads via LoadAtkValues.
 
 internal readonly struct CrystallizeAtkSlot {
     internal bool IsLeaf { get; init; }
@@ -15,12 +16,28 @@ internal readonly struct CrystallizeAtkSlot {
     internal int SourceIndex { get; init; }
 }
 
+// Flat AtkValue[] layout for MiragePrismPrismBoxCrystallize tree node 11.
+// Captured from the game's LoadAtkValues call before any parsing or reload.
+internal readonly struct CrystallizeAtkBufferLayout {
+    internal int UintValuesOffset { get; init; }
+    internal int StringValuesOffset { get; init; }
+    internal int UintValuesPerItem { get; init; }
+    internal int StringValuesPerItem { get; init; }
+
+    internal bool IsValid =>
+        UintValuesPerItem > 0
+        && StringValuesPerItem >= 0
+        && UintValuesOffset >= 0
+        && StringValuesOffset > UintValuesOffset;
+
+    internal bool Matches(CrystallizeAtkBufferLayout other)
+        => UintValuesOffset == other.UintValuesOffset
+            && StringValuesOffset == other.StringValuesOffset
+            && UintValuesPerItem == other.UintValuesPerItem
+            && StringValuesPerItem == other.StringValuesPerItem;
+}
+
 internal static unsafe class CrystallizeListAtk {
-    // Offsets and strides match MiragePrismPrismBoxCrystallize. Do not guess ? wrong values corrupt slots.
-    internal const int UintValuesOffset = 2;
-    internal const int StringValuesOffset = 1682;
-    internal const int UintValuesPerItem = 6;
-    internal const int StringValuesPerItem = 1;
 
     internal static AtkValue[] Clone(AtkValue[] source) {
         var copy = new AtkValue[source.Length];
@@ -28,14 +45,14 @@ internal static unsafe class CrystallizeListAtk {
         return copy;
     }
 
-    internal static int InferItemCount(AtkValue[] atkValues) {
+    internal static int InferItemCount(AtkValue[] atkValues, CrystallizeAtkBufferLayout layout) {
         var slotCount = 0;
         for (var itemIndex = 0; itemIndex < 200; itemIndex++) {
-            var baseIndex = UintValuesOffset + itemIndex * UintValuesPerItem;
-            if (baseIndex + UintValuesPerItem > atkValues.Length)
+            var baseIndex = layout.UintValuesOffset + itemIndex * layout.UintValuesPerItem;
+            if (baseIndex + layout.UintValuesPerItem > atkValues.Length)
                 break;
 
-            if (!SlotHasItemData(atkValues, baseIndex))
+            if (!SlotHasItemData(atkValues, baseIndex, layout.UintValuesPerItem))
                 break;
 
             slotCount = itemIndex + 1;
@@ -46,16 +63,16 @@ internal static unsafe class CrystallizeListAtk {
 
     // InferItemCount scans until the first empty slot; when switching categories the addon buffer can still
     // contain populated slots from the previous tab. Stop at the first leaf whose source index is out of range.
-    internal static int InferBoundedItemCount(AtkValue[] atkValues, int inferredCount, int categoryRowCount, bool includeHeaders) {
+    internal static int InferBoundedItemCount(AtkValue[] atkValues, int inferredCount, int categoryRowCount, bool includeHeaders, CrystallizeAtkBufferLayout layout) {
         if (inferredCount <= 0 || categoryRowCount <= 0)
             return inferredCount;
 
         var validCount = 0;
         for (var itemIndex = 0; itemIndex < inferredCount; itemIndex++) {
-            var baseIndex = UintValuesOffset + itemIndex * UintValuesPerItem;
-            if (baseIndex + UintValuesPerItem > atkValues.Length)
+            var baseIndex = layout.UintValuesOffset + itemIndex * layout.UintValuesPerItem;
+            if (baseIndex + layout.UintValuesPerItem > atkValues.Length)
                 break;
-            if (!SlotHasItemData(atkValues, baseIndex))
+            if (!SlotHasItemData(atkValues, baseIndex, layout.UintValuesPerItem))
                 break;
 
             var u0 = ReadUInt(atkValues, baseIndex);
@@ -80,17 +97,17 @@ internal static unsafe class CrystallizeListAtk {
         return validCount > 0 ? validCount : inferredCount;
     }
 
-    internal static void ClearSlots(AtkValue[] atkValues, int firstSlot, int lastSlot) {
+    internal static void ClearSlots(AtkValue[] atkValues, int firstSlot, int lastSlot, CrystallizeAtkBufferLayout layout) {
         if (firstSlot >= lastSlot)
             return;
         fixed (AtkValue* atkPtr = atkValues) {
-            ClearTrailingSlots(atkPtr, UintValuesOffset, StringValuesOffset, UintValuesPerItem, StringValuesPerItem,
+            ClearTrailingSlots(atkPtr, layout.UintValuesOffset, layout.StringValuesOffset, layout.UintValuesPerItem, layout.StringValuesPerItem,
                 firstSlot, lastSlot);
         }
     }
 
-    private static bool SlotHasItemData(AtkValue[] atkValues, int baseIndex) {
-        for (var u = 0; u < UintValuesPerItem; u++) {
+    private static bool SlotHasItemData(AtkValue[] atkValues, int baseIndex, int uintValuesPerItem) {
+        for (var u = 0; u < uintValuesPerItem; u++) {
             if (atkValues[baseIndex + u].Type != AtkValueType.Undefined)
                 return true;
         }
@@ -99,13 +116,13 @@ internal static unsafe class CrystallizeListAtk {
     }
 
     // Each slot is either a tree row (u0 = AtkComponentTreeListItemType) or a legacy flat row (u0 = source index).
-    internal static CrystallizeAtkSlot[] Parse(AtkValue[] atkValues, int itemCount, int categoryRowCount = 0) {
+    internal static CrystallizeAtkSlot[] Parse(AtkValue[] atkValues, int itemCount, CrystallizeAtkBufferLayout layout, int categoryRowCount = 0) {
         if (itemCount <= 0)
             return [];
 
         var slots = new CrystallizeAtkSlot[itemCount];
         for (var slot = 0; slot < itemCount; slot++) {
-            var baseIndex = UintValuesOffset + slot * UintValuesPerItem;
+            var baseIndex = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
             var u0 = ReadUInt(atkValues, baseIndex);
             var u1 = ReadUInt(atkValues, baseIndex + 1);
 
@@ -143,10 +160,7 @@ internal static unsafe class CrystallizeListAtk {
         AtkValue[] atkValues,
         CrystallizeAtkSlot[] layout,
         Func<int, bool> shouldHideLeaf,
-        int uintValuesOffset,
-        int stringValuesOffset,
-        int uintValuesPerItem,
-        int stringValuesPerItem,
+        CrystallizeAtkBufferLayout bufferLayout,
         int nativeItemCount,
         bool includeHeaders,
         HashSet<int>? visibleSources = null,
@@ -161,6 +175,11 @@ internal static unsafe class CrystallizeListAtk {
             PruneEmptySectionHeaders(keepSlots, layout);
         if (keepSlots.Count == 0)
             return 0;
+
+        var uintValuesOffset = bufferLayout.UintValuesOffset;
+        var stringValuesOffset = bufferLayout.StringValuesOffset;
+        var uintValuesPerItem = bufferLayout.UintValuesPerItem;
+        var stringValuesPerItem = bufferLayout.StringValuesPerItem;
 
         fixed (AtkValue* atkPtr = atkValues) {
             var scratch = new AtkValue[Math.Max(uintValuesPerItem, stringValuesPerItem)];
@@ -218,10 +237,10 @@ internal static unsafe class CrystallizeListAtk {
         => value is (uint)AtkComponentTreeListItemType.Leaf
             or (uint)AtkComponentTreeListItemType.LastLeafInGroup;
 
-    internal static void CopySlotToTreeItem(AtkValue[] atkValues, int slot, AtkComponentTreeListItem* item) {
-        var uintBase = UintValuesOffset + slot * UintValuesPerItem;
+    internal static void CopySlotToTreeItem(AtkValue[] atkValues, int slot, AtkComponentTreeListItem* item, CrystallizeAtkBufferLayout layout) {
+        var uintBase = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
         var uints = item->UIntValues;
-        for (var u = 0; u < UintValuesPerItem; u++) {
+        for (var u = 0; u < layout.UintValuesPerItem; u++) {
             var value = ReadUIntAt(atkValues, uintBase + u);
             if (value == uint.MaxValue)
                 continue;
@@ -230,7 +249,7 @@ internal static unsafe class CrystallizeListAtk {
                 uints[u] = value;
         }
 
-        var strIndex = StringValuesOffset + slot * StringValuesPerItem;
+        var strIndex = layout.StringValuesOffset + slot * layout.StringValuesPerItem;
         if ((uint)strIndex >= (uint)atkValues.Length)
             return;
 
@@ -249,12 +268,13 @@ internal static unsafe class CrystallizeListAtk {
         AtkValue[] atkValues,
         int slot,
         CrystallizeAtkSlot entry,
+        CrystallizeAtkBufferLayout layout,
         out PrismBoxCrystallizeItem row) {
         row = default;
-        var baseIndex = UintValuesOffset + slot * UintValuesPerItem;
+        var baseIndex = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
         if (baseIndex + 5 >= atkValues.Length || !entry.IsLeaf)
             return false;
-        if (!TryReadCategoryRowFields(atkValues, slot, IsTreeItemType(ReadUInt(atkValues, baseIndex)), out var inventory, out var itemSlot, out var itemId))
+        if (!TryReadCategoryRowFields(atkValues, slot, layout, IsTreeItemType(ReadUInt(atkValues, baseIndex)), out var inventory, out var itemSlot, out var itemId))
             return false;
         row = new PrismBoxCrystallizeItem {
             Inventory = inventory,
@@ -285,11 +305,11 @@ internal static unsafe class CrystallizeListAtk {
         return true;
     }
 
-    private static bool TryReadCategoryRowFields(AtkValue[] atkValues, int slot, bool isTreeLeaf, out InventoryType inventory, out int itemSlot, out uint itemId) {
+    private static bool TryReadCategoryRowFields(AtkValue[] atkValues, int slot, CrystallizeAtkBufferLayout layout, bool isTreeLeaf, out InventoryType inventory, out int itemSlot, out uint itemId) {
         inventory = default;
         itemSlot = 0;
         itemId = 0;
-        var baseIndex = UintValuesOffset + slot * UintValuesPerItem;
+        var baseIndex = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
         if (baseIndex + 5 >= atkValues.Length)
             return false;
         if (isTreeLeaf) {
