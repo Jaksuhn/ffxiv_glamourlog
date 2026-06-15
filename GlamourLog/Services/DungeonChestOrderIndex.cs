@@ -15,36 +15,15 @@ internal sealed class DungeonChestOrderIndex {
     private const uint TreasureSgbRegularChest = 1596;
     private const uint TreasureSgbBossChest = 1597;
     private const uint TreasureSgbFinalBossChest = 1598;
-
-    private static DungeonChestOrderIndex? _instance;
-
-    private readonly Dictionary<uint, uint> _cfcIdByChestRowId = [];
     private readonly Dictionary<uint, uint> _fightNoByChestRowId = [];
     private readonly Dictionary<uint, uint> _maxFightNoByCfcId = [];
     private readonly Dictionary<uint, DungeonChest> _chestByRowId = [];
     private readonly Dictionary<uint, string> _unmatchedSecondaryLabelByChestRowId = [];
 
-    internal static DungeonChestOrderIndex Instance => _instance ??= Build();
-
-    internal uint? TryGetFightNo(uint chestRowId)
-        => _fightNoByChestRowId.TryGetValue(chestRowId, out var fightNo) ? fightNo : null;
+    internal static DungeonChestOrderIndex Instance => field ??= Build();
 
     internal uint GetMaxFightNo(uint cfcId)
         => _maxFightNoByCfcId.GetValueOrDefault(cfcId);
-
-    internal bool IsBossChest(uint chestRowId)
-        => _fightNoByChestRowId.ContainsKey(chestRowId);
-
-    internal bool IsFinalBossChest(uint chestRowId) {
-        if (!_fightNoByChestRowId.TryGetValue(chestRowId, out var fightNo))
-            return false;
-        if (!_cfcIdByChestRowId.TryGetValue(chestRowId, out var cfcId))
-            return false;
-        return fightNo == GetMaxFightNo(cfcId);
-    }
-
-    internal DungeonChest? TryGetChest(uint chestRowId)
-        => _chestByRowId.GetValueOrDefault(chestRowId);
 
     internal List<uint> OrderChestRowIds(uint cfcId, IEnumerable<uint> chestRowIds)
         => [.. chestRowIds
@@ -68,11 +47,8 @@ internal sealed class DungeonChestOrderIndex {
                 var ck = chest.DungeonChest.RowId;
                 if (ck == 0)
                     continue;
-                if (!byCfc.TryGetValue(cfc, out var keySet)) {
-                    keySet = [];
-                    byCfc[cfc] = keySet;
-                }
-
+                if (!byCfc.TryGetValue(cfc, out var keySet))
+                    byCfc[cfc] = keySet = [];
                 keySet.Add(ck);
             }
         }
@@ -99,7 +75,7 @@ internal sealed class DungeonChestOrderIndex {
     }
 
     internal string FormatSecondaryLabel(uint chestRowId) {
-        if (TryGetFightNo(chestRowId) is { } fightNo)
+        if (_fightNoByChestRowId.TryGetValue(chestRowId, out var fightNo))
             return $"Boss #{fightNo + 1}";
 
         return _unmatchedSecondaryLabelByChestRowId.GetValueOrDefault(chestRowId) ?? string.Empty;
@@ -108,18 +84,15 @@ internal sealed class DungeonChestOrderIndex {
     private void AssignUnmatchedSecondaryLabels() {
         var unmatchedByCfcAndSgb = new Dictionary<(uint CfcId, uint SgbRowId), List<uint>>();
 
-        foreach (var (chestRowId, cfcId) in _cfcIdByChestRowId) {
+        foreach (var (chestRowId, chest) in _chestByRowId) {
             if (_fightNoByChestRowId.ContainsKey(chestRowId))
                 continue;
             if (TryGetChestSgbRowId(chestRowId) is not { } sgbRowId)
                 continue;
 
-            var key = (cfcId, sgbRowId);
-            if (!unmatchedByCfcAndSgb.TryGetValue(key, out var chests)) {
-                chests = [];
-                unmatchedByCfcAndSgb[key] = chests;
-            }
-
+            var key = (chest.ContentFinderConditionId, sgbRowId);
+            if (!unmatchedByCfcAndSgb.TryGetValue(key, out var chests))
+                unmatchedByCfcAndSgb[key] = chests = [];
             chests.Add(chestRowId);
         }
 
@@ -156,9 +129,9 @@ internal sealed class DungeonChestOrderIndex {
         };
 
     private uint? TryGetChestSgbRowId(uint dungeonChestRowId) {
-        if (TryGetChest(dungeonChestRowId) is not { ChestId: var treasureRowId } || treasureRowId == 0)
+        if (!_chestByRowId.TryGetValue(dungeonChestRowId, out var chest) || chest.ChestId == 0)
             return null;
-        if (!Treasure.TryGetRow(treasureRowId, out var treasure))
+        if (!Treasure.TryGetRow(chest.ChestId, out var treasure))
             return null;
         return treasure.SGB.RowId;
     }
@@ -170,7 +143,6 @@ internal sealed class DungeonChestOrderIndex {
             if (chest.RowId == 0)
                 continue;
             index._chestByRowId[chest.RowId] = chest;
-            index._cfcIdByChestRowId[chest.RowId] = chest.ContentFinderConditionId;
         }
 
         foreach (var boss in Svc.Data.GetSupplemental<DungeonBoss>(CsvLoader.DungeonBossResourceName))
