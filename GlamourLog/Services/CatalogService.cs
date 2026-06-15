@@ -6,7 +6,7 @@ namespace GlamourLog.Services;
 internal sealed class CatalogService : IDisposable {
     private bool _disposed;
 
-    internal ReadOnlyCollection<GlamourSet> GlamourSets { get; private set; } = Array.Empty<GlamourSet>().ToList().AsReadOnly();
+    internal ReadOnlyCollection<GlamourSet> GlamourSets { get; private set; } = new ReadOnlyCollection<GlamourSet>([]);
     internal Dictionary<string, List<GlamourSet>> GlamourSetsByCategory { get; } = [];
     internal ItemCostLookup CostsLookup { get; } = new();
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
@@ -27,11 +27,8 @@ internal sealed class CatalogService : IDisposable {
     public CatalogService() {
         Svc.ClientState.Login += OnClientLogin;
 
-        if (Svc.ClientState.IsLoggedIn) {
-            lock (_glamourDataLock)
-                _catalogBuilt = false;
-            RequestCatalogBuild();
-        }
+        if (Svc.ClientState.IsLoggedIn)
+            InvalidateCatalog();
     }
 
     public void Dispose() {
@@ -48,13 +45,10 @@ internal sealed class CatalogService : IDisposable {
         }
     }
 
-    private void OnClientLogin() {
-        lock (_glamourDataLock)
-            _catalogBuilt = false;
-        RequestCatalogBuild();
-    }
+    private void OnClientLogin() => InvalidateCatalog();
+    internal void OnArmoireChanged() => InvalidateCatalog();
 
-    internal void OnArmoireChanged() {
+    private void InvalidateCatalog() {
         lock (_glamourDataLock)
             _catalogBuilt = false;
         RequestCatalogBuild();
@@ -110,16 +104,9 @@ internal sealed class CatalogService : IDisposable {
     internal bool CatalogReady => _catalogBuilt;
 
     internal bool IsKnownCostCurrency(uint itemId) => itemId != 0 && _catalogBuilt && _costCurrencyItemIds.Contains(itemId);
-
-    internal bool IsMirageOutfitPiece(uint itemId)
-        => itemId != 0 && _catalogBuilt && MirageOutfitPieceIds.Contains(itemId);
-
+    internal bool IsMirageOutfitPiece(uint itemId) => itemId != 0 && _catalogBuilt && MirageOutfitPieceIds.Contains(itemId);
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
-
-    internal void MarkLogWindowDirty() => Svc.Get<WindowsService>().RefreshLogWindow();
-
-    /// <summary> Inventory / dresser changes that affect ownership or counts shown in the main log window. </summary>
-    internal void NotifyDisplayedOwnershipMayHaveChanged() => Svc.Get<WindowsService>().RefreshLogWindow();
+    internal void NotifyOwnershipChanged() => Svc.Get<WindowsService>().RefreshLogWindow();
 
     /// <summary> Real outfit tabs (excludes synthetic uncategorized / unobtainable rows).</summary>
     internal IReadOnlyList<OutfitCategory> OutfitCategories => _catalog.ClassifiableCategories;
@@ -149,19 +136,12 @@ internal sealed class CatalogService : IDisposable {
     private HashSet<uint> BuildSourceScopeItemIds(GlamourSet set, uint? costScopePieceItemId) {
         var cat = CategoryNameForPrimaryCostLookup(set);
         var itemIds = new HashSet<uint>();
-        if (costScopePieceItemId is { } only) {
-            itemIds.Add(only);
-            foreach (var c in GetPrimaryItemCosts(only, cat))
+        var pieces = costScopePieceItemId is { } only ? (IEnumerable<uint>)[only] : set.Items;
+        foreach (var pieceId in pieces) {
+            itemIds.Add(pieceId);
+            foreach (var c in GetPrimaryItemCosts(pieceId, cat))
                 if (c.ItemId != 0)
                     itemIds.Add(c.ItemId);
-        }
-        else {
-            foreach (var i in set.Items) {
-                itemIds.Add(i);
-                foreach (var c in GetPrimaryItemCosts(i, cat))
-                    if (c.ItemId != 0)
-                        itemIds.Add(c.ItemId);
-            }
         }
         return itemIds;
     }
@@ -172,9 +152,8 @@ internal sealed class CatalogService : IDisposable {
             return [];
         if (!string.IsNullOrEmpty(categoryNameForDiscriminator)) {
             lock (_glamourDataLock) {
-                foreach (var cat in _catalog.ClassifiableCategories) {
-                    if (cat.Name != categoryNameForDiscriminator)
-                        continue;
+                var cat = _catalog.ClassifiableCategories.FirstOrDefault(c => c.Name == categoryNameForDiscriminator);
+                if (cat is not null) {
                     var late = cat.Discriminator.LateCostCurrencyItemIds;
                     if (late.Count > 0) {
                         var pinnedLate = costs.Where(c => late.Contains(c.ItemId)).ToList();
@@ -186,21 +165,10 @@ internal sealed class CatalogService : IDisposable {
                         if (pinnedPiece.Count > 0)
                             return pinnedPiece;
                     }
-                    break;
                 }
             }
         }
         return [.. costs];
-    }
-
-    internal string DisplayLabelForCategory(string categoryName) {
-        lock (_glamourDataLock) {
-            foreach (var c in _catalog.UITabsInOrder) {
-                if (c.Name == categoryName)
-                    return c.Name;
-            }
-        }
-        return categoryName;
     }
 
     internal IReadOnlyList<GlamourSet> GetSharedModelSiblings(GlamourSet set) {

@@ -30,7 +30,7 @@ internal unsafe partial class LogWindow {
             if (!_categoryButtonMap.TryGetValue(btn, out var categoryId))
                 continue;
 
-            btn.LabelNode.String = Svc.Get<CatalogService>().DisplayLabelForCategory(categoryId);
+            btn.LabelNode.String = categoryId;
             btn.Selected = categoryId == _selectedCategoryId;
             if (_categoryCountByButton.TryGetValue(btn, out var countNode)) {
                 var cr = CategoryRows(categoryId);

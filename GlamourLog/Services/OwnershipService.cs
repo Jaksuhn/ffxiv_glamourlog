@@ -41,7 +41,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     private void OnArmoireChanged() {
         Svc.Get<CatalogService>().OnArmoireChanged();
-        Svc.Get<CatalogService>().NotifyDisplayedOwnershipMayHaveChanged();
+        Svc.Get<CatalogService>().NotifyOwnershipChanged();
         ArmoireOwnershipChanged?.Invoke();
     }
 
@@ -58,7 +58,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
             var itemId = eventData.Item.BaseItemId;
             var catalog = Svc.Get<CatalogService>();
             if (catalog.GlamourSets.Any(set => set.Items.Contains(itemId)) || catalog.IsKnownCostCurrency(itemId)) {
-                catalog.NotifyDisplayedOwnershipMayHaveChanged();
+                catalog.NotifyOwnershipChanged();
                 return;
             }
         }

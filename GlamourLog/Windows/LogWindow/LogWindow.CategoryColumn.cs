@@ -48,7 +48,7 @@ internal unsafe partial class LogWindow {
             button.LabelNode.LineSpacing = 20;
             button.LabelNode.AlignmentType = AlignmentType.Left;
             button.LabelNode.TextColor = CategoryNameGold;
-            button.LabelNode.String = Svc.Get<CatalogService>().DisplayLabelForCategory(captured);
+            button.LabelNode.String = categoryId;
             button.LabelNode.AddTextFlags(TextFlags.Emboss, TextFlags.Ellipsis);
 
             var countNode = new TextNode {
