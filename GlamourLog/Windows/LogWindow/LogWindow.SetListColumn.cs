@@ -3,6 +3,7 @@ using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using GlamourLog.Windows.LogWindow;
+using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog;
@@ -73,7 +74,12 @@ internal unsafe partial class LogWindow {
         _setListNode.OptionsList = [.. _setListOptions];
         if (_pendingClearSetSelection) {
             _pendingClearSetSelection = false;
-            _setListNode.FullRebuild();
+            _setListNode.ClearSelection();
+        }
+
+        if (_pendingResetSetScroll) {
+            _pendingResetSetScroll = false;
+            _setListNode.ResetScroll();
         }
 
         if (_pendingSelectSet is { } pendingSet) {
@@ -200,7 +206,7 @@ internal unsafe partial class LogWindow {
         C.SetListSortDirection = C.SetListSortDirection == ListSortDirection.Ascending ? ListSortDirection.Descending : ListSortDirection.Ascending;
         C.Save();
         SyncSortDirectionChrome();
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
+        if (!IsOpen || !CanPaintLists())
             return;
         _pendingRebuildSetListOrderOnly = true;
     }
@@ -213,8 +219,8 @@ internal unsafe partial class LogWindow {
         btn.TextTooltip = C.SetListSortDirection == ListSortDirection.Ascending ? Addon.GetRow(8043).Text : Addon.GetRow(8044).Text;
     }
 
-    private static ButtonIcon SortDirectionButtonIcon(ListSortDirection direction)
-        => direction == ListSortDirection.Ascending ? ButtonIcon.UpArrow : ButtonIcon.ArrowDown;
+    private static CircleButtonIcon SortDirectionButtonIcon(ListSortDirection direction)
+        => direction == ListSortDirection.Ascending ? CircleButtonIcon.UpArrow : CircleButtonIcon.ArrowDown;
 
     private string SetSublineText(GlamourSet set, OwnershipSnapshot snap) {
         var n = set.Items.Count;

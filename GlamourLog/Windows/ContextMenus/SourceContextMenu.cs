@@ -1,6 +1,6 @@
 using clib.TaskSystem;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using KamiToolKit;
+using KamiToolKit.BaseTypes;
 using System.Threading.Tasks;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 

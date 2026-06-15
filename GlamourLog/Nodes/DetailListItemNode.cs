@@ -3,7 +3,9 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Classes;
 using KamiToolKit.Enums;
 using KamiToolKit.Extensions;
+using KamiToolKit.Interfaces;
 using KamiToolKit.Nodes;
+using KamiToolKit.BaseTypes;
 using Lumina.Text.ReadOnly;
 
 namespace GlamourLog.Nodes;
@@ -54,6 +56,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     public static float ItemHeight => 30f;
     private const float PieceIconSize = 22f;
     private const float PieceTextBoxHeight = 19f; // ellipsis needs extra height vs line size
+    private const float DetailIconX = 2f;
+    private const float DetailIconTextX = 30f;
     private const float DutyChestLabelX = 6f;
     private const float DutyChestLabelPadding = 4f;
     private const float DutyChestLabelIconGap = 16f;
@@ -70,16 +74,16 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     public static Action<GlamourSet>? OnSharedModelSetLeftClick { get; set; }
     public static Action<uint, GlamourSet>? OnSharedModelItemLeftClick { get; set; }
 
+    private readonly RowFramedIcon _pieceIcon;
     private readonly CollisionNode _inputCollision;
     private readonly TextNode _primary;
     private readonly TextNode _secondary;
-    private readonly FramedItemIconNode _icon;
     private readonly TreeComboSectionNode _sectionChrome;
     private readonly TreeListHeaderNode _journalChrome;
     private readonly GlamourIconNode _storageBadge;
     private readonly InventoryBadgeNode _inventoryBadge;
     private readonly ArmoireWarningBadgeNode _armoireWarningBadge;
-    private readonly List<FramedItemIconNode> _sourceIcons = [];
+    private readonly List<RowFramedIcon> _sourceIcons = [];
     private readonly TextNode _sourceOverflow;
     private readonly SourceFlowNode _arrowFlow;
     private readonly CheckMarkBadgeNode _checkBadge;
@@ -90,12 +94,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         EnableSelection = false;
         EnableHighlight = false;
 
-        _icon = new FramedItemIconNode(PieceIconSize) {
-            Position = new Vector2(2f, PieceIconY),
-            Size = new Vector2(PieceIconSize),
-            IsVisible = false,
-        };
-        _icon.AttachNode(this);
+        // flat ResNode icon siblings (same coordinate space as text/header nodes)
+        _pieceIcon = new RowFramedIcon();
+        _pieceIcon.AttachTo(this);
 
         _sectionChrome = new TreeComboSectionNode(string.Empty, 200f) {
             IsVisible = false,
@@ -116,7 +117,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _journalChrome.AttachNode(this);
 
         _primary = new TextNode {
-            Position = new Vector2(30f, 1f),
+            Position = new Vector2(DetailIconTextX, 1f),
             Size = new Vector2(220f, 14f),
             FontType = FontType.Axis,
             FontSize = 12,
@@ -129,7 +130,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _primary.AttachNode(this);
 
         _secondary = new TextNode {
-            Position = new Vector2(30f, 14f),
+            Position = new Vector2(DetailIconTextX, 14f),
             Size = new Vector2(220f, 14f),
             FontType = FontType.Axis,
             FontSize = 12,
@@ -168,10 +169,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _inputCollision.AttachNode(this);
 
         for (var i = 0; i < 12; i++) {
-            var icon = new FramedItemIconNode(20f) {
-                IsVisible = false,
-            };
-            icon.AttachNode(this);
+            var icon = new RowFramedIcon();
+            icon.AttachTo(this);
             _sourceIcons.Add(icon);
         }
 
@@ -195,6 +194,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
     protected override void OnSizeChanged() {
         base.OnSizeChanged();
+
         _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
         _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
         _sectionChrome.Width = Width;
@@ -210,7 +210,13 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _armoireWarningBadge.Position = _storageBadge.Position + new Vector2(
             _storageBadge.Size.X - _armoireWarningBadge.Size.X,
             _storageBadge.Size.Y - _armoireWarningBadge.Size.Y);
-        _checkBadge.Position = new Vector2(PieceIconSize - _checkBadge.Size.X - 2f, PieceIconY + PieceIconSize - _checkBadge.Size.Y);
+
+        if (_pieceIcon.IsVisible)
+            LayoutIconRow();
+
+        _checkBadge.Position = new Vector2(
+            DetailIconX + PieceIconSize - _checkBadge.Size.X - 2f,
+            PieceIconY + PieceIconSize - _checkBadge.Size.Y);
 
         _inputCollision.Position = Vector2.Zero;
         _inputCollision.Size = Size;
@@ -218,6 +224,10 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         // row width from parent updated; pooled ItemData may not re-run SetNodeData same frame
         if (ItemData is not null)
             ApplyDynamicWidth(ItemData);
+    }
+
+    private void LayoutIconRow() {
+        _pieceIcon.Layout(new Vector2(DetailIconX, PieceIconY), PieceIconSize);
     }
 
     private void ApplyDynamicWidth(DetailListRowData data) {
@@ -233,7 +243,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 else if (_inventoryBadge.IsVisible)
                     pieceTextRightReserve = _inventoryBadge.Size.X + 16f;
                 _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), PieceTextBoxHeight);
-                _primary.Position = new Vector2(30f, PieceIconY + (PieceIconSize - PieceTextBoxHeight) * 0.5f);
+                _primary.Position = new Vector2(DetailIconTextX, PieceIconY + (PieceIconSize - PieceTextBoxHeight) * 0.5f);
                 break;
             case DetailRowKind.Cost:
             case DetailRowKind.SharedModelSet:
@@ -276,8 +286,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                         var icon = _sourceIcons[i];
                         if (i < show) {
                             icon.SetItemId(sourceItems[i]);
-                            icon.Size = new Vector2(iconSize, iconSize);
-                            icon.Position = new Vector2(iconOriginX + i * (iconSize + iconGap), iconY);
+                            icon.Layout(new Vector2(iconOriginX + i * (iconSize + iconGap), iconY), iconSize);
                             icon.IsVisible = true;
                         }
                         else {
@@ -309,7 +318,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     }
 
     protected override void SetNodeData(DetailListRowData itemData) {
-        _icon.IsVisible = false;
+        _pieceIcon.IsVisible = false;
         _sectionChrome.IsVisible = false;
         _journalChrome.IsVisible = false;
         _secondary.IsVisible = false;
@@ -334,8 +343,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _primary.LineSpacing = 12;
         _primary.AlignmentType = AlignmentType.Left;
         _primary.TextColor = ImGuiColors.DalamudWhite;
-        _primary.Position = new Vector2(30f, 1f);
-        _secondary.Position = new Vector2(30f, 14f);
+        _primary.Position = new Vector2(DetailIconTextX, 1f);
+        _secondary.Position = new Vector2(DetailIconTextX, 14f);
         _inputCollision.CollisionType = CollisionType.Hit;
         _inputCollision.ShowClickableCursor = false;
 
@@ -374,8 +383,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 break;
             case DetailRowKind.Piece:
                 var itemRow = Item.GetRow(itemData.ItemId);
-                _icon.SetItemId(itemData.ItemId);
-                _icon.IsVisible = true;
+                _pieceIcon.SetItemId(itemData.ItemId);
+                _pieceIcon.IsVisible = true;
                 // Left = middle-left in atk; Center also centers horizontally in the text box
                 _primary.AlignmentType = AlignmentType.Left;
                 _primary.FontSize = 14;
@@ -397,8 +406,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.RemoveTextFlags(TextFlags.Ellipsis);
                 break;
             case DetailRowKind.Cost:
-                _icon.SetItemId(itemData.ItemId);
-                _icon.IsVisible = true;
+                _pieceIcon.SetItemId(itemData.ItemId);
+                _pieceIcon.IsVisible = true;
                 ApplyIconTwoLineTextLayout(itemData.PrimaryText, itemData.SecondaryText);
                 _inputCollision.ShowClickableCursor = true;
                 _inputCollision.ItemTooltip = itemData.ItemId;
@@ -470,8 +479,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 var sharedIconId = sharedRow.IconItemId != 0
                     ? sharedRow.IconItemId
                     : sharedRow.Set.NonSetCabinetPiece ? sharedRow.Set.Items[0] : sharedRow.Set.ItemId;
-                _icon.SetItemId(sharedIconId);
-                _icon.IsVisible = true;
+                _pieceIcon.SetItemId(sharedIconId);
+                _pieceIcon.IsVisible = true;
                 ApplyIconTwoLineTextLayout(sharedRow.Title, sharedRow.Subtitle);
                 _checkBadge.IsVisible = sharedRow.IsOwned;
                 if (sharedRow.ShowStorage) {
@@ -513,8 +522,9 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         => MeasureDutyChestLabelColumnWidth(primaryText, secondaryText);
 
     private void ApplyIconTwoLineTextLayout(string primaryText, string secondaryText) {
+        LayoutIconRow();
         _primary.String = primaryText;
-        _primary.Position = new Vector2(30f, 1f);
+        _primary.Position = new Vector2(DetailIconTextX, 1f);
         _primary.FontSize = 12;
         _primary.LineSpacing = 12;
         _primary.AlignmentType = AlignmentType.Left;
@@ -522,7 +532,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _primary.RemoveTextFlags(TextFlags.Ellipsis);
         _secondary.String = secondaryText;
         _secondary.IsVisible = true;
-        _secondary.Position = new Vector2(30f, 15f);
+        _secondary.Position = new Vector2(DetailIconTextX, 15f);
         _secondary.FontSize = 12;
         _secondary.LineSpacing = 12;
         _secondary.TextColor = TwoLineSubtitleColor;
@@ -624,5 +634,54 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         if (ItemData.Kind is DetailRowKind.SourceDuty
             && (ItemData.ContentFinderConditionId != 0 || ItemData.NavigateTarget is not null))
             OnSourceHeaderRightClick?.Invoke(ItemData.ContentFinderConditionId, ItemData.NavigateTarget);
+    }
+
+    private sealed class RowFramedIcon {
+        private const float FrameOutset = 8f;
+        private static readonly NodeFlags VisibleFlags = NodeFlags.Visible | NodeFlags.Enabled | NodeFlags.EmitsEvents;
+
+        public readonly IconImageNode Image;
+        public readonly ImageNode Frame;
+
+        public RowFramedIcon() {
+            Image = new IconImageNode {
+                FitTexture = true,
+                IsVisible = false,
+                NodeFlags = VisibleFlags,
+            };
+            Frame = new ImageNode {
+                PartId = 0,
+                WrapMode = WrapMode.Stretch,
+                IsVisible = false,
+                NodeFlags = VisibleFlags,
+            };
+            IconNodeTextureHelper.LoadIconAFrameTexture(Frame);
+        }
+
+        public void AttachTo(NodeBase parent) {
+            Frame.AttachNode(parent);
+            Image.AttachNode(parent);
+        }
+
+        public bool IsVisible {
+            get => Image.IsVisible;
+            set {
+                Image.IsVisible = value;
+                Frame.IsVisible = value;
+            }
+        }
+
+        public void SetItemId(uint itemId) {
+            Image.ItemTooltip = itemId;
+            Image.IconId = Item.GetRowRef(itemId) is { IsValid: true } row ? (uint)row.Value.Icon : 0;
+        }
+
+        public void Layout(Vector2 position, float iconSize) {
+            var frameInset = FrameOutset * 0.5f;
+            Image.Position = position;
+            Image.Size = new Vector2(iconSize);
+            Frame.Position = position - new Vector2(frameInset);
+            Frame.Size = new Vector2(iconSize + FrameOutset);
+        }
     }
 }

@@ -202,7 +202,8 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         _refreshRecursionDepth++;
         try {
             OnPostRefreshCore(addon, data);
-        } finally {
+        }
+        finally {
             _refreshRecursionDepth--;
         }
     }
@@ -228,7 +229,8 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
                 LogFilterDebug(nameof(OnPostRefresh), "filter enable aborted (category snapshot unavailable after native refresh)");
                 return;
             }
-        } else {
+        }
+        else {
             ParseAtkLayout(force: true);
         }
         if (!HasAtkBufferLayout || _nativeAtkSnapshot.Length == 0 || _atkLayout.Length == 0 || _categoryRows.Length == 0) {
@@ -238,7 +240,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         }
         if (IsNativeTreeTruncatedVersusSnapshot(data)) {
             RestoreFullCategory(data);
-            var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)0;
+            var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : 0;
             LogFilterDebug(nameof(OnPostRefresh),
                 $"native tree truncated vs snapshot (listLength={listLength} snapshot={_categoryRows.Length}) — requesting refresh");
             RequestAddonRefresh(addon);
@@ -552,7 +554,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     private bool IsNativeTreeTruncatedVersusSnapshot(MiragePrismPrismBoxData* data) {
         if (_categoryRows.Length <= 0)
             return false;
-        var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)0;
+        var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : 0;
         if (listLength <= 0)
             return false;
         var agentCount = InferPopulatedCategoryItemCount(data);
@@ -581,7 +583,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
 
         var layoutMaxSource = GetLayoutMaxSourceIndex();
         var scannedCount = InferPopulatedCategoryItemCount(data);
-        var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)0;
+        var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : 0;
         var rowCount = Math.Max(scannedCount, listLength);
         if (_crystallizeFilterFlagsSnapshot == 0) // gearset off: trust layoutMax; on: layoutMax is often stale
             rowCount = Math.Max(rowCount, layoutMaxSource);

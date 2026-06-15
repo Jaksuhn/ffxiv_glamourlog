@@ -1,3 +1,4 @@
+using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes;
@@ -28,13 +29,13 @@ internal sealed class SetListExportControlNode : ResNode {
         ExportDropDown.BackgroundNode.IsVisible = false;
         ExportDropDown.LabelNode.IsVisible = false;
         ExportDropDown.CollapseArrowNode.IsVisible = false;
-        ExportDropDown.DisableCollisionNode = true;
+        ExportDropDown.CollisionNode.NodeFlags = 0;
         ExportDropDown.AttachNode(this);
 
         ExportButton = new CircleButtonNode {
             Position = new Vector2(ButtonGap, 0f),
             Size = new Vector2(ButtonSize, ButtonSize),
-            Icon = ButtonIcon.Document,
+            Icon = CircleButtonIcon.Document,
             TextTooltip = "Export data",
             OnClick = () => ExportDropDown.Toggle(),
         };

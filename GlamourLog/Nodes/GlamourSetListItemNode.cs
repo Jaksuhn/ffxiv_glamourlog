@@ -1,5 +1,7 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using KamiToolKit.Enums;
 using KamiToolKit.Extensions;
+using KamiToolKit.Interfaces;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes;
@@ -17,8 +19,9 @@ internal sealed class SetListRowData {
 }
 
 internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowData>, IListItemNode {
-    private const float TextX = 36f;
-    private const float TextRightMargin = 8f;
+    private const float IconLeftMargin = 4f;
+    private const float TextX = 36f + IconLeftMargin;
+    private const float TextRightMargin = 12f;
     private const float StorageTextReserve = 14f;
     private const uint TitleFontSize = 14;
     private const uint SubFontSize = 12;
@@ -27,6 +30,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
     public static float ItemHeight => 38f;
     public static Action<GlamourSet>? OnRowRightClick { get; set; }
 
+    private readonly ResNode _iconAnchor;
     private readonly FramedItemIconNode _iconNode;
     private readonly CheckMarkBadgeNode _checkBadge;
     private readonly TextNode _titleNode;
@@ -41,8 +45,11 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         EnableSelection = false;
         EnableHighlight = false;
 
+        _iconAnchor = new ResNode();
+        _iconAnchor.AttachNode(this);
+
         _iconNode = new FramedItemIconNode(IconSize);
-        _iconNode.AttachNode(this);
+        _iconNode.AttachNode(_iconAnchor);
 
         _checkBadge = new CheckMarkBadgeNode();
         _checkBadge.AttachNode(this);
@@ -77,9 +84,11 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         _inputCollision = new CollisionNode {
             CollisionType = CollisionType.Hit,
             Uses = 0,
-            ShowClickableCursor = true
+            ShowClickableCursor = true,
+            NodeFlags = NodeFlags.Visible | NodeFlags.Enabled | NodeFlags.HasCollision |
+                        NodeFlags.RespondToMouse | NodeFlags.EmitsEvents,
         };
-        _inputCollision.AddDrawFlags(KamiToolKit.Enums.DrawFlags.ClickableCursor);
+        _inputCollision.AddDrawFlags(DrawFlags.ClickableCursor);
         _inputCollision.AttachNode(this);
         // full-row hitbox
         _inputCollision.AddEvent(AtkEventType.MouseClick, (_, _, _, _, eventData) => {
@@ -100,9 +109,12 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
         base.OnSizeChanged();
 
         var iconY = (Height - IconSize) * 0.5f;
-        _iconNode.Position = new Vector2(0f, iconY);
+        _iconAnchor.Position = new Vector2(IconLeftMargin, iconY);
+        _iconAnchor.Size = new Vector2(IconSize, IconSize);
         _iconNode.Size = new Vector2(IconSize, IconSize);
-        _checkBadge.Position = new Vector2(IconSize - _checkBadge.Size.X - 4f, iconY + IconSize - _checkBadge.Size.Y);
+        _checkBadge.Position = _iconAnchor.Position + new Vector2(
+            IconSize - _checkBadge.Size.X - 4f,
+            IconSize - _checkBadge.Size.Y);
 
         _storageBadge.Position = new Vector2(Math.Max(0f, Width - _storageBadge.Size.X - 4f), 2f);
         _armoireWarningBadge.Position = _storageBadge.Position + new Vector2(

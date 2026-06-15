@@ -4,7 +4,8 @@ using GlamourLog.Services;
 using GlamourLog.Windows.ContextMenus;
 using GlamourLog.Windows.GuideWindow;
 using GlamourLog.Windows.LogWindow;
-using KamiToolKit;
+using KamiToolKit.BaseTypes;
+using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
@@ -31,14 +32,13 @@ internal unsafe partial class LogWindow : NativeAddon {
     private VerticalLineNode? _columnSeparatorLeft;
     private VerticalLineNode? _columnSeparatorRight;
     private HorizontalLineNode? _columnSeparatorBottom;
-    private ScrollingListNode? _categoryListNode;
+    private ScrollingNode<VerticalListNode>? _categoryListNode;
     private ListNode<SetListRowData, GlamourSetListItemNode>? _setListNode;
     private DetailRowsListNode? _detailRowsListNode; // not ListNode<>: generic ItemData setter can't be overridden; pooled-row ref skip broke piece text (DetailRowsListNode)
 
     private string _selectedCategoryId = "";
     private GlamourSet? _selectedSet;
     private uint? _sourceFilterPieceItemId;
-    private bool _isFinalizing;
     private bool _pendingRefreshListsAndDetails;
     private bool _pendingRebuildSetListOrderOnly; // skips left/right columns
     private bool _pendingPaintDetailsOnly;
@@ -68,13 +68,48 @@ internal unsafe partial class LogWindow : NativeAddon {
     }
 
     internal void RefreshListsAndDetails() {
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
+        if (!IsOpen || !CanPaintLists())
             return;
         _pendingRefreshListsAndDetails = true;
     }
 
+    private void AttachListCallbacks() {
+        _setListExportControl?.ExportDropDown.OnOptionSelected = OnDataExportFormatSelected;
+        if (_setListSortControl is not null) {
+            _setListSortControl.SortDropDown.OnOptionSelected = OnSetListSortModeSelected;
+            _setListSortControl.SortDirectionButton.OnClick = OnSetListSortDirectionToggle;
+        }
+
+        _setListNode?.OnItemSelected = item => {
+            if (item is null)
+                return;
+            if (ReferenceEquals(_selectedSet, item.Set))
+                return;
+            _selectedSet = item.Set;
+            _sourceFilterPieceItemId = null;
+            _pendingPaintDetailsOnly = true;
+            _pendingResetDetailScroll = true;
+        };
+
+        GlamourSetListItemNode.OnRowRightClick = set => SetContextMenu.Open(this, set, _contextMenu);
+        DetailListItemNode.OnPieceLeftClick = OnDetailPieceItemLeftClick;
+        DetailListItemNode.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
+        DetailListItemNode.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
+        DetailListItemNode.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
+        DetailListItemNode.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
+        DetailListItemNode.OnDetailSectionToggle = OnDetailSectionToggle;
+        DetailListItemNode.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
+        DetailListItemNode.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;
+        DetailListItemNode.OnSharedModelItemLeftClick = OnSharedModelItemLeftClick;
+
+        if (_detailRowsListNode is not null) {
+            _detailRowsListNode.OnItemSelected = _ => { };
+            _detailRowsListNode.AttachInteractivity();
+        }
+    }
+
     private void RefreshListsAndDetailsNow() {
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
+        if (!IsOpen || !CanPaintLists())
             return;
         try {
             SyncCategoryPaneToDataVersion();
@@ -93,7 +128,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     }
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {
-        _isFinalizing = false;
+        base.OnSetup(addon, atkValueSpan);
 
         var topGap = 2f;
         var leftWidth = 220f;
@@ -131,8 +166,11 @@ internal unsafe partial class LogWindow : NativeAddon {
         var listBottom = contentStart.Y + contentSize.Y - BottomStatsBlockHeight;
         var listHeight = listBottom - listY;
         var midColLeft = contentStart.X + leftWidth + columnGap;
-        var midListTop = alignTop + FilterCogSize + 4f;
-        var midListHeight = listBottom - midListTop;
+        var setListTop = alignTop + FilterCogSize;
+        var setListHeight = listBottom - setListTop;
+        var setListRowHeight = GlamourSetListItemNode.ItemHeight;
+        var setListVisibleRows = Math.Max(1, (int)(setListHeight / setListRowHeight));
+        var setListItemSpacing = Math.Max(0f, (setListHeight / setListVisibleRows) - setListRowHeight);
 
         var midHeaderWidth = middleWidth - 8f;
         var midHeaderLeft = midColLeft + 4f;
@@ -150,19 +188,16 @@ internal unsafe partial class LogWindow : NativeAddon {
         };
         _setListExportControl.AttachNode(_midListHeader);
         _setListExportControl.ExportDropDown.SelectedOption = GlamourDataExportFormat.LalaAchievements;
-        _setListExportControl.ExportDropDown.OnOptionSelected = OnDataExportFormatSelected;
 
         _setListSortControl = new SetListSortControlNode(C.SetListSortDirection) {
             Position = new Vector2(sortRelX, 0f),
         };
         _setListSortControl.AttachNode(_midListHeader);
         _setListSortControl.SortDropDown.SelectedOption = C.SetListSortMode;
-        _setListSortControl.SortDropDown.OnOptionSelected = OnSetListSortModeSelected;
-        _setListSortControl.SortDirectionButton.OnClick = OnSetListSortDirectionToggle;
         SyncSortDirectionChrome();
 
         _filterSettingsButton = new CircleButtonNode {
-            Icon = ButtonIcon.GearCog,
+            Icon = CircleButtonIcon.GearCog,
             TextTooltip = "Set list filters",
             Size = new Vector2(FilterCogSize, FilterCogSize),
             Position = new Vector2(filterRelX, 0f),
@@ -187,40 +222,23 @@ internal unsafe partial class LogWindow : NativeAddon {
         _categoryListNode = SimpleScrollList.Create(new Vector2(contentStart.X, listY), new Vector2(leftWidth, listHeight), true);
         _categoryListNode.AttachNode(this);
         _setListNode = new ListNode<SetListRowData, GlamourSetListItemNode> {
-            Position = new Vector2(midColLeft, midListTop),
+            Position = new Vector2(midColLeft, setListTop),
             OptionsList = [],
-            OnItemSelected = item => {
-                if (item is null)
-                    return;
-                if (ReferenceEquals(_selectedSet, item.Set))
-                    return;
-                _selectedSet = item.Set;
-                _sourceFilterPieceItemId = null;
-                _pendingPaintDetailsOnly = true;
-                _pendingResetDetailScroll = true;
-            }
+            AutoResetScroll = false,
+            ItemSpacing = setListItemSpacing,
         };
-        GlamourSetListItemNode.OnRowRightClick = set => SetContextMenu.Open(this, set, _contextMenu);
         _setListNode.AttachNode(this);
-        _setListNode.Size = new Vector2(middleWidth, midListHeight);
+        _setListNode.Size = new Vector2(middleWidth, setListHeight);
         var detailX = contentStart.X + leftWidth + middleWidth + columnGap * 2;
         var detailW = contentSize.X - (leftWidth + middleWidth + columnGap * 2);
         _detailRowsListNode = new DetailRowsListNode {
             Position = new Vector2(detailX, alignTop),
             OptionsList = [],
-            OnItemSelected = _ => { },
         };
-        DetailListItemNode.OnPieceLeftClick = OnDetailPieceItemLeftClick;
-        DetailListItemNode.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
-        DetailListItemNode.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
-        DetailListItemNode.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
-        DetailListItemNode.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
-        DetailListItemNode.OnDetailSectionToggle = OnDetailSectionToggle;
-        DetailListItemNode.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
-        DetailListItemNode.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;
-        DetailListItemNode.OnSharedModelItemLeftClick = OnSharedModelItemLeftClick;
         _detailRowsListNode.AttachNode(this);
         _detailRowsListNode.Size = new Vector2(detailW, listBottom - alignTop);
+
+        AttachListCallbacks();
 
         var sepHalf = 1.5f;
         var sepColumnHeight = listBottom - alignTop;
@@ -245,7 +263,7 @@ internal unsafe partial class LogWindow : NativeAddon {
 
         var helpBtnY = listBottom + (BottomStatsBlockHeight - HelpMenuButtonSize) * 0.5f;
         _helpMainMenuButton = new CircleButtonNode {
-            Icon = ButtonIcon.QuestionMark,
+            Icon = CircleButtonIcon.QuestionMark,
             TextTooltip = "Help and tweak settings",
             Size = new Vector2(HelpMenuButtonSize, HelpMenuButtonSize),
             Position = new Vector2(contentStart.X + leftPad, helpBtnY),
@@ -258,16 +276,28 @@ internal unsafe partial class LogWindow : NativeAddon {
         BuildCategoryButtons();
         _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
 
-        base.OnSetup(addon, atkValueSpan);
         addon->ShouldFireCallbackAndHideOrClose = C.DisableClose; // why is this init-only
 
         // don't rebuild at all during Setup, just let OnUpdate handle it
-        if (!_isFinalizing && CanPaintLists())
+        if (CanPaintLists())
             _pendingRefreshListsAndDetails = true;
     }
 
+    protected override void OnHide(AtkUnitBase* addon) {
+        CancelPendingListWork();
+        ClearStaticCallbacks();
+        PrepareScrollbarsForClose();
+
+        try {
+            _filterWindow.CloseIfOpen();
+            _contextMenu.Close();
+            _contextMenu.Clear();
+        }
+        catch { }
+    }
+
     protected override void OnUpdate(AtkUnitBase* addon) {
-        if (_isFinalizing) {
+        if (!IsOpen) {
             base.OnUpdate(addon);
             return;
         }
@@ -286,15 +316,6 @@ internal unsafe partial class LogWindow : NativeAddon {
                 _pendingCategoryPaneRebuild = false;
                 RebuildCategoryButtonsFromPaneOrder();
                 _pendingRefreshListsAndDetails = true;
-            }
-
-            if (_pendingResetSetScroll && _pendingRefreshListsAndDetails && _setListNode is not null) {
-                // ListNode keeps an internal scroll index; clearing options first guarantees clamp to zero.
-                _setListNode.OptionsList = [];
-                _setListNode.FullRebuild();
-                if (_pendingSelectSet is null)
-                    _pendingClearSetSelection = true;
-                _pendingResetSetScroll = false;
             }
 
             if (_pendingResetDetailScroll) {
@@ -320,7 +341,7 @@ internal unsafe partial class LogWindow : NativeAddon {
 
             if (_pendingResetSetScroll) {
                 _pendingResetSetScroll = false;
-                ResetScrollToTop(_setListNode);
+                _setListNode?.ResetScroll();
             }
         }
         catch (Exception ex) {
@@ -330,6 +351,11 @@ internal unsafe partial class LogWindow : NativeAddon {
         base.OnUpdate(addon);
 
         try {
+            // ListNode row width uses ScrollBarNode.Bounds during build; sync after native layout.
+            SyncVirtualListRowWidths(_setListNode);
+            SyncDetailListRowWidths();
+            SyncCategoryCountLayouts();
+
             _setListNode?.Update();
             _detailRowsListNode?.Update();
 
@@ -342,7 +368,7 @@ internal unsafe partial class LogWindow : NativeAddon {
                 }
             }
 
-            _filterSettingsButton?.Icon = _filterWindow.IsOpen ? ButtonIcon.ActiveGearCog : ButtonIcon.GearCog;
+            _filterSettingsButton?.Icon = _filterWindow.IsOpen ? CircleButtonIcon.ActiveGearCog : CircleButtonIcon.GearCog;
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, $"[{nameof(LogWindow)}] OnUpdate");
@@ -352,18 +378,33 @@ internal unsafe partial class LogWindow : NativeAddon {
     private bool CanPaintLists()
         => _setListNode is not null && _statsSetsLine is not null && _statsSpaceLine is not null && _categoryListNode is not null && _detailRowsListNode is not null;
 
-    private static void ResetScrollToTop(ScrollingListNode? list) {
+    private const float VirtualListRowWidthInset = 16f;
+
+    private static void SyncVirtualListRowWidths(ListNode<SetListRowData, GlamourSetListItemNode>? list) {
         if (list is null)
             return;
-        list.ScrollPosition = 0;
-        list.RecalculateLayout();
+
+        var rowWidth = Math.Max(0f, list.Width - VirtualListRowWidthInset);
+        foreach (var node in list.OptionNodes) {
+            if (Math.Abs(node.Width - rowWidth) > 0.5f)
+                node.Width = rowWidth;
+        }
+    }
+
+    private void SyncDetailListRowWidths()
+        => _detailRowsListNode?.SyncRowWidths();
+
+    private static void ResetScrollToTop(ScrollingNode<VerticalListNode>? list) {
+        if (list is null)
+            return;
+        list.ScrollBarNode.ScrollPosition = 0;
+        list.RecalculateSizes();
     }
 
     private static void ResetScrollToTop(ListNode<SetListRowData, GlamourSetListItemNode>? list) {
         if (list is null)
             return;
-        list.ScrollBarNode.ScrollPosition = 0;
-        list.FullRebuild();
+        list.ResetScroll();
     }
 
     private static void ResetScrollToTop(DetailRowsListNode? list) {
@@ -374,21 +415,79 @@ internal unsafe partial class LogWindow : NativeAddon {
     }
 
     protected override void OnFinalize(AtkUnitBase* addon) {
-        _isFinalizing = true;
-        _pendingCategoryPaneRebuild = false;
+        base.OnFinalize(addon);
 
+        ClearStaticCallbacks();
+        ClearNodeReferences();
+    }
+
+    public override void Dispose() {
+        ClearStaticCallbacks();
+        base.Dispose();
+    }
+
+    private void CancelPendingListWork() {
+        _pendingCategoryPaneRebuild = false;
+        _pendingRefreshListsAndDetails = false;
+        _pendingRebuildSetListOrderOnly = false;
+        _pendingPaintDetailsOnly = false;
+        _pendingResetSetScroll = false;
+        _pendingResetDetailScroll = false;
+        _pendingClearSetSelection = false;
+        _pendingSelectSet = null;
+    }
+
+    // Scrolled scrollbars keep native drag/position state that races AtkUldManager.Finalizer on close.
+    private void PrepareScrollbarsForClose() {
         try {
-            // do not dispose of another NativeAddon here
-            _filterWindow.CloseIfOpen();
-            _gatheringNoteSearch?.Input.ClearFocus();
-            _contextMenu.Close();
-            _contextMenu.Clear();
+            if (_setListNode is not null) {
+                _setListNode.ScrollBarNode.OnValueChanged = null;
+                ResetNativeScrollPosition(_setListNode.ScrollBarNode);
+            }
         }
         catch { }
 
+        try {
+            _detailRowsListNode?.PrepareForClose();
+        }
+        catch { }
+
+        try {
+            if (_categoryListNode is not null) {
+                _categoryListNode.ScrollBarNode.OnValueChanged = null;
+                var bar = (AtkComponentScrollBar*)_categoryListNode.ScrollBarNode;
+                bar->SetContentNode(null, null);
+                ResetNativeScrollPosition(_categoryListNode.ScrollBarNode);
+            }
+        }
+        catch { }
+    }
+
+    private static void ResetNativeScrollPosition(ScrollBarNode scrollBar) {
+        var bar = (AtkComponentScrollBar*)scrollBar;
+        bar->IsBeingDragged = false;
+        bar->SetScrollPosition(0);
+    }
+
+    private void ClearStaticCallbacks() {
         _setListExportControl?.ExportDropDown.OnOptionSelected = null;
         _setListSortControl?.SortDropDown.OnOptionSelected = null;
         _setListSortControl?.SortDirectionButton.OnClick = null;
+        _setListNode?.OnItemSelected = null;
+        _detailRowsListNode?.DetachInteractivity();
+        GlamourSetListItemNode.OnRowRightClick = null;
+        DetailListItemNode.OnPieceLeftClick = null;
+        DetailListItemNode.OnItemRightClick = null;
+        DetailListItemNode.OnSourceHeaderRightClick = null;
+        DetailListItemNode.OnSourceMapFlagLeftClick = null;
+        DetailListItemNode.OnCraftRecipeJournalLeftClick = null;
+        DetailListItemNode.OnDetailSectionToggle = null;
+        DetailListItemNode.IsDetailSectionCollapsed = null;
+        DetailListItemNode.OnSharedModelSetLeftClick = null;
+        DetailListItemNode.OnSharedModelItemLeftClick = null;
+    }
+
+    private void ClearNodeReferences() {
         _midListHeader = null;
         _setListExportControl = null;
         _setListSortControl = null;
@@ -404,23 +503,12 @@ internal unsafe partial class LogWindow : NativeAddon {
         _setListOptions.Clear();
         _detailRowOptions.Clear();
         _collapsedDetailSections.Clear();
-        GlamourSetListItemNode.OnRowRightClick = null;
-        DetailListItemNode.OnPieceLeftClick = null;
-        DetailListItemNode.OnItemRightClick = null;
-        DetailListItemNode.OnSourceHeaderRightClick = null;
-        DetailListItemNode.OnSourceMapFlagLeftClick = null;
-        DetailListItemNode.OnCraftRecipeJournalLeftClick = null;
-        DetailListItemNode.OnDetailSectionToggle = null;
-        DetailListItemNode.IsDetailSectionCollapsed = null;
-        DetailListItemNode.OnSharedModelSetLeftClick = null;
-        DetailListItemNode.OnSharedModelItemLeftClick = null;
         _detailRowsListNode = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;
         _columnSeparatorBottom = null;
         _statsSetsLine = null;
         _statsSpaceLine = null;
-        base.OnFinalize(addon);
     }
 
     private Vector2 ComputeFilterWindowScreenOrigin() {

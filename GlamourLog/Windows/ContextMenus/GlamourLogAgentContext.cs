@@ -1,5 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using KamiToolKit;
+using KamiToolKit.BaseTypes;
 
 namespace GlamourLog.Windows.ContextMenus;
 

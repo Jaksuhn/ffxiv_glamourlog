@@ -6,6 +6,9 @@ using KamiToolKit.Nodes;
 namespace GlamourLog;
 
 internal unsafe partial class LogWindow {
+    private const float CategoryCountWidth = 44f;
+    private const float CategoryCountRightInset = 4f;
+
     private List<string> BuildOrderedCategoryPaneList() {
         var r = new List<string> { AllCategoryId, Svc.Get<CatalogService>().UncategorizedTab.Name };
         foreach (var (category, _) in Svc.Get<CatalogService>().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
@@ -25,24 +28,25 @@ internal unsafe partial class LogWindow {
 
     // rebuilds left pane from _categoryPaneOrder (first setup + when CatalogService.DataVersion bumps)
     private void RebuildCategoryButtonsFromPaneOrder() {
-        if (_isFinalizing || _categoryListNode is null)
+        if (_categoryListNode is null)
             return;
 
         // full clear is ok here (small list); hot-path set/detail lists avoid ktk Clear for dispose/scrollbar races
-        _categoryListNode.Clear();
+        _categoryListNode.ContentNode.Clear();
         _categoryButtons.Clear();
         _categoryButtonMap.Clear();
         _categoryCountByButton.Clear();
 
         foreach (var categoryId in _categoryPaneOrder) {
             var captured = categoryId;
+            var buttonWidth = Math.Max(0f, _categoryListNode.ContentNode.Width);
             var button = new ListButtonNode {
-                Height = 24f,
+                Size = new Vector2(buttonWidth, 24f),
                 String = string.Empty,
                 Selected = captured == _selectedCategoryId,
             };
             button.LabelNode.Position = new Vector2(4f, 1f);
-            button.LabelNode.Size = new Vector2(button.Width - 52f, button.Height - 2f);
+            button.LabelNode.Size = new Vector2(button.Width - CategoryCountWidth - CategoryCountRightInset - 8f, button.Height - 2f);
             button.LabelNode.FontType = FontType.Jupiter;
             button.LabelNode.FontSize = 20;
             button.LabelNode.LineSpacing = 20;
@@ -52,8 +56,8 @@ internal unsafe partial class LogWindow {
             button.LabelNode.AddTextFlags(TextFlags.Emboss, TextFlags.Ellipsis);
 
             var countNode = new TextNode {
-                Position = new Vector2(button.Width - 48f, 1f),
-                Size = new Vector2(44f, button.Height - 2f),
+                Position = new Vector2(button.Width - CategoryCountWidth - CategoryCountRightInset, 1f),
+                Size = new Vector2(CategoryCountWidth, button.Height - 2f),
                 FontType = FontType.Axis,
                 FontSize = 11,
                 LineSpacing = 11,
@@ -82,19 +86,28 @@ internal unsafe partial class LogWindow {
             _categoryButtons.Add(button);
             _categoryButtonMap[button] = categoryId;
             _categoryCountByButton[button] = countNode;
-            _categoryListNode.AddNode(button);
+            _categoryListNode.ContentNode.AddNode(button);
         }
 
-        _categoryListNode.RecalculateLayout();
+        _categoryListNode.RecalculateSizes();
         SyncCategoryCountLayouts();
         ResetScrollToTop(_categoryListNode);
     }
 
     private void SyncCategoryCountLayouts() {
+        if (_categoryListNode is null)
+            return;
+
+        var buttonWidth = Math.Max(0f, _categoryListNode.ContentNode.Width);
         foreach (var btn in _categoryButtons) {
+            if (Math.Abs(btn.Width - buttonWidth) > 0.5f) {
+                btn.Width = buttonWidth;
+                btn.LabelNode.Size = new Vector2(buttonWidth - CategoryCountWidth - CategoryCountRightInset - 8f, btn.Height - 2f);
+            }
+
             if (_categoryCountByButton.TryGetValue(btn, out var count)) {
-                count.Position = new Vector2(btn.Width - 48f, 1f);
-                count.Size = new Vector2(44f, btn.Height - 2f);
+                count.Position = new Vector2(btn.Width - CategoryCountWidth - CategoryCountRightInset, 1f);
+                count.Size = new Vector2(CategoryCountWidth, btn.Height - 2f);
                 count.AlignmentType = AlignmentType.BottomRight;
             }
         }

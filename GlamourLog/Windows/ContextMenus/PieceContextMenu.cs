@@ -2,7 +2,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
-using KamiToolKit;
+using KamiToolKit.BaseTypes;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
 
 namespace GlamourLog.Windows.ContextMenus;

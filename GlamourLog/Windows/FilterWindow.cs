@@ -1,7 +1,7 @@
 using Dalamud.Interface.Colors;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Services;
-using KamiToolKit;
+using KamiToolKit.BaseTypes;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog;

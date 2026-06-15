@@ -1,6 +1,8 @@
-using KamiToolKit.Nodes;
+using FFXIVClientStructs.FFXIV.Component.GUI;
+using KamiToolKit.Classes;
 using KamiToolKit.Enums;
-using KamiToolKit.Premade.Node.Simple;
+using KamiToolKit.Nodes;
+using KamiToolKit.Nodes.Simplified;
 
 namespace GlamourLog.Nodes;
 
@@ -19,17 +21,18 @@ public sealed class FramedItemIconNode : SimpleComponentNode {
 
     public FramedItemIconNode(float iconSize = 22f, uint itemId = 0) {
         // simplecomponent defaults can leave nested icon+frame invisible in some atk trees until explicitly flagged
-        NodeFlags = FFXIVClientStructs.FFXIV.Component.GUI.NodeFlags.Visible;
+        var visibleFlags = NodeFlags.Visible | NodeFlags.Enabled | NodeFlags.EmitsEvents;
+        NodeFlags = visibleFlags;
 
         IconNode = new IconImageNode {
             FitTexture = true,
-            NodeFlags = FFXIVClientStructs.FFXIV.Component.GUI.NodeFlags.Visible,
+            NodeFlags = visibleFlags,
         };
 
         FrameNode = new ImageNode {
             PartId = 0,
             WrapMode = WrapMode.Stretch,
-            NodeFlags = FFXIVClientStructs.FFXIV.Component.GUI.NodeFlags.Visible,
+            NodeFlags = visibleFlags,
         };
         IconNodeTextureHelper.LoadIconAFrameTexture(FrameNode);
 

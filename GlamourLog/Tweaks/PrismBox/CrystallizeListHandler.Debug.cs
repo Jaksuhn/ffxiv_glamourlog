@@ -77,7 +77,7 @@ internal sealed unsafe partial class CrystallizeListHandler {
         ResolveNativeTree(addon);
         var nativeVisible = _nativeTreeResNode is not null && _nativeTreeResNode->IsVisible();
         var nativeItems = _nativeTreeList is not null ? _nativeTreeList->Items.Count : -1;
-        var nativeListLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : (short)-1;
+        var nativeListLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : -1;
         var nativeGetItemCount = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->GetItemCount() : -1;
         var summary =
             $"snapshot={_categoryRows.Length} agentCount={data->CrystallizeItemCount} inferred={InferCategoryItemCount(data)} " +

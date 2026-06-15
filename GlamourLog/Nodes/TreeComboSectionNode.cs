@@ -4,6 +4,7 @@ using KamiToolKit.Nodes;
 namespace GlamourLog.Nodes;
 
 // ktk TreeListCategoryNode + optional TreeListHeaderNode journal stripe (detail section headers)
+#pragma warning disable KamiToolKit_Experimental
 public sealed class TreeComboSectionNode : TreeListCategoryNode {
     public TreeListHeaderNode? JournalHeader { get; }
 

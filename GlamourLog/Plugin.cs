@@ -45,10 +45,13 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 
     public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.Commands.RemoveHandler(c));
-        Svc.Interface.UiBuilder.OpenMainUi -= Svc.Get<WindowsService>().ToggleMainWindow;
-        Svc.Interface.UiBuilder.OpenConfigUi -= Svc.Get<WindowsService>().ToggleMainMenu;
-        CLibMain.Dispose();
-        await Svc.Framework.RunOnFrameworkThread(KamiToolKitLibrary.Dispose);
+        await Svc.Framework.RunOnFrameworkThread(() => {
+            Svc.Interface.UiBuilder.OpenMainUi -= Svc.Get<WindowsService>().ToggleMainWindow;
+            Svc.Interface.UiBuilder.OpenConfigUi -= Svc.Get<WindowsService>().ToggleMainMenu;
+            Svc.Get<WindowsService>().Dispose();
+            CLibMain.Dispose(); // needs to be called on main cause of the KTK things I add to Svc
+            KamiToolKitLibrary.Dispose();
+        });
     }
 
     private void OnCommand(string command, string arguments) {

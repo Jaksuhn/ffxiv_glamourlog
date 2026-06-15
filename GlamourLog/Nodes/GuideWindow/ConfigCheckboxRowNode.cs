@@ -1,4 +1,5 @@
 using GlamourLog.Windows.GuideWindow;
+using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes.GuideWindow;
@@ -26,7 +27,7 @@ internal sealed class ConfigCheckboxRowNode : ResNode {
         _checkbox.AttachNode(this);
 
         _infoButton = new CircleButtonNode {
-            Icon = ButtonIcon.Exclamation,
+            Icon = CircleButtonIcon.Exclamation,
             Size = new Vector2(InfoButtonSize, InfoButtonSize),
             Position = new Vector2(width - InfoButtonSize, 0f),
             TextTooltip = setting.InfoTooltip,

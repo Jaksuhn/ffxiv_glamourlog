@@ -1,5 +1,5 @@
 using GlamourLog.Nodes.GuideWindow;
-using KamiToolKit;
+using KamiToolKit.BaseTypes;
 
 namespace GlamourLog.Windows.GuideWindow;
 
@@ -25,7 +25,7 @@ public unsafe partial class GuideWindow {
         foreach (var block in page.EnumerateBlocks()) {
             var node = CreateRightPaneBlock(block);
             node.IsVisible = false;
-            scroll.AddNode(node);
+            scroll.ContentNode.AddNode(node);
             blocks.Add(node);
         }
 
@@ -49,10 +49,10 @@ public unsafe partial class GuideWindow {
     }
 
     private void RelayoutVisibleRightPaneBlocks() {
-        if (_isFinalizing || _rightScroll is null || !_pageBlocks.TryGetValue(_selectedPage, out var nodes))
+        if (_rightScroll is null || !_pageBlocks.TryGetValue(_selectedPage, out var nodes))
             return;
 
-        var layoutWidth = Math.Min(_rightTextWidth, _rightScroll.ContentWidth);
+        var layoutWidth = Math.Min(_rightTextWidth, _rightScroll.ContentNode.Width);
         foreach (var node in nodes) {
             if (!node.IsVisible)
                 continue;

@@ -8,13 +8,13 @@ namespace GlamourLog;
 
 internal unsafe partial class LogWindow {
     private void PaintDetailsOnly() {
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
+        if (!IsOpen || !CanPaintLists())
             return;
         _pendingPaintDetailsOnly = true;
     }
 
     private void PaintDetailsOnlyNow() {
-        if (_isFinalizing || !IsOpen || !CanPaintLists())
+        if (!IsOpen || !CanPaintLists())
             return;
         try {
             RefreshDetails(Svc.Get<OwnershipService>().CaptureSnapshot());
@@ -107,7 +107,7 @@ internal unsafe partial class LogWindow {
     }
 
     private void OnDetailSectionToggle(string sectionTitle, bool expandSection) {
-        if (_isFinalizing || !IsOpen)
+        if (!IsOpen)
             return;
         if (expandSection)
             _collapsedDetailSections.Remove(sectionTitle);
@@ -191,7 +191,7 @@ internal unsafe partial class LogWindow {
     }
 
     private void OnDetailPieceItemLeftClick(uint itemId) {
-        if (_isFinalizing || _selectedSet?.NonSetCabinetPiece == true)
+        if (_selectedSet?.NonSetCabinetPiece == true)
             return;
         _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
         _pendingPaintDetailsOnly = true;
@@ -256,7 +256,7 @@ internal unsafe partial class LogWindow {
     }
 
     private void OnSharedModelItemLeftClick(uint itemId, GlamourSet catalogSet) {
-        if (_isFinalizing)
+        if (!IsOpen)
             return;
 
         if (_sourceFilterPieceItemId is not null && _selectedSet?.Items.Contains(itemId) == true) {
@@ -271,7 +271,7 @@ internal unsafe partial class LogWindow {
     }
 
     private void OnSharedModelSetLeftClick(GlamourSet set) {
-        if (_isFinalizing)
+        if (!IsOpen)
             return;
         if (ReferenceEquals(_selectedSet, set))
             return;

@@ -1,9 +1,9 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
 using GlamourLog.Nodes.GuideWindow;
-using KamiToolKit;
+using KamiToolKit.BaseTypes;
 using KamiToolKit.Nodes;
-using KamiToolKit.Premade.Node.Simple;
+using KamiToolKit.Nodes.Simplified;
 namespace GlamourLog.Windows.GuideWindow;
 
 public unsafe partial class GuideWindow : NativeAddon {
@@ -27,12 +27,11 @@ public unsafe partial class GuideWindow : NativeAddon {
 
     private bool _hasPendingScreenOrigin;
     private Vector2 _pendingScreenOrigin;
-    private bool _isFinalizing;
 
     private TextNode? _categoryHeading;
     private VerticalListNode? _leftNavList;
     private ResNode? _rightHeaderRow;
-    private ScrollingListNode? _rightScroll;
+    private ScrollingNode<VerticalListNode>? _rightScroll;
     private VerticalLineNode? _splitter;
     private TextNode? _rightTitle;
     private float _rightTextWidth;
@@ -76,7 +75,7 @@ public unsafe partial class GuideWindow : NativeAddon {
     }
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {
-        _isFinalizing = false;
+        base.OnSetup(addon, atkValueSpan);
 
         if (_hasPendingScreenOrigin) {
             SetWindowPosition(_pendingScreenOrigin);
@@ -108,8 +107,6 @@ public unsafe partial class GuideWindow : NativeAddon {
         SyncLeftNav();
         BuildAllRightPanePages();
         PaintRight();
-
-        base.OnSetup(addon, atkValueSpan);
     }
 
     private void BuildChrome() {
@@ -186,7 +183,7 @@ public unsafe partial class GuideWindow : NativeAddon {
             new Vector2(rightInnerX, rightScrollTop),
             new Vector2(rightInnerW, rightScrollHeight),
             true);
-        _rightScroll.ItemSpacing = RightBlockSpacing;
+        _rightScroll.ContentNode.ItemSpacing = RightBlockSpacing;
         _rightScroll.AttachNode(this);
 
         for (var c = 0; c < NavCategories.Length; c++) {
@@ -211,7 +208,7 @@ public unsafe partial class GuideWindow : NativeAddon {
         }
 
         SyncLeftNav();
-        _rightScroll.RecalculateLayout();
+        _rightScroll.RecalculateSizes();
     }
 
     private void SyncLeftNav() {
@@ -228,9 +225,6 @@ public unsafe partial class GuideWindow : NativeAddon {
     }
 
     private void OnParentCategoryClicked(int catIndex) {
-        if (_isFinalizing)
-            return;
-
         _expandedCategoryIndex = catIndex;
         _selectedPage = NavCategories[catIndex].Pages[0];
         SyncLeftNav();
@@ -238,29 +232,25 @@ public unsafe partial class GuideWindow : NativeAddon {
     }
 
     private void OnSubClicked(Page page) {
-        if (_isFinalizing)
-            return;
-
         _selectedPage = page;
         SyncLeftNav();
         PaintRight();
     }
 
     private void PaintRight() {
-        if (_isFinalizing || _rightTitle is null || _rightScroll is null)
+        if (_rightTitle is null || _rightScroll is null)
             return;
 
         _rightTitle.String = _selectedPage.SubCategoryTitle;
         ShowRightPanePage(_selectedPage);
-        _rightScroll.RecalculateLayout();
+        _rightScroll.RecalculateSizes();
         RelayoutVisibleRightPaneBlocks();
-        _rightScroll.RecalculateLayout();
-        _rightScroll.FitToContentHeight();
-        _rightScroll.ScrollPosition = 0;
+        _rightScroll.RecalculateSizes();
+        _rightScroll.ScrollBarNode.ScrollPosition = 0;
     }
 
     protected override void OnFinalize(AtkUnitBase* addon) {
-        _isFinalizing = true;
+        base.OnFinalize(addon);
 
         foreach (var section in _categorySections) {
             section.CategoryRow.ClearClickHandlers();
@@ -276,7 +266,6 @@ public unsafe partial class GuideWindow : NativeAddon {
         _rightScroll = null;
         _splitter = null;
         _rightTitle = null;
-        base.OnFinalize(addon);
     }
 
     private static SimpleNineGridNode CreateHeaderPlateNineGrid(Vector2 size) => new() {

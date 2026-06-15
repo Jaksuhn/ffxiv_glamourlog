@@ -4,9 +4,9 @@
     "net10.0-windows7.0": {
       "croizat.clib": {
         "type": "Direct",
-        "requested": "[1.0.35, )",
-        "resolved": "1.0.35",
-        "contentHash": "nokbe/l91GMgDvxzkLBeE5x9KJVXIo4SUOskbhwjyxt9RafBhenvMsOABJiZtn7LAYyv6BnpPhC7IUR1HOR8Gg==",
+        "requested": "[1.0.44, )",
+        "resolved": "1.0.44",
+        "contentHash": "C9HgZ0uYrLq0de3FY4Fzt2tp4so+2oI1BTY+Y91NmurNBY6vpZwSRh3JBOLyy6V4524sjRFOptYNOO4s/OsnfA==",
         "dependencies": {
           "AllaganLib.GameSheets": "2.2.2",
           "LuminaSupplemental.Excel": "4.3.3"
@@ -26,9 +26,9 @@
       },
       "KamiToolKit": {
         "type": "Direct",
-        "requested": "[1.1.18, )",
-        "resolved": "1.1.18",
-        "contentHash": "Qz/1HFEUHrVhYBw08g7Nf6us2kcKO2tbTDY3KNG/NDOwvH+LEzCYmEhN597osvcl8UKhOzOTZ0eipuoWnQzG4g=="
+        "requested": "[2.0.9, )",
+        "resolved": "2.0.9",
+        "contentHash": "ZpBHxoe1GY5ZME+Mh7wZM46u3miijTWK0MFArYzR1Pko7UM6oQNcnPAXCG94XkvMgY4pYtTeR+mvZiHqnPpaUw=="
       },
       "AllaganLib.GameSheets": {
         "type": "Transitive",

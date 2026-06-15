@@ -24,6 +24,7 @@ internal sealed class WindowsService : IDisposable {
             InternalName = "GlamourLog",
             Title = "Glamour Log",
             Size = new Vector2(920f, 660f),
+            RememberClosePosition = false,
         };
     }
 

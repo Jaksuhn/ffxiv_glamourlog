@@ -19,8 +19,8 @@ internal readonly struct CrystallizeAtkBufferLayout {
     internal int UintValuesPerItem { get; init; }
     internal int StringValuesPerItem { get; init; }
 
-    internal bool IsValid =>
-        UintValuesPerItem > 0
+    internal bool IsValid
+        => UintValuesPerItem > 0
         && StringValuesPerItem >= 0
         && UintValuesOffset >= 0
         && StringValuesOffset > UintValuesOffset;
@@ -75,13 +75,16 @@ internal static unsafe class CrystallizeListAtk {
                 if (IsLeafType(u0)) {
                     if (!IsValidSourceIndex((int)u1, categoryRowCount))
                         break;
-                } else if (IsHeaderType(u0)) {
+                }
+                else if (IsHeaderType(u0)) {
                     if (!includeHeaders)
                         break;
-                } else {
+                }
+                else {
                     break;
                 }
-            } else if (!IsValidSourceIndex((int)u0, categoryRowCount)) {
+            }
+            else if (!IsValidSourceIndex((int)u0, categoryRowCount)) {
                 break;
             }
 
@@ -301,7 +304,8 @@ internal static unsafe class CrystallizeListAtk {
             itemId = ReadUInt(atkValues, baseIndex + 4);
             if (itemId is 0 or uint.MaxValue)
                 itemId = ReadUInt(atkValues, baseIndex + 5);
-        } else {
+        }
+        else {
             inventory = (InventoryType)ReadUInt(atkValues, baseIndex + 1);
             itemSlot = (int)ReadUInt(atkValues, baseIndex + 2);
             itemId = ReadUInt(atkValues, baseIndex + 3);
@@ -331,7 +335,8 @@ internal static unsafe class CrystallizeListAtk {
             itemId = uints[4];
             if (itemId == 0 && uints.Count > 5)
                 itemId = uints[5];
-        } else {
+        }
+        else {
             inventory = (InventoryType)uints[1];
             itemSlot = (int)uints[2];
             itemId = uints[3];

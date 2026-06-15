@@ -1,7 +1,7 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Extensions;
 using KamiToolKit.Nodes;
-using KamiToolKit.Premade.Node.Simple;
+using KamiToolKit.Nodes.Simplified;
 
 namespace GlamourLog.Nodes;
 
@@ -9,6 +9,19 @@ namespace GlamourLog.Nodes;
 // not ListNode<>: assignments use ListItemNode.ItemData, so a derived setter never runs; same-ref skips leave pooled text stale (PopulateNodes).
 internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     public readonly ScrollBarNode ScrollBarNode;
+
+    private const float ScrollBarWidth = 8f;
+    private const float RowWidthInset = 16f;
+
+    public IReadOnlyList<DetailListItemNode> OptionNodes => nodeList;
+
+    public void SyncRowWidths() {
+        var rowWidth = Math.Max(0f, Width - RowWidthInset);
+        foreach (var node in nodeList) {
+            if (Math.Abs(node.Width - rowWidth) > 0.5f)
+                node.Width = rowWidth;
+        }
+    }
 
     private readonly List<DetailListItemNode> nodeList = [];
     private readonly float itemHeight = DetailListItemNode.ItemHeight;
@@ -33,16 +46,14 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     protected override void OnSizeChanged() {
         base.OnSizeChanged();
 
-        ScrollBarNode.Size = new Vector2(8.0f, Height);
-        ScrollBarNode.Position = new Vector2(Width - 8.0f, 0.0f);
+        ScrollBarNode.Size = new Vector2(ScrollBarWidth, Height);
+        ScrollBarNode.Position = new Vector2(Width - ScrollBarWidth, 0.0f);
 
         var newNodeCount = (int)(Height / (itemHeight + ItemSpacing));
         if (newNodeCount != nodeCount)
             FullRebuild();
 
-        // kami ListNode: row width = space left of scrollbar track (scrollbar still reserves 8px at right)
-        foreach (var node in nodeList)
-            node.Width = ScrollBarNode.Bounds.Left - 8.0f;
+        SyncRowWidths();
 
         RecalculateScroll();
     }
@@ -82,6 +93,28 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
         // list re-applies SourceChest narrow text widths that atk keeps until scroll/rebind
     }
 
+    public void AttachInteractivity() {
+        ScrollBarNode.OnValueChanged = OnScrollUpdate;
+    }
+
+    public void DetachInteractivity() {
+        ScrollBarNode.OnValueChanged = null;
+        OnItemSelected = null;
+    }
+
+    public void PrepareForClose() {
+        DetachInteractivity();
+        ResetNativeScrollPosition();
+    }
+
+    private void ResetNativeScrollPosition() {
+        var bar = (AtkComponentScrollBar*)ScrollBarNode;
+        bar->IsBeingDragged = false;
+        bar->SetContentNode(null, null);
+        bar->SetScrollPosition(0);
+        scrollPosition = 0;
+    }
+
     public void FullRebuild() {
         foreach (var node in nodeList)
             node.Dispose();
@@ -97,6 +130,9 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     }
 
     public void Update() {
+        if (OnItemSelected is null)
+            return;
+
         // post-native pass: pre-native populate + atk draw can leave SourceChest narrow text metrics on Cost rows
         if (needsPostNativeRebind) {
             PopulateNodes(forceRebind: true);
@@ -118,7 +154,7 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
 
         foreach (var index in Enumerable.Range(0, nodeCount)) {
             var node = new DetailListItemNode {
-                Size = new Vector2(ScrollBarNode.Bounds.Left - 8.0f, itemHeight),
+                Size = new Vector2(Math.Max(0f, Width - RowWidthInset), itemHeight),
                 Position = new Vector2(0.0f, index * (itemHeight + ItemSpacing)),
                 // ktk pool convention: stable ids for addon node table (matches ListNode)
                 NodeId = (uint)index + 2,
@@ -187,7 +223,11 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
 
     private void RecalculateScroll() {
         scrollPosition = Math.Clamp(scrollPosition, 0, Math.Max(0, OptionsList.Count - nodeCount));
-        ScrollBarNode.IsEnabled = OptionsList.Count > nodeCount;
+
+        if (OptionsList.Count < nodeCount) {
+            ScrollBarNode.ScrollPosition = 0;
+            ScrollBarNode.IsEnabled = false;
+        }
 
         var totalHeight = (int)(OptionsList.Count * (itemHeight + ItemSpacing) + ItemSpacing);
         ScrollBarNode.UpdateScrollParams((int)(nodeList.Count * (itemHeight + ItemSpacing)), totalHeight);

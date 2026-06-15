@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes;
@@ -35,13 +36,13 @@ public sealed class SetListSortControlNode : ResNode {
         SortDropDown.BackgroundNode.IsVisible = false;
         SortDropDown.LabelNode.IsVisible = false;
         SortDropDown.CollapseArrowNode.IsVisible = false;
-        SortDropDown.DisableCollisionNode = true;
+        SortDropDown.CollisionNode.NodeFlags = 0;
         SortDropDown.AttachNode(this);
 
         SortDirectionButton = new CircleButtonNode {
             Position = new Vector2(0f, 0f),
             Size = new Vector2(ButtonSize, ButtonSize),
-            Icon = sortDirection == ListSortDirection.Ascending ? ButtonIcon.UpArrow : ButtonIcon.ArrowDown,
+            Icon = sortDirection == ListSortDirection.Ascending ? CircleButtonIcon.UpArrow : CircleButtonIcon.ArrowDown,
             TextTooltip = sortDirection == ListSortDirection.Ascending ? Addon.GetRow(8043).Text : Addon.GetRow(8044).Text,
         };
         SortDirectionButton.AttachNode(this);
@@ -49,7 +50,7 @@ public sealed class SetListSortControlNode : ResNode {
         SortButton = new CircleButtonNode {
             Position = new Vector2(ButtonSize + ButtonGap, 0f),
             Size = new Vector2(ButtonSize, ButtonSize),
-            Icon = ButtonIcon.Sort,
+            Icon = CircleButtonIcon.Sort,
             TextTooltip = Addon.GetRow(1389).Text, // Sort
             OnClick = () => SortDropDown.Toggle(),
         };
