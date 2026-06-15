@@ -4,11 +4,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.PrismBox;
 
-// Low-level helpers for the MiragePrismPrismBoxCrystallize addon ATK value buffer.
-// The game's tree list (node 11) is backed by a flat AtkValue[] on the addon: uint blocks per slot
-// (type + source index + item fields) plus optional string blocks. CrystallizeListHandler captures
-// CrystallizeAtkBufferLayout from the game's LoadAtkValues call, snapshots that buffer, parses slot
-// structure here, compacts kept slots, and reloads via LoadAtkValues.
+// ATK buffer helpers for MiragePrismPrismBoxCrystallize node 11 — parse, compact, reload via LoadAtkValues.
 
 internal readonly struct CrystallizeAtkSlot {
     internal bool IsLeaf { get; init; }
@@ -16,8 +12,7 @@ internal readonly struct CrystallizeAtkSlot {
     internal int SourceIndex { get; init; }
 }
 
-// Flat AtkValue[] layout for MiragePrismPrismBoxCrystallize tree node 11.
-// Captured from the game's LoadAtkValues call before any parsing or reload.
+// flat AtkValue[] layout for node 11; captured from LoadAtkValues before parse/reload
 internal readonly struct CrystallizeAtkBufferLayout {
     internal int UintValuesOffset { get; init; }
     internal int StringValuesOffset { get; init; }
@@ -61,8 +56,7 @@ internal static unsafe class CrystallizeListAtk {
         return slotCount;
     }
 
-    // InferItemCount scans until the first empty slot; when switching categories the addon buffer can still
-    // contain populated slots from the previous tab. Stop at the first leaf whose source index is out of range.
+    // caps InferItemCount when prior tab left stale slots — stop at first out-of-range leaf source index
     internal static int InferBoundedItemCount(AtkValue[] atkValues, int inferredCount, int categoryRowCount, bool includeHeaders, CrystallizeAtkBufferLayout layout) {
         if (inferredCount <= 0 || categoryRowCount <= 0)
             return inferredCount;
@@ -100,10 +94,8 @@ internal static unsafe class CrystallizeListAtk {
     internal static void ClearSlots(AtkValue[] atkValues, int firstSlot, int lastSlot, CrystallizeAtkBufferLayout layout) {
         if (firstSlot >= lastSlot)
             return;
-        fixed (AtkValue* atkPtr = atkValues) {
-            ClearTrailingSlots(atkPtr, layout.UintValuesOffset, layout.StringValuesOffset, layout.UintValuesPerItem, layout.StringValuesPerItem,
-                firstSlot, lastSlot);
-        }
+        fixed (AtkValue* atkPtr = atkValues)
+            ClearTrailingSlots(atkPtr, layout, firstSlot, lastSlot);
     }
 
     private static bool SlotHasItemData(AtkValue[] atkValues, int baseIndex, int uintValuesPerItem) {
@@ -115,7 +107,7 @@ internal static unsafe class CrystallizeListAtk {
         return false;
     }
 
-    // Each slot is either a tree row (u0 = AtkComponentTreeListItemType) or a legacy flat row (u0 = source index).
+    // tree row (u0 = AtkComponentTreeListItemType) or legacy flat row (u0 = source index)
     internal static CrystallizeAtkSlot[] Parse(AtkValue[] atkValues, int itemCount, CrystallizeAtkBufferLayout layout, int categoryRowCount = 0) {
         if (itemCount <= 0)
             return [];
@@ -153,9 +145,7 @@ internal static unsafe class CrystallizeListAtk {
         return slots;
     }
 
-    // Remove hidden slots from a working copy of the addon ATK buffer. Returns the new slot count.
-    // Caller reloads the tree with LoadAtkValues using that count ? we do not patch the live addon buffer
-    // until the handler clones and passes the result to LoadTreeFromAtkSnapshot.
+    // compact hidden slots in a working copy; returns new slot count (live buffer unchanged until handler reloads)
     internal static int ApplyToBuffer(
         AtkValue[] atkValues,
         CrystallizeAtkSlot[] layout,
@@ -198,42 +188,35 @@ internal static unsafe class CrystallizeListAtk {
                 if (!entry.IsLeaf)
                     continue;
 
-                WriteLeafIndex(atkPtr, uintValuesOffset, uintValuesPerItem, outSlot, entry, leafIndex++);
+                WriteLeafIndex(atkPtr, uintValuesOffset, uintValuesPerItem, outSlot, leafIndex++);
             }
 
             var clearThrough = Math.Max(slotLimit, layout.Length);
-            ClearTrailingSlots(atkPtr, uintValuesOffset, stringValuesOffset, uintValuesPerItem, stringValuesPerItem,
-                keepSlots.Count, clearThrough);
+            ClearTrailingSlots(atkPtr, bufferLayout, keepSlots.Count, clearThrough);
         }
 
         return keepSlots.Count;
     }
 
-    private static void ClearTrailingSlots(
-        AtkValue* atkValues,
-        int uintValuesOffset,
-        int stringValuesOffset,
-        int uintValuesPerItem,
-        int stringValuesPerItem,
-        int firstClearedSlot,
-        int lastSlot) {
-
+    private static void ClearTrailingSlots(AtkValue* atkValues, CrystallizeAtkBufferLayout layout, int firstClearedSlot, int lastSlot) {
         var empty = default(AtkValue);
+        var uintValuesOffset = layout.UintValuesOffset;
+        var uintValuesPerItem = layout.UintValuesPerItem;
         for (var slot = firstClearedSlot; slot < lastSlot; slot++) {
             for (var u = 0; u < uintValuesPerItem; u++)
                 atkValues[uintValuesOffset + slot * uintValuesPerItem + u] = empty;
         }
     }
 
-    internal static bool IsRealHeader(CrystallizeAtkSlot entry)
+    private static bool IsRealHeader(CrystallizeAtkSlot entry)
         => !entry.IsLeaf && entry.ItemType is AtkComponentTreeListItemType.GroupHeader
             or AtkComponentTreeListItemType.CollapsibleGroupHeader;
 
-    internal static bool IsHeaderType(uint value)
+    private static bool IsHeaderType(uint value)
         => value is (uint)AtkComponentTreeListItemType.GroupHeader
             or (uint)AtkComponentTreeListItemType.CollapsibleGroupHeader;
 
-    internal static bool IsLeafType(uint value)
+    private static bool IsLeafType(uint value)
         => value is (uint)AtkComponentTreeListItemType.Leaf
             or (uint)AtkComponentTreeListItemType.LastLeafInGroup;
 
@@ -241,7 +224,7 @@ internal static unsafe class CrystallizeListAtk {
         var uintBase = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
         var uints = item->UIntValues;
         for (var u = 0; u < layout.UintValuesPerItem; u++) {
-            var value = ReadUIntAt(atkValues, uintBase + u);
+            var value = ReadUInt(atkValues, uintBase + u);
             if (value == uint.MaxValue)
                 continue;
 
@@ -358,15 +341,7 @@ internal static unsafe class CrystallizeListAtk {
         return itemId != 0;
     }
 
-    internal static uint ReadUIntAt(AtkValue[] atkValues, int index) {
-        if ((uint)index >= (uint)atkValues.Length)
-            return uint.MaxValue;
-
-        ref var value = ref atkValues[index];
-        return value.Type == AtkValueType.UInt ? value.UInt : uint.MaxValue;
-    }
-
-    internal static void CopyItemBlocks(AtkValue* atkValues, int uintValuesOffset, int stringValuesOffset, int uintValuesPerItem, int stringValuesPerItem, int fromItem, int toItem, AtkValue[] scratch) {
+    private static void CopyItemBlocks(AtkValue* atkValues, int uintValuesOffset, int stringValuesOffset, int uintValuesPerItem, int stringValuesPerItem, int fromItem, int toItem, AtkValue[] scratch) {
         for (var i = 0; i < uintValuesPerItem; i++)
             scratch[i] = atkValues[uintValuesOffset + fromItem * uintValuesPerItem + i];
         for (var i = 0; i < uintValuesPerItem; i++)
@@ -381,8 +356,7 @@ internal static unsafe class CrystallizeListAtk {
             atkValues[stringValuesOffset + toItem * stringValuesPerItem + i] = scratch[i];
     }
 
-    // Walk layout in slot order. Headers are kept only when includeHeaders and the section still has a
-    // visible leaf (checked via visibleSources + shouldExcludeSource, not shouldHideLeaf ? see handler).
+    // keep headers when includeHeaders and section has a visible leaf (shouldExcludeSource, not shouldHideLeaf)
     private static List<int> BuildKeepSlots(
         CrystallizeAtkSlot[] layout,
         Func<int, bool> shouldHideLeaf,
@@ -414,8 +388,8 @@ internal static unsafe class CrystallizeListAtk {
         return keep;
     }
 
-    // Drop section headers that ended up with no kept leaves after filtering (e.g. whole Hands section hidden).
-    internal static List<int> PruneEmptySectionHeaders(List<int> keep, CrystallizeAtkSlot[] layout) {
+    // drop headers with no kept leaves after filtering
+    private static void PruneEmptySectionHeaders(List<int> keep, CrystallizeAtkSlot[] layout) {
         for (var i = keep.Count - 1; i >= 0; i--) {
             var slot = keep[i];
             if (!IsRealHeader(layout[slot]))
@@ -432,11 +406,9 @@ internal static unsafe class CrystallizeListAtk {
             if (!hasLeaf)
                 keep.RemoveAt(i);
         }
-        return keep;
     }
 
-    // Look ahead from a header for any leaf whose source index is in the visible set and not excluded.
-    // Intentionally does not call shouldHideLeaf ? duplicate suppression must not run during header checks.
+    // header check: skip shouldHideLeaf so duplicate suppression doesn't run here
     private static bool SectionHasVisibleLeaf(
         CrystallizeAtkSlot[] layout,
         int headerIndex,
@@ -458,15 +430,15 @@ internal static unsafe class CrystallizeListAtk {
         return false;
     }
 
-    // After compaction, leaf u1 values become 0..N-1 display indices for the shortened list.
-    private static void WriteLeafIndex(AtkValue* atkValues, int uintValuesOffset, int uintValuesPerItem, int outSlot, CrystallizeAtkSlot template, int displayLeafIndex) {
+    // after compaction, leaf u1 becomes 0..N-1 display index
+    private static void WriteLeafIndex(AtkValue* atkValues, int uintValuesOffset, int uintValuesPerItem, int outSlot, int displayLeafIndex) {
         var baseIndex = uintValuesOffset + outSlot * uintValuesPerItem;
         if (IsTreeItemType(ReadUInt(atkValues, baseIndex))) {
             atkValues[baseIndex + 1].UInt = (uint)displayLeafIndex;
             return;
         }
 
-        // Flat rows store the source index in u0; rewrite as a tree leaf so u0 is never 2?4 (header types).
+        // flat row: rewrite u0 as tree leaf so it isn't a header type (2-4)
         atkValues[baseIndex].Type = AtkValueType.UInt;
         atkValues[baseIndex].UInt = (uint)AtkComponentTreeListItemType.Leaf;
         atkValues[baseIndex + 1].Type = AtkValueType.UInt;
