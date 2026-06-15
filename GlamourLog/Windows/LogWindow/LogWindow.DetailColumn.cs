@@ -25,7 +25,7 @@ internal unsafe partial class LogWindow {
     }
 
     private void RefreshDetails(OwnershipSnapshot snap) {
-        if (_detailRowsListNode is null)
+        if (DetailList is null)
             return;
 
         if (_selectedSet == null)
@@ -38,8 +38,8 @@ internal unsafe partial class LogWindow {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details", IsTopLevelSection = true });
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" });
             ApplyCollapsedDetailSections(_detailRowOptions);
-            _detailRowsListNode.OptionsList = [.. _detailRowOptions];
-            _detailRowsListNode.Update();
+            DetailList.OptionsList = [.. _detailRowOptions];
+            DetailList.Update();
             return;
         }
 
@@ -96,14 +96,14 @@ internal unsafe partial class LogWindow {
         }
 
         var sourcesStartIndex = _detailRowOptions.Count;
-        SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions);
+        SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions, DetailList.DutyChestMeasureNode);
         if (_detailRowOptions.Count > sourcesStartIndex) {
             _detailRowOptions.Insert(sourcesStartIndex, new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources", IsTopLevelSection = true });
         }
         AppendSharedModelsSection(snap);
         ApplyCollapsedDetailSections(_detailRowOptions);
-        _detailRowsListNode.OptionsList = [.. _detailRowOptions];
-        _detailRowsListNode.Update();
+        DetailList.OptionsList = [.. _detailRowOptions];
+        DetailList.Update();
     }
 
     private void OnDetailSectionToggle(string sectionTitle, bool expandSection) {

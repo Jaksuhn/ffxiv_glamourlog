@@ -6,6 +6,7 @@ using AllaganLib.GameSheets.Sheets;
 using AllaganLib.GameSheets.Sheets.Rows;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
+using KamiToolKit.Nodes;
 using Lumina.Excel;
 
 namespace GlamourLog.Windows.LogWindow;
@@ -43,7 +44,7 @@ internal static class SourcesPanelBuilder {
         ItemInfoType.Oizys,
     ];
 
-    internal static void AppendSourceRows(CatalogService catalog, GlamourSet set, uint? pieceFilter, List<DetailListRowData> rows) {
+    internal static void AppendSourceRows(CatalogService catalog, GlamourSet set, uint? pieceFilter, List<DetailListRowData> rows, TextNode dutyChestMeasure) {
         var scopeList = catalog.GetSourceScopeItemIds(set, pieceFilter);
         var scope = scopeList.ToHashSet();
         if (scope.Count == 0)
@@ -59,7 +60,7 @@ internal static class SourcesPanelBuilder {
 
         var dutyChestRowIdsOrderedByCfc = DungeonChestOrderIndex.Instance.BuildDutyChestRowIdsOrderedByCfc(catalog, set);
 
-        AppendDuties(rows, sourcesByPiece, scope, dutyChestRowIdsOrderedByCfc);
+        AppendDuties(rows, sourcesByPiece, scope, dutyChestRowIdsOrderedByCfc, dutyChestMeasure);
         AppendFates(rows, sourcesByPiece, scope);
         AppendSupplemental(rows, sourcesByPiece, scope);
         AppendCraft(rows, sourcesByPiece, scope);
@@ -71,7 +72,8 @@ internal static class SourcesPanelBuilder {
         List<DetailListRowData> rows,
         Dictionary<uint, List<ItemSource>> sourcesByPiece,
         HashSet<uint> scope,
-        Dictionary<uint, List<uint>> dutyChestRowIdsOrderedByCfc) {
+        Dictionary<uint, List<uint>> dutyChestRowIdsOrderedByCfc,
+        TextNode dutyChestMeasure) {
         var duties = new Dictionary<uint, DutyBuckets>();
         foreach (var (pieceId, list) in sourcesByPiece) {
             foreach (var src in list) {
@@ -121,7 +123,7 @@ internal static class SourcesPanelBuilder {
             var hasChests = chestKeysThisDuty.Count > 0;
 
             var chestOrderForLabelWidth = fullChestOrder is { Count: > 0 } ? fullChestOrder : chestKeysThisDuty;
-            var maxDutyChestLabelWidth = chestIndex.ComputeMaxLabelColumnWidth(cfcId, chestOrderForLabelWidth, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
+            var maxDutyChestLabelWidth = chestIndex.ComputeMaxLabelColumnWidth(dutyChestMeasure, cfcId, chestOrderForLabelWidth, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
 
             if (hasGeneral) {
                 if (hasChests)

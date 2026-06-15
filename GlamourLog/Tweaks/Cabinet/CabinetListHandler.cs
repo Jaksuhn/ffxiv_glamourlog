@@ -4,11 +4,13 @@ using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using GlamourLog.Services;
 using KamiToolKit.Controllers;
+using System.Threading.Tasks;
 using static FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule;
 
 namespace GlamourLog.Features.Cabinet;
 
-internal sealed unsafe class CabinetListHandler : IDisposable {
+internal sealed class CabinetListHandler : IAsyncDisposable {
+    private bool _disposed;
     private const string AddonName = "Cabinet";
     private const int MaxCategoryItems = 140;
 
@@ -23,7 +25,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
     private int _pendingFullListCount;
     private bool _needsCategorySnapshot;
 
-    public CabinetListHandler() {
+    public unsafe CabinetListHandler() {
         _filters = [new HideDepositedItemsFilter(), new HideGearsetItemsFilter()];
 
         _addonController = new AddonController<AddonCabinet> {
@@ -37,12 +39,6 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         Svc.Get<OwnershipService>().ArmoireOwnershipChanged += OnArmoireOwnershipChanged;
     }
 
-    public void Dispose() {
-        Svc.Get<OwnershipService>().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
-        _addonController.Dispose();
-        ClearFilterState();
-    }
-
     private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
 
     private bool ShouldExcludeItem(uint itemId) => itemId == 0 || _filters.Any(f => f.IsEnabled && f.ShouldHide(itemId));
@@ -51,7 +47,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
     }
 
-    private void ApplyConfigChange() {
+    private unsafe void ApplyConfigChange() {
         CabinetGearsetLookup.Invalidate();
 
         var addon = Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName);
@@ -85,7 +81,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         addon->OnRefresh(0, null);
     }
 
-    private void OnArmoireOwnershipChanged() {
+    private unsafe void OnArmoireOwnershipChanged() {
         if (!IsFilteringActive)
             return;
 
@@ -96,7 +92,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         });
     }
 
-    private void OnPreRefresh(AddonCabinet* addon) {
+    private unsafe void OnPreRefresh(AddonCabinet* addon) {
         if (!IsFilteringActive)
             return;
 
@@ -112,7 +108,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         EnsureCategoryTracked(addon, agent);
     }
 
-    private void OnPostRefresh(AddonCabinet* addon) {
+    private unsafe void OnPostRefresh(AddonCabinet* addon) {
         if (addon is null)
             return;
 
@@ -130,12 +126,12 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         }
     }
 
-    private void OnFinalize(AddonCabinet* addon) {
+    private unsafe void OnFinalize(AddonCabinet* addon) {
         _ = addon;
         ClearFilterState();
     }
 
-    private void ApplyFilterAfterNativeRefresh(AddonCabinet* addon, AgentCabinet* agent) {
+    private unsafe void ApplyFilterAfterNativeRefresh(AddonCabinet* addon, AgentCabinet* agent) {
         EnsureCategoryTracked(addon, agent);
 
         if (_needsCategorySnapshot || !HasValidCategorySnapshot(addon))
@@ -144,10 +140,10 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         TryApplyFilterPipeline(addon, agent);
     }
 
-    private bool HasValidCategorySnapshot(AddonCabinet* addon)
+    private unsafe bool HasValidCategorySnapshot(AddonCabinet* addon)
         => _categoryRows.Length > 0 && _categoryIndex == addon->CategoryIndex;
 
-    private bool TryApplyFilterPipeline(AddonCabinet* addon, AgentCabinet* agent) {
+    private unsafe bool TryApplyFilterPipeline(AddonCabinet* addon, AgentCabinet* agent) {
         if (_categoryRows.Length == 0)
             return false;
 
@@ -157,7 +153,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         return true;
     }
 
-    private void EnsureCategoryTracked(AddonCabinet* addon, AgentCabinet* agent) {
+    private unsafe void EnsureCategoryTracked(AddonCabinet* addon, AgentCabinet* agent) {
         if (_categoryIndex == addon->CategoryIndex && _categoryItemCount > 0)
             return;
 
@@ -166,7 +162,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         _needsCategorySnapshot = true;
     }
 
-    private void CaptureCategorySnapshot(AgentCabinet* agent, AddonCabinet* addon) {
+    private unsafe void CaptureCategorySnapshot(AgentCabinet* agent, AddonCabinet* addon) {
         ReleaseCategorySnapshot();
 
         var count = _categoryItemCount > 0 ? _categoryItemCount : InferCategoryItemCount(addon, agent);
@@ -210,7 +206,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         _displayToSource = [.. visible];
     }
 
-    private void ProjectVisibleRows(AgentCabinet* agent, AddonCabinet* addon) {
+    private unsafe void ProjectVisibleRows(AgentCabinet* agent, AddonCabinet* addon) {
         var visibleCount = _displayToSource.Length;
         for (var displayIndex = 0; displayIndex < visibleCount; displayIndex++) {
             var sourceIndex = _displayToSource[displayIndex];
@@ -222,7 +218,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         }
     }
 
-    private void ApplyFilteredListLayout(AddonCabinet* addon) {
+    private unsafe void ApplyFilteredListLayout(AddonCabinet* addon) {
         var list = addon->ItemList;
         if (list is null)
             return;
@@ -250,7 +246,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         }
     }
 
-    private struct ItemSlotProjection {
+    private unsafe struct ItemSlotProjection {
         internal uint IconId;
         internal uint Unk6C;
         internal uint Unk70;
@@ -291,7 +287,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         }
     }
 
-    private struct ItemCacheProjection {
+    private unsafe struct ItemCacheProjection {
         internal uint Id;
         internal uint IconId;
         internal uint StackSize;
@@ -347,7 +343,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         }
     }
 
-    private static uint ResolveRowItemId(AgentCabinet* agent, AddonCabinet* addon, int index) {
+    private static unsafe uint ResolveRowItemId(AgentCabinet* agent, AddonCabinet* addon, int index) {
         var cacheId = agent->ItemCaches[index].Id;
         if (cacheId != 0)
             return Svc.Get<OwnershipService>().GetItemIdFromLookups(cacheId);
@@ -362,7 +358,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         return Svc.Get<OwnershipService>().GetItemIdFromLookups(agent->Items[itemsIndex].Id);
     }
 
-    private static void ApplyFullListLayout(AddonCabinet* addon, int count) {
+    private static unsafe void ApplyFullListLayout(AddonCabinet* addon, int count) {
         var list = addon->ItemList;
         if (list is null || count <= 0)
             return;
@@ -375,7 +371,7 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         list->IsUpdatePending = true;
     }
 
-    private static int InferCategoryItemCount(AddonCabinet* addon, AgentCabinet* agent) {
+    private static unsafe int InferCategoryItemCount(AddonCabinet* addon, AgentCabinet* agent) {
         var lastIndex = -1;
         for (var i = 0; i < MaxCategoryItems; i++) {
             if (agent->ItemCaches[i].Id != 0)
@@ -396,5 +392,18 @@ internal sealed unsafe class CabinetListHandler : IDisposable {
         _displayToSource = [];
         _pendingFullListCount = 0;
         _needsCategorySnapshot = false;
+    }
+
+    public async ValueTask DisposeAsync() {
+        if (_disposed)
+            return;
+        _disposed = true;
+        await Svc.Framework.RunOnFrameworkThread(DisposeCore);
+    }
+
+    private void DisposeCore() {
+        Svc.Get<OwnershipService>().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
+        _addonController.Dispose();
+        ClearFilterState();
     }
 }

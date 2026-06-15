@@ -3,12 +3,14 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Controllers;
+using System.Threading.Tasks;
 
 namespace GlamourLog.Features.PrismBox;
 
 // row filters for MiragePrismPrismBoxCrystallize — patch agent + node 11 in place.
 // snapshot _categoryRows -> filter -> ProjectVisibleRows -> RepopulateDisplayTreeList; OnPreRefresh restores when safe.
-internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
+internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
+    private bool _disposed;
     private const string AddonName = "MiragePrismPrismBoxCrystallize";
     private const int MaxCategoryItems = 140;
     private const uint ItemTreeListNodeId = 11;
@@ -32,13 +34,13 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     private CrystallizeAtkSlot[] _atkLayout = []; // header/leaf + source index per ATK slot
     private int _nativeAtkSlotCount; // populated slots in _nativeAtkSnapshot
     private int _filteredAtkSlotCount; // slots after ApplyToBuffer
-    private AtkResNode* _nativeTreeResNode; // node 11 — filtered in place
-    private AtkComponentTreeList* _nativeTreeList;
+    private unsafe AtkResNode* _nativeTreeResNode; // node 11 — filtered in place
+    private unsafe AtkComponentTreeList* _nativeTreeList;
     private CrystallizeAtkBufferLayout _atkBufferLayout;
 
     private bool HasAtkBufferLayout => _atkBufferLayout.IsValid;
 
-    public CrystallizeListHandler() {
+    public unsafe CrystallizeListHandler() {
         _filters = [
             new HideDresserDepositedFilter(),
             new HideArmoireEligibleFilter(),
@@ -60,12 +62,6 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         _addonController.Enable();
     }
 
-    public void Dispose() {
-        _addonController.Dispose();
-        _loadAtkValuesHook?.Dispose();
-        ClearFilterState();
-    }
-
     private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
 
     private bool IncludeSectionHeaders => _displayToSource.Length > 0;
@@ -75,7 +71,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // settings toggle: restore full category, refilter in place or cold refresh
-    private void ApplyConfigChange() {
+    private unsafe void ApplyConfigChange() {
         var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(AddonName);
         var data = GetData();
         if (addon is null || data is null) {
@@ -88,7 +84,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
             if (snapshotCount > 0)
                 RestoreFullCategory(data);
             LogFilterDebug(nameof(ApplyConfigChange),
-                $"filters disabled snapshot={snapshotCount} agentCountBefore={agentCountBefore} agentCountAfter={data->CrystallizeItemCount} restored={(snapshotCount > 0)}");
+                $"filters disabled snapshot={snapshotCount} agentCountBefore={agentCountBefore} agentCountAfter={data->CrystallizeItemCount} restored={snapshotCount > 0}");
             _displayToSource = [];
             _filteredAtkSlotCount = 0;
             ClearFilterLogSignatures();
@@ -125,7 +121,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         addon->OnRefresh(0, null);
     }
 
-    private bool TryApplyFilterPipeline(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+    private unsafe bool TryApplyFilterPipeline(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (_categoryRows.Length == 0 || !HasAtkBufferLayout || _nativeAtkSnapshot.Length == 0)
             return false;
 
@@ -143,13 +139,13 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return true;
     }
 
-    private void OnSetup(AtkUnitBase* addon) {
+    private unsafe void OnSetup(AtkUnitBase* addon) {
         InvalidateTreeNodeCache();
         EnsureNativeTreeVisible(addon);
     }
 
     // restore full category before native refresh when agent still holds the filtered projection
-    private void OnPreRefresh(AtkUnitBase* addon) {
+    private unsafe void OnPreRefresh(AtkUnitBase* addon) {
         var data = GetData();
         if (data is null)
             return;
@@ -191,7 +187,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // capture native list, then apply filters
-    private void OnPostRefresh(AtkUnitBase* addon) {
+    private unsafe void OnPostRefresh(AtkUnitBase* addon) {
         if (!IsAddonUsable(addon))
             return;
 
@@ -208,7 +204,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         }
     }
 
-    private void OnPostRefreshCore(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+    private unsafe void OnPostRefreshCore(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (!IsFilteringActive) {
             ResolveNativeTree(addon);
             CaptureNativeAtkSnapshot(addon);
@@ -251,7 +247,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // map -> ProjectVisibleRows -> compact ATK -> reload node 11
-    private void ApplyFilterAfterNativeRefresh(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+    private unsafe void ApplyFilterAfterNativeRefresh(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (_nativeTreeList is null)
             return;
 
@@ -268,7 +264,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         LogApplyPipelineResult(_nativeTreeList, data);
     }
 
-    private void OnFinalize(AtkUnitBase* addon) {
+    private unsafe void OnFinalize(AtkUnitBase* addon) {
         if (addon is not null) {
             EnsureNativeTreeVisible(addon);
             var data = GetData();
@@ -279,12 +275,12 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         ClearFilterState();
     }
 
-    private void InvalidateTreeNodeCache() {
+    private unsafe void InvalidateTreeNodeCache() {
         _nativeTreeResNode = null;
         _nativeTreeList = null;
     }
 
-    private void ResolveNativeTree(AtkUnitBase* addon) {
+    private unsafe void ResolveNativeTree(AtkUnitBase* addon) {
         var nativeNode = addon->GetNodeById(ItemTreeListNodeId);
         if (nativeNode is null)
             return;
@@ -293,12 +289,12 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // show node 11, hide stray duplicate tree nodes
-    private void EnsureNativeTreeVisible(AtkUnitBase* addon) {
+    private unsafe void EnsureNativeTreeVisible(AtkUnitBase* addon) {
         ResolveNativeTree(addon);
         ApplyItemTreeVisibility(addon, _nativeTreeResNode);
     }
 
-    private void ApplyItemTreeVisibility(AtkUnitBase* addon, AtkResNode* activeNode) {
+    private unsafe void ApplyItemTreeVisibility(AtkUnitBase* addon, AtkResNode* activeNode) {
         ResolveNativeTree(addon);
         foreach (var nodePtr in addon->UldManager.Nodes) {
             var node = nodePtr.Value;
@@ -315,19 +311,19 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         addon->UldManager.UpdateDrawNodeList();
     }
 
-    private static void SetNodeVisible(AtkResNode* node, bool visible) {
+    private static unsafe void SetNodeVisible(AtkResNode* node, bool visible) {
         if (node is null)
             return;
         node->ToggleVisibility(visible);
     }
 
-    private static void SetTreeInteractionEnabled(AtkComponentTreeList* tree, bool enabled) {
+    private static unsafe void SetTreeInteractionEnabled(AtkComponentTreeList* tree, bool enabled) {
         if (tree is null)
             return;
         ((AtkComponentList*)tree)->IsItemInteractionEnabled = enabled;
     }
 
-    private static void SetTreeScrollBarVisible(AtkComponentTreeList* tree, bool visible) {
+    private static unsafe void SetTreeScrollBarVisible(AtkComponentTreeList* tree, bool visible) {
         if (tree is null)
             return;
         var scrollBar = ((AtkComponentList*)tree)->ScrollBarComponent;
@@ -336,7 +332,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         SetNodeVisible((AtkResNode*)scrollBar->OwnerNode, visible);
     }
 
-    private static void ResetTreeScroll(AtkComponentTreeList* tree) {
+    private static unsafe void ResetTreeScroll(AtkComponentTreeList* tree) {
         if (tree is null)
             return;
         var list = (AtkComponentList*)tree;
@@ -349,7 +345,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
             scrollBar->SetScrollPosition(0);
     }
 
-    private static void ClearTreeDisplay(AtkComponentTreeList* tree) {
+    private static unsafe void ClearTreeDisplay(AtkComponentTreeList* tree) {
         if (tree is null)
             return;
         var list = (AtkComponentList*)tree;
@@ -358,7 +354,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         RefreshTreeListLayout(tree);
     }
 
-    private static void LoadTreeFromAtkSnapshot(
+    private static unsafe void LoadTreeFromAtkSnapshot(
         AtkComponentTreeList* tree,
         AtkValue[] atkSnapshot,
         int slotCount,
@@ -385,7 +381,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         RefreshTreeListLayout(tree);
     }
 
-    private void ApplyEmptyCategory(MiragePrismPrismBoxData* data) {
+    private unsafe void ApplyEmptyCategory(MiragePrismPrismBoxData* data) {
         _displayToSource = [];
         _filteredAtkSlotCount = 0;
         data->CrystallizeItemCount = 0;
@@ -395,7 +391,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // rewrite CrystallizeItems[] for filtered display indices (must match ATK u1 after reload)
-    private void ProjectVisibleRows(MiragePrismPrismBoxData* data) {
+    private unsafe void ProjectVisibleRows(MiragePrismPrismBoxData* data) {
         var visible = _displayToSource.Length;
         var selectedItemId = data->CrystallizeSelectedItem.ItemId;
         for (var displayIndex = 0; displayIndex < visible; displayIndex++) {
@@ -411,7 +407,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // inverse of ProjectVisibleRows for OnPreRefresh
-    private void RestoreFullCategory(MiragePrismPrismBoxData* data) {
+    private unsafe void RestoreFullCategory(MiragePrismPrismBoxData* data) {
         var count = _categoryRows.Length;
         for (var i = 0; i < count; i++)
             data->CrystallizeItems[i] = _categoryRows[i];
@@ -421,7 +417,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         _displayToSource = [.. Enumerable.Range(0, count)];
     }
 
-    private static void ClampCrystallizeSelection(MiragePrismPrismBoxData* data, uint previousSelectedItemId) {
+    private static unsafe void ClampCrystallizeSelection(MiragePrismPrismBoxData* data, uint previousSelectedItemId) {
         var count = data->CrystallizeItemCount;
         if (count == 0) {
             data->CrystallizeItemIndex = 0;
@@ -440,7 +436,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // only restore when agent still holds the filtered projection — crystallize updates agent first; stale restore crashes
-    private bool ShouldRestoreFullCategoryBeforeNativeRefresh(MiragePrismPrismBoxData* data) {
+    private unsafe bool ShouldRestoreFullCategoryBeforeNativeRefresh(MiragePrismPrismBoxData* data) {
         if (_needsCategorySnapshot || _categoryRows.Length == 0)
             return false;
         if (MatchesFilteredProjection(data))
@@ -451,7 +447,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return false;
     }
 
-    private bool MatchesFilteredProjection(MiragePrismPrismBoxData* data) {
+    private unsafe bool MatchesFilteredProjection(MiragePrismPrismBoxData* data) {
         var agentCount = data->CrystallizeItemCount;
         if (_displayToSource.Length == 0 || agentCount != _displayToSource.Length)
             return false;
@@ -465,7 +461,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return true;
     }
 
-    private bool AgentMatchesCategorySnapshot(MiragePrismPrismBoxData* data) {
+    private unsafe bool AgentMatchesCategorySnapshot(MiragePrismPrismBoxData* data) {
         var agentCount = InferPopulatedCategoryItemCount(data);
         if (agentCount != _categoryRows.Length)
             return false;
@@ -476,7 +472,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return true;
     }
 
-    private void MarkCategorySnapshotStale(MiragePrismPrismBoxData* data, string reason) {
+    private unsafe void MarkCategorySnapshotStale(MiragePrismPrismBoxData* data, string reason) {
         if (_needsCategorySnapshot)
             return;
         _needsCategorySnapshot = true;
@@ -484,13 +480,13 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
             $"{reason} category={data->CrystallizeCategory} agentCount={data->CrystallizeItemCount} snapshot={_categoryRows.Length}");
     }
 
-    private void RequestAddonRefresh(AtkUnitBase* addon) {
+    private unsafe void RequestAddonRefresh(AtkUnitBase* addon) {
         if (_refreshRecursionDepth > 1)
             return;
         addon->OnRefresh(0, null);
     }
 
-    private bool HasValidCategorySnapshot(MiragePrismPrismBoxData* data)
+    private unsafe bool HasValidCategorySnapshot(MiragePrismPrismBoxData* data)
         => data is not null
            && data->CrystallizeCategory == _crystallizeCategory
            && _categoryRows.Length > 0;
@@ -551,7 +547,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // agent has full category but tree still shows filtered row count
-    private bool IsNativeTreeTruncatedVersusSnapshot(MiragePrismPrismBoxData* data) {
+    private unsafe bool IsNativeTreeTruncatedVersusSnapshot(MiragePrismPrismBoxData* data) {
         if (_categoryRows.Length <= 0)
             return false;
         var listLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : 0;
@@ -573,7 +569,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // rebuild _categoryRows from agent + native ATK after refresh
-    private bool TryCaptureCategorySnapshotAfterNative(MiragePrismPrismBoxData* data) {
+    private unsafe bool TryCaptureCategorySnapshotAfterNative(MiragePrismPrismBoxData* data) {
         if (_nativeAtkSnapshot.Length == 0)
             return false;
 
@@ -606,7 +602,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // fill rows the game only materialized in ATK/tree (common after gearset toggles)
-    private void FillMissingCategoryRowsFromNative(MiragePrismPrismBoxData* data) {
+    private unsafe void FillMissingCategoryRowsFromNative(MiragePrismPrismBoxData* data) {
         for (var slot = 0; slot < _atkLayout.Length; slot++) {
             ref readonly var entry = ref _atkLayout[slot];
             if (!entry.IsLeaf)
@@ -628,7 +624,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         }
     }
 
-    private void CaptureNativeAtkSnapshot(AtkUnitBase* addon) {
+    private unsafe void CaptureNativeAtkSnapshot(AtkUnitBase* addon) {
         if (addon->AtkValues is null || addon->AtkValuesCount <= 0) {
             _nativeAtkSnapshot = [];
             return;
@@ -641,7 +637,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // clone ATK, ApplyToBuffer, LoadAtkValues into node 11
-    private void RepopulateDisplayTreeList(AtkUnitBase* addon) {
+    private unsafe void RepopulateDisplayTreeList(AtkUnitBase* addon) {
         var tree = _nativeTreeList;
         if (tree is null || !HasAtkBufferLayout)
             return;
@@ -681,7 +677,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         _ = addon;
     }
 
-    private static void SyncTreeItemsFromAtk(AtkComponentTreeList* tree, AtkValue[] atkValues, int slotCount, CrystallizeAtkBufferLayout layout) {
+    private static unsafe void SyncTreeItemsFromAtk(AtkComponentTreeList* tree, AtkValue[] atkValues, int slotCount, CrystallizeAtkBufferLayout layout) {
         if (slotCount <= 0)
             return;
         var itemCount = Math.Min(slotCount, tree->Items.Count);
@@ -693,7 +689,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         }
     }
 
-    private void LoadAtkValuesDetour(
+    private unsafe void LoadAtkValuesDetour(
         AtkComponentTreeList* thisPtr,
         int atkValuesCount,
         AtkValue* atkValues,
@@ -718,7 +714,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
             callBackInterface);
     }
 
-    private bool TryCaptureAtkBufferLayout(
+    private unsafe bool TryCaptureAtkBufferLayout(
         AtkComponentTreeList* tree,
         int uintValuesOffset,
         int stringValuesOffset,
@@ -760,7 +756,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return true;
     }
 
-    private static void RefreshTreeListLayout(AtkComponentTreeList* tree) {
+    private static unsafe void RefreshTreeListLayout(AtkComponentTreeList* tree) {
         if (tree is null)
             return;
         var list = (AtkComponentList*)tree;
@@ -771,7 +767,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         list->IsScrollRefreshPending = true;
     }
 
-    private bool TryCaptureCategorySnapshot(MiragePrismPrismBoxData* data) {
+    private unsafe bool TryCaptureCategorySnapshot(MiragePrismPrismBoxData* data) {
         EnsureCategoryTracked(data);
         if (InferCategoryItemCount(data) <= 0)
             return false;
@@ -779,7 +775,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return true;
     }
 
-    private void EnsureCategoryTracked(MiragePrismPrismBoxData* data) {
+    private unsafe void EnsureCategoryTracked(MiragePrismPrismBoxData* data) {
         if (data->CrystallizeCategory == _crystallizeCategory && _categoryRows.Length > 0)
             return;
         if (data->CrystallizeCategory != _crystallizeCategory) {
@@ -805,7 +801,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // fallback before PostRefresh; prefer TryCaptureCategorySnapshotAfterNative when ATK is available
-    private void CaptureCategorySnapshot(MiragePrismPrismBoxData* data) {
+    private unsafe void CaptureCategorySnapshot(MiragePrismPrismBoxData* data) {
         var agentCount = _nativeCategoryItemCount > 0 ? _nativeCategoryItemCount : InferCategoryItemCount(data);
         if (agentCount <= 0) {
             _categoryRows = [];
@@ -831,11 +827,11 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
             $"category={_crystallizeCategory} agentRows={agentCount} filterFlags={data->CrystallizeFilterFlags}");
     }
 
-    private void SyncCrystallizeFilterFlagsSnapshot(MiragePrismPrismBoxData* data) {
+    private unsafe void SyncCrystallizeFilterFlagsSnapshot(MiragePrismPrismBoxData* data) {
         _crystallizeFilterFlagsSnapshot = data->CrystallizeFilterFlags;
     }
 
-    private bool TryDetectCrystallizeFilterFlagsChange(MiragePrismPrismBoxData* data, string phase) {
+    private unsafe bool TryDetectCrystallizeFilterFlagsChange(MiragePrismPrismBoxData* data, string phase) {
         if (_crystallizeFilterFlagsSnapshot == byte.MaxValue) {
             SyncCrystallizeFilterFlagsSnapshot(data);
             return false;
@@ -849,7 +845,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return true;
     }
 
-    private bool TryHandleCrystallizeFilterFlagsChange(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+    private unsafe bool TryHandleCrystallizeFilterFlagsChange(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (!TryDetectCrystallizeFilterFlagsChange(data, nameof(OnAddonUpdate)))
             return false;
         ApplyFilterAfterFlagsChange(addon, data);
@@ -857,7 +853,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // gearset filter toggled mid-frame — recapture and refilter without waiting for refresh
-    private void ApplyFilterAfterFlagsChange(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+    private unsafe void ApplyFilterAfterFlagsChange(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (!IsAddonUsable(addon) || !IsFilteringActive)
             return;
 
@@ -881,12 +877,12 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
             $"refiltered after flags change nativeAtkSlots={_nativeAtkSlotCount} filteredAtkSlots={_filteredAtkSlotCount} snapshot={_categoryRows.Length} filterFlags={_crystallizeFilterFlagsSnapshot}");
     }
 
-    private static MiragePrismPrismBoxData* GetData() {
+    private static unsafe MiragePrismPrismBoxData* GetData() {
         var agent = AgentMiragePrismPrismBox.Instance();
         return agent is null ? null : agent->Data;
     }
 
-    private static int InferCategoryItemCount(MiragePrismPrismBoxData* data) {
+    private static unsafe int InferCategoryItemCount(MiragePrismPrismBoxData* data) {
         var populated = InferPopulatedCategoryItemCount(data);
         if (populated > 0)
             return populated;
@@ -894,7 +890,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // CrystallizeItemCount is unreliable while filtering
-    private static int InferPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
+    private static unsafe int InferPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
         var lastIndex = -1;
         for (var i = 0; i < MaxCategoryItems; i++) {
             if (data->CrystallizeItems[i].ItemId != 0)
@@ -904,7 +900,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
     }
 
     // CrystallizeFilterFlags / PrismBoxItemIds can change outside refresh
-    private void OnAddonUpdate(AtkUnitBase* addon) {
+    private unsafe void OnAddonUpdate(AtkUnitBase* addon) {
         if (!IsAddonUsable(addon) || !IsFilteringActive)
             return;
 
@@ -924,7 +920,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         RequestAddonRefresh(addon);
     }
 
-    private bool TryDetectPrismBoxItemIdsChange(MirageManager* mirage) {
+    private unsafe bool TryDetectPrismBoxItemIdsChange(MirageManager* mirage) {
         var current = mirage->PrismBoxItemIds;
         if (!_prismBoxItemIdsInitialized) {
             current.CopyTo(_prismBoxItemIdsSnapshot);
@@ -937,7 +933,7 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         return true;
     }
 
-    private void ClearFilterState() {
+    private unsafe void ClearFilterState() {
         _categoryRows = [];
         _displayToSource = [];
         _nativeAtkSnapshot = [];
@@ -954,6 +950,19 @@ internal sealed unsafe partial class CrystallizeListHandler : IDisposable {
         ClearFilterLogSignatures();
     }
 
-    private static bool IsAddonUsable(AtkUnitBase* addon)
+    public async ValueTask DisposeAsync() {
+        if (_disposed)
+            return;
+        _disposed = true;
+        await Svc.Framework.RunOnFrameworkThread(DisposeCore);
+    }
+
+    private void DisposeCore() {
+        _addonController.Dispose();
+        _loadAtkValuesHook?.Dispose();
+        ClearFilterState();
+    }
+
+    private static unsafe bool IsAddonUsable(AtkUnitBase* addon)
         => addon is not null && addon->IsVisible;
 }

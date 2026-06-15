@@ -4,7 +4,7 @@ using System.Text;
 
 namespace GlamourLog.Features.PrismBox;
 
-internal sealed unsafe partial class CrystallizeListHandler {
+internal sealed partial class CrystallizeListHandler {
     private const int MaxHiddenItemLogLines = 48;
 
     // signature dedupe so identical state isn't logged every frame
@@ -29,7 +29,7 @@ internal sealed unsafe partial class CrystallizeListHandler {
     private static void LogFilterDebug(string phase, string message)
         => Svc.Log.Information($"[{nameof(CrystallizeListHandler)}.{phase}] {message}");
 
-    private void LogNativeListMetrics(AtkUnitBase* addon) {
+    private unsafe void LogNativeListMetrics(AtkUnitBase* addon) {
         if (addon is null)
             return;
         ResolveNativeTree(addon);
@@ -40,7 +40,7 @@ internal sealed unsafe partial class CrystallizeListHandler {
             $"native itemHeight={list->ItemHeight} rowStepY={list->RowStepY} listHeight={list->ListHeight} numVisible={list->NumVisibleItems} numVisibleRows={list->NumVisibleRows} listLength={list->ListLength}");
     }
 
-    private void LogApplyPipelineResult(AtkComponentTreeList* tree, MiragePrismPrismBoxData* data) {
+    private unsafe void LogApplyPipelineResult(AtkComponentTreeList* tree, MiragePrismPrismBoxData* data) {
         var itemsCount = tree->Items.Count;
         var listLength = ((AtkComponentList*)tree)->ListLength;
         var getItemCount = ((AtkComponentList*)tree)->GetItemCount();
@@ -51,7 +51,7 @@ internal sealed unsafe partial class CrystallizeListHandler {
         LogFilterDebug(nameof(ApplyFilterAfterNativeRefresh), $"applied {applySummary}");
     }
 
-    private void LogFilterOnState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+    private unsafe void LogFilterOnState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         ResolveNativeTree(addon);
         var tree = _nativeTreeList;
         var nativeVisible = _nativeTreeResNode is not null && _nativeTreeResNode->IsVisible();
@@ -73,7 +73,7 @@ internal sealed unsafe partial class CrystallizeListHandler {
         LogFilterDebug(phase, summary);
     }
 
-    private void LogFilterOffState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+    private unsafe void LogFilterOffState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         ResolveNativeTree(addon);
         var nativeVisible = _nativeTreeResNode is not null && _nativeTreeResNode->IsVisible();
         var nativeItems = _nativeTreeList is not null ? _nativeTreeList->Items.Count : -1;

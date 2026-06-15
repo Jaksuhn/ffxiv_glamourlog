@@ -38,20 +38,22 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
         Svc.Register<ChatAlerts>();
 
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
-        await Svc.Framework.RunOnFrameworkThread(Svc.Register<WindowsService>);
+        Svc.Register<WindowsService>();
         Svc.Interface.UiBuilder.OpenMainUi += Svc.Get<WindowsService>().ToggleMainWindow;
         Svc.Interface.UiBuilder.OpenConfigUi += Svc.Get<WindowsService>().ToggleMainMenu;
     }
 
     public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.Commands.RemoveHandler(c));
+
+        var windows = Svc.Get<WindowsService>();
         await Svc.Framework.RunOnFrameworkThread(() => {
-            Svc.Interface.UiBuilder.OpenMainUi -= Svc.Get<WindowsService>().ToggleMainWindow;
-            Svc.Interface.UiBuilder.OpenConfigUi -= Svc.Get<WindowsService>().ToggleMainMenu;
-            Svc.Get<WindowsService>().Dispose();
-            CLibMain.Dispose(); // needs to be called on main cause of the KTK things I add to Svc
-            KamiToolKitLibrary.Dispose();
+            Svc.Interface.UiBuilder.OpenMainUi -= windows.ToggleMainWindow;
+            Svc.Interface.UiBuilder.OpenConfigUi -= windows.ToggleMainMenu;
         });
+
+        await CLibMain.DisposeAsync();
+        await Svc.Framework.RunOnFrameworkThread(KamiToolKitLibrary.Dispose);
     }
 
     private void OnCommand(string command, string arguments) {

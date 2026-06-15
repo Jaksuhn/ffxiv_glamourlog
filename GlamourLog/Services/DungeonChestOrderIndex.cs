@@ -1,5 +1,6 @@
 using AllaganLib.GameSheets.ItemSources;
 using GlamourLog.Nodes;
+using KamiToolKit.Nodes;
 using LuminaSupplemental.Excel.Model;
 using LuminaSupplemental.Excel.Services;
 
@@ -58,12 +59,13 @@ internal sealed class DungeonChestOrderIndex {
         return result;
     }
 
-    internal float ComputeMaxLabelColumnWidth(uint cfcId, IReadOnlyList<uint> chestOrder, string? extraPrimaryLabel = null) {
+    internal float ComputeMaxLabelColumnWidth(TextNode measure, uint cfcId, IReadOnlyList<uint> chestOrder, string? extraPrimaryLabel = null) {
         var max = 0f;
         if (extraPrimaryLabel is { Length: > 0 })
-            max = DetailListItemNode.MeasureDutyChestLabelColumnWidth(extraPrimaryLabel, string.Empty);
+            max = DetailListItemNode.MeasureDutyChestLabelColumnWidth(measure, extraPrimaryLabel, string.Empty);
         for (var i = 0; i < chestOrder.Count; i++) {
             var width = DetailListItemNode.MeasureDutyChestLabelColumnWidth(
+                measure,
                 $"Chest {i + 1}",
                 FormatSecondaryLabel(chestOrder[i]));
             if (width > max)

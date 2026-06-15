@@ -3,7 +3,7 @@ using KamiToolKit.BaseTypes;
 
 namespace GlamourLog.Windows.GuideWindow;
 
-public unsafe partial class GuideWindow {
+public partial class GuideWindow {
     private const float RightBlockSpacing = Constants.BlockSpacing;
 
     private readonly Dictionary<Page, List<NodeBase>> _pageBlocks = [];

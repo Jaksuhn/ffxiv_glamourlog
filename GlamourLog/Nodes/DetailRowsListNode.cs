@@ -9,6 +9,7 @@ namespace GlamourLog.Nodes;
 // not ListNode<>: assignments use ListItemNode.ItemData, so a derived setter never runs; same-ref skips leave pooled text stale (PopulateNodes).
 internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     public readonly ScrollBarNode ScrollBarNode;
+    internal TextNode DutyChestMeasureNode => _dutyChestMeasureNode;
 
     private const float ScrollBarWidth = 8f;
     private const float RowWidthInset = 16f;
@@ -24,6 +25,7 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     }
 
     private readonly List<DetailListItemNode> nodeList = [];
+    private readonly TextNode _dutyChestMeasureNode;
     private readonly float itemHeight = DetailListItemNode.ItemHeight;
     private DetailListRowData? selectedItem;
     private int scrollPosition;
@@ -32,6 +34,14 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
     private bool needsPostNativeRebind;
 
     public DetailRowsListNode() {
+        _dutyChestMeasureNode = new TextNode {
+            FontSize = 12,
+            LineSpacing = 12,
+            FontType = FontType.Axis,
+            IsVisible = false,
+        };
+        _dutyChestMeasureNode.AttachNode(this);
+
         ScrollBarNode = new ScrollBarNode {
             OnValueChanged = OnScrollUpdate,
             ScrollSpeed = (int)itemHeight,

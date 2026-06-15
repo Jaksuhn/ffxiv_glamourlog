@@ -503,23 +503,16 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
     private static readonly Vector4 TwoLineSubtitleColor = new(157f / 255f, 131f / 255f, 91f / 255f, 1f);
 
-    private static TextNode? _dutyChestMeasureNode;
-
-    internal static float MeasureDutyChestLabelColumnWidth(string primaryText, string secondaryText) {
-        _dutyChestMeasureNode ??= new TextNode {
-            FontSize = 12,
-            LineSpacing = 12,
-            FontType = FontType.Axis,
-        };
-        _dutyChestMeasureNode.RemoveTextFlags(TextFlags.Emboss);
-        var width = _dutyChestMeasureNode.GetTextDrawSize((ReadOnlySeString)primaryText).X;
+    internal static float MeasureDutyChestLabelColumnWidth(TextNode measure, string primaryText, string secondaryText) {
+        measure.RemoveTextFlags(TextFlags.Emboss);
+        var width = measure.GetTextDrawSize((ReadOnlySeString)primaryText).X;
         if (secondaryText.Length > 0)
-            width = Math.Max(width, _dutyChestMeasureNode.GetTextDrawSize((ReadOnlySeString)secondaryText).X);
+            width = Math.Max(width, measure.GetTextDrawSize((ReadOnlySeString)secondaryText).X);
         return Math.Max(DutyChestLabelMinWidth, MathF.Ceiling(width) + DutyChestLabelPadding);
     }
 
     private float MeasureDutyChestLabelWidth(string primaryText, string secondaryText)
-        => MeasureDutyChestLabelColumnWidth(primaryText, secondaryText);
+        => MeasureDutyChestLabelColumnWidth(_primary, primaryText, secondaryText);
 
     private void ApplyIconTwoLineTextLayout(string primaryText, string secondaryText) {
         LayoutIconRow();

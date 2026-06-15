@@ -10,7 +10,7 @@ namespace GlamourLog;
 
 internal unsafe partial class LogWindow {
     private void RefreshRows(OwnershipSnapshot snap) {
-        if (_setListNode is null || _statsSetsLine is null || _statsSpaceLine is null)
+        if (SetList is null || _statsSetsLine is null || _statsSpaceLine is null)
             return;
 
         var agent = ItemFinderModule.Instance();
@@ -20,32 +20,19 @@ internal unsafe partial class LogWindow {
             return;
         }
 
-        // mirage sets only. non-set armoire doesn't get included
         var mirageCatalogSets = Svc.Get<CatalogService>().GlamourSets.Where(s => !s.NonSetCabinetPiece);
         var ownedMirageSets = snap.OwnedSets.Where(s => !s.NonSetCabinetPiece);
         var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || snap.OwnedSets.Contains(x));
         _statsSetsLine.String = $"{ownedMirageSets.Count()} / {totalObtainable}";
         _statsSpaceLine.String = $"{ownedMirageSets.Sum(x => x.Items.Count - 1)}";
 
-        foreach (var btn in _categoryButtons) {
-            if (!_categoryButtonMap.TryGetValue(btn, out var categoryId))
-                continue;
-
-            btn.LabelNode.String = categoryId;
-            btn.Selected = categoryId == _selectedCategoryId;
-            if (_categoryCountByButton.TryGetValue(btn, out var countNode)) {
-                var cr = CategoryRows(categoryId);
-                countNode.String = $"{cr.Count(snap.OwnedSets.Contains)}/{cr.Count}";
-            }
-        }
-        SyncCategoryCountLayouts();
+        _categoryColumn?.UpdateButtonStates(_selectedCategoryId, CategoryRows, snap);
 
         RepopulateSetListFromFilteredRows(snap);
     }
 
-    // middle column only: re-sort / re-filter row models; skips category + stats (sort chrome toggles)
     private void RebuildSetListOrderOnly() {
-        if (_setListNode is null)
+        if (SetList is null)
             return;
         if (ItemFinderModule.Instance() is null)
             return;
@@ -54,10 +41,10 @@ internal unsafe partial class LogWindow {
     }
 
     private void RepopulateSetListFromFilteredRows(OwnershipSnapshot snap) {
-        if (_setListNode is null)
+        if (SetList is null)
             return;
 
-        var searchRaw = _gatheringNoteSearch?.Input.String.ToString() ?? string.Empty;
+        var searchRaw = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
         var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
         var rows = SetListFilterSort.Apply(searchTrimmed, CategoryRows(_selectedCategoryId), snap);
 
@@ -71,15 +58,15 @@ internal unsafe partial class LogWindow {
             }
         }
 
-        _setListNode.OptionsList = [.. _setListOptions];
+        SetList.OptionsList = [.. _setListOptions];
         if (_pendingClearSetSelection) {
             _pendingClearSetSelection = false;
-            _setListNode.ClearSelection();
+            SetList.ClearSelection();
         }
 
         if (_pendingResetSetScroll) {
             _pendingResetSetScroll = false;
-            _setListNode.ResetScroll();
+            SetList.ResetScroll();
         }
 
         if (_pendingSelectSet is { } pendingSet) {
@@ -89,43 +76,42 @@ internal unsafe partial class LogWindow {
     }
 
     private void ScrollSetListToSet(GlamourSet set) {
-        if (_setListNode is null)
+        if (SetList is null)
             return;
 
-        var index = _setListNode.OptionsList.FindIndex(r => r.Set.ItemId == set.ItemId);
+        var index = SetList.OptionsList.FindIndex(r => r.Set.ItemId == set.ItemId);
         if (index < 0)
             return;
 
-        var stride = (int)(GlamourSetListItemNode.ItemHeight + _setListNode.ItemSpacing);
+        var stride = (int)(GlamourSetListItemNode.ItemHeight + SetList.ItemSpacing);
         if (stride < 1)
             return;
 
-        var nodeCount = Math.Max(1, (int)(_setListNode.Height / stride));
-        var maxScroll = Math.Max(0, _setListNode.OptionsList.Count - nodeCount);
-        var scroll = _setListNode.ScrollBarNode.ScrollPosition / stride;
+        var nodeCount = Math.Max(1, (int)(SetList.Height / stride));
+        var maxScroll = Math.Max(0, SetList.OptionsList.Count - nodeCount);
+        var scroll = SetList.ScrollBarNode.ScrollPosition / stride;
         if (index < scroll)
             scroll = index;
         else if (index >= scroll + nodeCount)
             scroll = Math.Min(index - nodeCount + 1, maxScroll);
 
-        // ListNode wires this to OnScrollUpdate → PopulateNodes + scrollbar sync.
-        _setListNode.ScrollBarNode.OnValueChanged?.Invoke(scroll * stride);
+        SetList.ScrollBarNode.OnValueChanged?.Invoke(scroll * stride);
     }
 
     private void ClearSetSearchIfActive() {
-        if (_gatheringNoteSearch is null)
+        if (_categoryColumn is null)
             return;
-        var current = _gatheringNoteSearch.Input.String.ToString();
+        var current = _categoryColumn.Search.Input.String.ToString();
         if (string.IsNullOrWhiteSpace(current))
             return;
-        _gatheringNoteSearch.Input.String = string.Empty;
+        _categoryColumn.Search.Input.String = string.Empty;
     }
 
     private SetListRowData BuildSetListRowData(GlamourSet set, OwnershipSnapshot snap, bool appendNotInListSuffix = false) {
         var setStorageState = Svc.Get<OwnershipService>().GetSetStorageState(set, snap);
         var subtitle = SetSublineText(set, snap);
         if (appendNotInListSuffix) {
-            var searchRaw = _gatheringNoteSearch?.Input.String.ToString() ?? string.Empty;
+            var searchRaw = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
             var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
             if (C.HideSharedModels && !SetListFilterSort.IsVisibleInSetList(set, searchTrimmed, CategoryRows(_selectedCategoryId), snap))
                 subtitle += " · Not in list";
@@ -198,29 +184,18 @@ internal unsafe partial class LogWindow {
         C.SetListSortMode = mode;
         C.SetListSortDirection = mode.DefaultDirection();
         C.Save();
-        SyncSortDirectionChrome();
+        _setListColumn?.SyncSortDirectionChrome();
         RefreshListsAndDetails();
     }
 
     private void OnSetListSortDirectionToggle() {
         C.SetListSortDirection = C.SetListSortDirection == ListSortDirection.Ascending ? ListSortDirection.Descending : ListSortDirection.Ascending;
         C.Save();
-        SyncSortDirectionChrome();
+        _setListColumn?.SyncSortDirectionChrome();
         if (!IsOpen || !CanPaintLists())
             return;
         _pendingRebuildSetListOrderOnly = true;
     }
-
-    private void SyncSortDirectionChrome() {
-        if (_setListSortControl is null)
-            return;
-        var btn = _setListSortControl.SortDirectionButton;
-        btn.Icon = SortDirectionButtonIcon(C.SetListSortDirection);
-        btn.TextTooltip = C.SetListSortDirection == ListSortDirection.Ascending ? Addon.GetRow(8043).Text : Addon.GetRow(8044).Text;
-    }
-
-    private static CircleButtonIcon SortDirectionButtonIcon(ListSortDirection direction)
-        => direction == ListSortDirection.Ascending ? CircleButtonIcon.UpArrow : CircleButtonIcon.ArrowDown;
 
     private string SetSublineText(GlamourSet set, OwnershipSnapshot snap) {
         var n = set.Items.Count;
