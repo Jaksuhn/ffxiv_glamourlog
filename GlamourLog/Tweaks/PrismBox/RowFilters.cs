@@ -10,7 +10,7 @@ internal interface IPrismBoxRowFilter {
 internal sealed class HideDresserDepositedFilter : IPrismBoxRowFilter {
     public bool IsEnabled => C.HideCrystallizeOwnedItems;
     public bool ShouldHide(uint itemId)
-        => itemId != 0 && Svc.Get<OwnershipService>().IsItemInGlamourDresser(ItemUtil.GetBaseId(itemId).ItemId);
+        => itemId != 0 && Svc.Get<OwnershipService>().IsCrystallizeItemFullyDeposited(ItemUtil.GetBaseId(itemId).ItemId);
 }
 
 internal sealed class HideArmoireEligibleFilter : IPrismBoxRowFilter {

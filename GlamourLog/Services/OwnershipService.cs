@@ -330,6 +330,35 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return IsPieceInMirageOutfitSlot(itemId);
     }
 
+    /// <summary>
+    /// Crystallize picker: hide when loose in the dresser, or when every mirage outfit that includes
+    /// this piece already has it deposited. Still show when at least one outfit set can accept it.
+    /// </summary>
+    internal bool IsCrystallizeItemFullyDeposited(uint itemId) {
+        itemId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (itemId == 0)
+            return false;
+
+        var itemFinder = ItemFinderModule.Instance();
+        if (itemFinder is not null) {
+            foreach (var id in itemFinder->GlamourDresserBaseItemIds) {
+                if (id == itemId)
+                    return true;
+            }
+        }
+
+        var inAnyOutfit = false;
+        foreach (var row in MirageStoreSetItem.Where(r => r.RowId > 0)) {
+            if (!IsPieceInOutfitDefinition(row, itemId))
+                continue;
+            inAnyOutfit = true;
+            if (!IsPieceInMirageOutfitSlot(row, itemId))
+                return false;
+        }
+
+        return inAnyOutfit;
+    }
+
     /// <summary> True when the sheet lists the same number of pieces as <paramref name="set"/> and each slot is collected on the mirage outfit (see <see cref="MirageStoreSetItemExtensions.IsFullSetCollected(MirageStoreSetItem, bool)"/>). </summary>
     private static bool IsFullMirageOutfit(GlamourSet set) {
         var row = MirageStoreSetItem.GetRow(set.ItemId);
@@ -343,6 +372,15 @@ internal sealed unsafe class OwnershipService : IDisposable {
         }
 
         return defined == set.Items.Count;
+    }
+
+    private static bool IsPieceInOutfitDefinition(MirageStoreSetItem row, uint pieceItemId) {
+        foreach (var itemRef in row.Items) {
+            if (itemRef.RowId != 0 && itemRef.RowId == pieceItemId)
+                return true;
+        }
+
+        return false;
     }
 
     private static bool IsPieceInMirageOutfitSlot(MirageStoreSetItem row, uint pieceItemId) {

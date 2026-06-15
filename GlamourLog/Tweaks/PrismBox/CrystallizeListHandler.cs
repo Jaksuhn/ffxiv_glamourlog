@@ -121,9 +121,8 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
         Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
     }
 
-    // User toggled a GlamourLog filter in settings. Always restore the full agent category and invalidate
-    // cached ATK so the next refresh rebuilds from an unfiltered native tree — applying on a truncated
-    // filtered tree leaves listLength << snapshot and breaks toggles / dresser updates.
+    // User toggled a GlamourLog filter in settings. Restore the full agent category first, then either
+    // refilter in place from the existing snapshot (fast path) or invalidate ATK and refresh (cold path).
     private void ApplyConfigChange() {
         var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(AddonName);
         var data = GetData();
@@ -144,6 +143,20 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             addon->OnRefresh(0, null);
             return;
         }
+
+        EnsureCategoryTracked(data);
+
+        if (_categoryRows.Length > 0)
+            RestoreFullCategory(data);
+
+        // Re-filter from the existing category + native ATK snapshot when possible (instant, correct indices).
+        if (HasValidCategorySnapshot(data) && TryApplyFilterPipeline(addon, data)) {
+            ClearFilterLogSignatures();
+            LogFilterDebug(nameof(ApplyConfigChange),
+                $"filters refiltered in place category={_crystallizeCategory} snapshot={_categoryRows.Length} visible={_displayToSource.Length}");
+            return;
+        }
+
         if (!HasValidCategorySnapshot(data) && !TryCaptureCategorySnapshot(data)) {
             _needsCategorySnapshot = true;
             LogFilterDebug(nameof(ApplyConfigChange),
@@ -151,14 +164,31 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
             addon->OnRefresh(0, null);
             return;
         }
-        if (_categoryRows.Length > 0)
-            RestoreFullCategory(data);
+
         InvalidateNativeAtkCache();
         _needsCategorySnapshot = _categoryRows.Length > 0;
         ClearFilterLogSignatures();
         LogFilterDebug(nameof(ApplyConfigChange),
             $"filters enabled category={_crystallizeCategory} snapshot={_categoryRows.Length} needsSnapshot={_needsCategorySnapshot}");
         addon->OnRefresh(0, null);
+    }
+
+    private bool TryApplyFilterPipeline(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        if (_categoryRows.Length == 0 || !HasAtkBufferLayout || _nativeAtkSnapshot.Length == 0)
+            return false;
+
+        ResolveNativeTree(addon);
+        if (_nativeTreeList is null)
+            return false;
+
+        if (_atkLayout.Length == 0 || _nativeAtkSlotCount <= 0)
+            ParseAtkLayout(force: true);
+
+        if (_atkLayout.Length == 0 || _nativeAtkSlotCount <= 0)
+            return false;
+
+        ApplyFilterAfterNativeRefresh(addon, data);
+        return true;
     }
 
     private void OnSetup(AtkUnitBase* addon) {
@@ -231,8 +261,9 @@ internal sealed unsafe class CrystallizeListHandler : IDisposable {
     private void OnPostRefreshCore(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (!IsFilteringActive) {
             ResolveNativeTree(addon);
-            if (_nativeTreeList is not null)
-                RestoreNativeTreeFromSnapshot(addon);
+            CaptureNativeAtkSnapshot(addon);
+            if (_categoryRows.Length > 0 && HasAtkBufferLayout && _nativeAtkSnapshot.Length > 0)
+                ParseAtkLayout(force: true);
             SetFilteredTreeActive(addon, active: false);
             LogFilterOffState(nameof(OnPostRefresh), addon, data);
             return;
