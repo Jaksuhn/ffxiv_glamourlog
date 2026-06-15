@@ -50,7 +50,7 @@ internal sealed class IpcProvider : IDisposable {
     private static List<uint> GetDresserItemIds() {
         var ownership = Svc.Get<OwnershipService>();
         ownership.GetLalaAchievementsExportBuckets(out var outfitsBySetId, out _);
-        var dresserIds = ownership.GetDresserStoredItemIds();
+        var dresserIds = ownership.GetDresserItemIds();
         var setTokens = Svc.Get<CatalogService>().GlamourSets.Select(s => s.ItemId).ToHashSet();
         var result = new HashSet<uint>(dresserIds.Where(id => !setTokens.Contains(id)));
         foreach (var pieces in outfitsBySetId.Values) {
