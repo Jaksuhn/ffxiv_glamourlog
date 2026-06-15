@@ -64,15 +64,15 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private const float DutyChestLabelMinWidth = 36f;
     private static float PieceIconY => (ItemHeight - PieceIconSize) * 0.5f;
 
-    public static Action<uint>? OnPieceLeftClick { get; set; }
-    public static Action<uint>? OnItemRightClick { get; set; }
-    public static Action<uint, SourceNavigateTarget?>? OnSourceHeaderRightClick { get; set; }
-    public static Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
-    public static Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
-    public static Action<string, bool>? OnDetailSectionToggle { get; set; } // fired when SectionHeader is toggled
-    public static Func<string, bool>? IsDetailSectionCollapsed { get; set; } // restore collapsed state for headers are rebuild if true
-    public static Action<GlamourSet>? OnSharedModelSetLeftClick { get; set; }
-    public static Action<uint, GlamourSet>? OnSharedModelItemLeftClick { get; set; }
+    public Action<uint>? OnPieceLeftClick { get; set; }
+    public Action<uint>? OnItemRightClick { get; set; }
+    public Action<uint, SourceNavigateTarget?>? OnSourceHeaderRightClick { get; set; }
+    public Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
+    public Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
+    public Action<string, bool>? OnDetailSectionToggle { get; set; } // fired when SectionHeader is toggled
+    public Func<string, bool>? IsDetailSectionCollapsed { get; set; } // restore collapsed state for headers are rebuild if true
+    public Action<GlamourSet>? OnSharedModelSetLeftClick { get; set; }
+    public Action<uint, GlamourSet>? OnSharedModelItemLeftClick { get; set; }
 
     private readonly RowFramedIcon _pieceIcon;
     private readonly CollisionNode _inputCollision;

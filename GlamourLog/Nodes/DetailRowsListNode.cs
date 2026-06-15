@@ -60,6 +60,16 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
 
     public Action<DetailListRowData?>? OnItemSelected { get; set; }
 
+    public Action<uint>? OnPieceLeftClick { get; set; }
+    public Action<uint>? OnItemRightClick { get; set; }
+    public Action<uint, SourceNavigateTarget?>? OnSourceHeaderRightClick { get; set; }
+    public Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
+    public Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
+    public Action<string, bool>? OnDetailSectionToggle { get; set; }
+    public Func<string, bool>? IsDetailSectionCollapsed { get; set; }
+    public Action<GlamourSet>? OnSharedModelSetLeftClick { get; set; }
+    public Action<uint, GlamourSet>? OnSharedModelItemLeftClick { get; set; }
+
     public float ItemSpacing {
         get;
         set {
@@ -95,11 +105,22 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
 
     public void AttachInteractivity() {
         ScrollBarNode.OnValueChanged = OnScrollUpdate;
+        SyncNodeCallbacks();
     }
 
     public void DetachInteractivity() {
         ScrollBarNode.OnValueChanged = null;
         OnItemSelected = null;
+        OnPieceLeftClick = null;
+        OnItemRightClick = null;
+        OnSourceHeaderRightClick = null;
+        OnSourceMapFlagLeftClick = null;
+        OnCraftRecipeJournalLeftClick = null;
+        OnDetailSectionToggle = null;
+        IsDetailSectionCollapsed = null;
+        OnSharedModelSetLeftClick = null;
+        OnSharedModelItemLeftClick = null;
+        SyncNodeCallbacks();
     }
 
     public void PrepareForClose() {
@@ -165,8 +186,26 @@ internal sealed unsafe class DetailRowsListNode : SimpleComponentNode {
                 IsVisible = false,
             };
             node.AttachNode(this);
+            WireNode(node);
             nodeList.Add(node);
         }
+    }
+
+    private void WireNode(DetailListItemNode node) {
+        node.OnPieceLeftClick = OnPieceLeftClick;
+        node.OnItemRightClick = OnItemRightClick;
+        node.OnSourceHeaderRightClick = OnSourceHeaderRightClick;
+        node.OnSourceMapFlagLeftClick = OnSourceMapFlagLeftClick;
+        node.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
+        node.OnDetailSectionToggle = OnDetailSectionToggle;
+        node.IsDetailSectionCollapsed = IsDetailSectionCollapsed;
+        node.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;
+        node.OnSharedModelItemLeftClick = OnSharedModelItemLeftClick;
+    }
+
+    private void SyncNodeCallbacks() {
+        foreach (var node in nodeList)
+            WireNode(node);
     }
 
     private void ResetSlotIndexMemory() {

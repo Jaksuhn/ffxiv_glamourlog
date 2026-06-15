@@ -28,7 +28,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemNode<SetListRowDat
     private const float IconSize = 29f;
 
     public static float ItemHeight => 38f;
-    public static Action<GlamourSet>? OnRowRightClick { get; set; }
+    public Action<GlamourSet>? OnRowRightClick { get; set; }
 
     private readonly ResNode _iconAnchor;
     private readonly FramedItemIconNode _iconNode;

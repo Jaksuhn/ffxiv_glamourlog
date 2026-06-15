@@ -33,7 +33,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private VerticalLineNode? _columnSeparatorRight;
     private HorizontalLineNode? _columnSeparatorBottom;
     private ScrollingNode<VerticalListNode>? _categoryListNode;
-    private ListNode<SetListRowData, GlamourSetListItemNode>? _setListNode;
+    private GlamourSetListNode? _setListNode;
     private DetailRowsListNode? _detailRowsListNode; // not ListNode<>: generic ItemData setter can't be overridden; pooled-row ref skip broke piece text (DetailRowsListNode)
 
     private string _selectedCategoryId = "";
@@ -91,21 +91,30 @@ internal unsafe partial class LogWindow : NativeAddon {
             _pendingResetDetailScroll = true;
         };
 
-        GlamourSetListItemNode.OnRowRightClick = set => SetContextMenu.Open(this, set, _contextMenu);
-        DetailListItemNode.OnPieceLeftClick = OnDetailPieceItemLeftClick;
-        DetailListItemNode.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
-        DetailListItemNode.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
-        DetailListItemNode.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
-        DetailListItemNode.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
-        DetailListItemNode.OnDetailSectionToggle = OnDetailSectionToggle;
-        DetailListItemNode.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
-        DetailListItemNode.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;
-        DetailListItemNode.OnSharedModelItemLeftClick = OnSharedModelItemLeftClick;
+        _setListNode?.OnRowRightClick = set => SetContextMenu.Open(this, set, _contextMenu);
 
         if (_detailRowsListNode is not null) {
             _detailRowsListNode.OnItemSelected = _ => { };
+            _detailRowsListNode.OnPieceLeftClick = OnDetailPieceItemLeftClick;
+            _detailRowsListNode.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
+            _detailRowsListNode.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
+            _detailRowsListNode.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
+            _detailRowsListNode.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
+            _detailRowsListNode.OnDetailSectionToggle = OnDetailSectionToggle;
+            _detailRowsListNode.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
+            _detailRowsListNode.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;
+            _detailRowsListNode.OnSharedModelItemLeftClick = OnSharedModelItemLeftClick;
             _detailRowsListNode.AttachInteractivity();
         }
+    }
+
+    private void DetachListCallbacks() {
+        _setListExportControl?.ExportDropDown.OnOptionSelected = null;
+        _setListSortControl?.SortDropDown.OnOptionSelected = null;
+        _setListSortControl?.SortDirectionButton.OnClick = null;
+        _setListNode?.OnItemSelected = null;
+        _setListNode?.OnRowRightClick = null;
+        _detailRowsListNode?.DetachInteractivity();
     }
 
     private void RefreshListsAndDetailsNow() {
@@ -221,7 +230,7 @@ internal unsafe partial class LogWindow : NativeAddon {
 
         _categoryListNode = SimpleScrollList.Create(new Vector2(contentStart.X, listY), new Vector2(leftWidth, listHeight), true);
         _categoryListNode.AttachNode(this);
-        _setListNode = new ListNode<SetListRowData, GlamourSetListItemNode> {
+        _setListNode = new GlamourSetListNode {
             Position = new Vector2(midColLeft, setListTop),
             OptionsList = [],
             AutoResetScroll = false,
@@ -285,7 +294,7 @@ internal unsafe partial class LogWindow : NativeAddon {
 
     protected override void OnHide(AtkUnitBase* addon) {
         CancelPendingListWork();
-        ClearStaticCallbacks();
+        DetachListCallbacks();
         PrepareScrollbarsForClose();
 
         try {
@@ -380,7 +389,7 @@ internal unsafe partial class LogWindow : NativeAddon {
 
     private const float VirtualListRowWidthInset = 16f;
 
-    private static void SyncVirtualListRowWidths(ListNode<SetListRowData, GlamourSetListItemNode>? list) {
+    private static void SyncVirtualListRowWidths(GlamourSetListNode? list) {
         if (list is null)
             return;
 
@@ -401,7 +410,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         list.RecalculateSizes();
     }
 
-    private static void ResetScrollToTop(ListNode<SetListRowData, GlamourSetListItemNode>? list) {
+    private static void ResetScrollToTop(GlamourSetListNode? list) {
         if (list is null)
             return;
         list.ResetScroll();
@@ -416,13 +425,10 @@ internal unsafe partial class LogWindow : NativeAddon {
 
     protected override void OnFinalize(AtkUnitBase* addon) {
         base.OnFinalize(addon);
-
-        ClearStaticCallbacks();
         ClearNodeReferences();
     }
 
     public override void Dispose() {
-        ClearStaticCallbacks();
         base.Dispose();
     }
 
@@ -440,10 +446,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     // Scrolled scrollbars keep native drag/position state that races AtkUldManager.Finalizer on close.
     private void PrepareScrollbarsForClose() {
         try {
-            if (_setListNode is not null) {
-                _setListNode.ScrollBarNode.OnValueChanged = null;
-                ResetNativeScrollPosition(_setListNode.ScrollBarNode);
-            }
+            PrepareScrollBarForClose(_setListNode?.ScrollBarNode);
         }
         catch { }
 
@@ -453,38 +456,20 @@ internal unsafe partial class LogWindow : NativeAddon {
         catch { }
 
         try {
-            if (_categoryListNode is not null) {
-                _categoryListNode.ScrollBarNode.OnValueChanged = null;
-                var bar = (AtkComponentScrollBar*)_categoryListNode.ScrollBarNode;
-                bar->SetContentNode(null, null);
-                ResetNativeScrollPosition(_categoryListNode.ScrollBarNode);
-            }
+            PrepareScrollBarForClose(_categoryListNode?.ScrollBarNode);
         }
         catch { }
     }
 
-    private static void ResetNativeScrollPosition(ScrollBarNode scrollBar) {
+    private static void PrepareScrollBarForClose(ScrollBarNode? scrollBar) {
+        if (scrollBar is null)
+            return;
+
+        scrollBar.OnValueChanged = null;
         var bar = (AtkComponentScrollBar*)scrollBar;
         bar->IsBeingDragged = false;
+        bar->SetContentNode(null, null);
         bar->SetScrollPosition(0);
-    }
-
-    private void ClearStaticCallbacks() {
-        _setListExportControl?.ExportDropDown.OnOptionSelected = null;
-        _setListSortControl?.SortDropDown.OnOptionSelected = null;
-        _setListSortControl?.SortDirectionButton.OnClick = null;
-        _setListNode?.OnItemSelected = null;
-        _detailRowsListNode?.DetachInteractivity();
-        GlamourSetListItemNode.OnRowRightClick = null;
-        DetailListItemNode.OnPieceLeftClick = null;
-        DetailListItemNode.OnItemRightClick = null;
-        DetailListItemNode.OnSourceHeaderRightClick = null;
-        DetailListItemNode.OnSourceMapFlagLeftClick = null;
-        DetailListItemNode.OnCraftRecipeJournalLeftClick = null;
-        DetailListItemNode.OnDetailSectionToggle = null;
-        DetailListItemNode.IsDetailSectionCollapsed = null;
-        DetailListItemNode.OnSharedModelSetLeftClick = null;
-        DetailListItemNode.OnSharedModelItemLeftClick = null;
     }
 
     private void ClearNodeReferences() {
