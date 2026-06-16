@@ -1,5 +1,5 @@
-using Dalamud.Interface.Colors;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Nodes;
 using GlamourLog.Services;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Nodes;
@@ -143,7 +143,7 @@ internal unsafe class FilterWindow : NativeAddon {
         _okButton.LabelNode.FontType = FontType.Axis;
         _okButton.LabelNode.FontSize = 12;
         _okButton.LabelNode.LineSpacing = 12;
-        _okButton.LabelNode.TextColor = ImGuiColors.DalamudWhite;
+        _okButton.LabelNode.TextColor = ColourPalette.PrimaryWhite;
         _okButton.AttachNode(this);
     }
 
