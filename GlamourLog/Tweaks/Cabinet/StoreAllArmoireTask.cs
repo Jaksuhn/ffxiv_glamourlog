@@ -23,8 +23,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
     private async Task SelectCategory(int categoryIndex) {
         using var scope = BeginScope(nameof(SelectCategory));
         ErrorIf(!TrySelectCategory(categoryIndex), "Failed to switch category");
-        Status = $"Switching to category {categoryIndex + 1}/{CategoryCount}";
-        Svc.Log.Debug(Status);
+        Svc.Log.Debug($"Switching to category {categoryIndex + 1}/{CategoryCount}");
         await WaitUntil(() => IsCategoryReady(categoryIndex), "WaitForCategory");
         await NextFrame(2);
     }
@@ -32,8 +31,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
     private async Task StoreAllInCurrentCategory() {
         using var scope = BeginScope(nameof(StoreAllInCurrentCategory));
         while (TryGetNextCabinetId(out var cabinetId)) {
-            Status = $"Storing cabinet item {cabinetId}";
-            Svc.Log.Debug(Status);
+            Svc.Log.Debug($"Storing cabinet item {cabinetId}");
             ErrorIf(!StoreCabinetItem(cabinetId), "Failed to store item");
 
             await WaitUntil(() => IsCabinetItemStored(cabinetId) && IsStoreConfirmationClear(), "WaitForStored");
