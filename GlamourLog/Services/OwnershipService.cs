@@ -17,7 +17,6 @@ internal readonly struct OwnershipSnapshot {
 }
 
 internal sealed unsafe class OwnershipService : IDisposable {
-    private readonly ArmoireService _armoireService;
     private static readonly Lazy<FrozenDictionary<uint, uint>> CabinetLookup = new(()
         => Cabinet.Where(row => row.Item.RowId != 0)
             .ToFrozenDictionary(row => row.Item.RowId, row => row.RowId));
@@ -26,15 +25,13 @@ internal sealed unsafe class OwnershipService : IDisposable {
             .ToFrozenDictionary(row => row.RowId, row => row.Item.RowId));
 
     public OwnershipService() {
-        _armoireService = new ArmoireService();
-        _armoireService.ArmoireChanged += OnArmoireChanged;
+        Svc.Armoire.ArmoireChanged += OnArmoireChanged;
         Svc.GameInventory.InventoryChanged += OnInventoryChanged;
     }
 
     public void Dispose() {
         Svc.GameInventory.InventoryChanged -= OnInventoryChanged;
-        _armoireService.ArmoireChanged -= OnArmoireChanged;
-        _armoireService.Dispose();
+        Svc.Armoire.ArmoireChanged -= OnArmoireChanged;
     }
 
     internal event System.Action? ArmoireOwnershipChanged;
@@ -113,7 +110,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     private void AddArmoireServiceItems(HashSet<uint> owned) {
-        foreach (var rawId in _armoireService.GetArmoireItems()) {
+        foreach (var rawId in Svc.Armoire.GetArmoireItems()) {
             // some are item ids, some are cabinet row ids.
             owned.Add(ItemUtil.GetBaseId(rawId).ItemId);
             if (CabinetByRowLookup.Value.TryGetValue(rawId, out var itemId))
@@ -207,7 +204,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
         => GetItemIdFromLookups(itemId) is var id and not 0 && (IsInArmoireService(id) || IsInCabinet(id));
 
     private bool IsInArmoireService(uint itemId) {
-        foreach (var rawId in _armoireService.GetArmoireItems()) {
+        foreach (var rawId in Svc.Armoire.GetArmoireItems()) {
             if (ItemUtil.GetBaseId(rawId).ItemId == itemId)
                 return true;
             if (CabinetByRowLookup.Value.TryGetValue(rawId, out var mappedId) && ItemUtil.GetBaseId(mappedId).ItemId == itemId)
