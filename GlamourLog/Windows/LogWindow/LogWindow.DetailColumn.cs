@@ -38,7 +38,7 @@ internal unsafe partial class LogWindow {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details", IsTopLevelSection = true });
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" });
             ApplyCollapsedDetailSections(_detailRowOptions);
-            DetailList.OptionsList = [.. _detailRowOptions];
+            DetailList.AssignOptionsList([.. _detailRowOptions]);
             DetailList.Update();
             return;
         }
@@ -102,7 +102,7 @@ internal unsafe partial class LogWindow {
         }
         AppendSharedModelsSection(snap);
         ApplyCollapsedDetailSections(_detailRowOptions);
-        DetailList.OptionsList = [.. _detailRowOptions];
+        DetailList.AssignOptionsList([.. _detailRowOptions]);
         DetailList.Update();
     }
 

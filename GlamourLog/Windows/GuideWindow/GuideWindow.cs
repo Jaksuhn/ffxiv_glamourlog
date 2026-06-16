@@ -20,8 +20,6 @@ public unsafe partial class GuideWindow : NativeAddon {
     private const float CategoryHeadingGap = 4f;
     private const float RightHeaderHeight = 68f;
 
-    private static readonly Vector4 CategoryHeadingGrey = new(160f / 255f, 160f / 255f, 160f / 255f, 1f);
-    private static readonly Vector4 HeaderTextColor = new(238f / 255f, 225f / 255f, 197f / 255f, 1f);
     private static readonly TextFlags HeaderTextFlags =
         TextFlags.Emboss | TextFlags.WordWrap | TextFlags.MultiLine | unchecked((TextFlags)0x8000);
 
@@ -137,7 +135,7 @@ public unsafe partial class GuideWindow : NativeAddon {
             FontSize = 20,
             LineSpacing = 20,
             AlignmentType = AlignmentType.Left,
-            TextColor = CategoryHeadingGrey,
+            TextColor = ColourPalette.HeadingGrey,
             String = "Category",
         };
         _categoryHeading.RemoveTextFlags(TextFlags.Emboss);
@@ -171,7 +169,7 @@ public unsafe partial class GuideWindow : NativeAddon {
             FontSize = 18,
             LineSpacing = 18,
             AlignmentType = AlignmentType.Center,
-            TextColor = HeaderTextColor,
+            TextColor = ColourPalette.Cream,
             TextFlags = HeaderTextFlags,
         };
         _rightTitle.AttachNode(_rightHeaderRow);
