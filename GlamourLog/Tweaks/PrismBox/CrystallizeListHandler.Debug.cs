@@ -7,54 +7,45 @@ namespace GlamourLog.Features.PrismBox;
 internal sealed partial class CrystallizeListHandler {
     private const int MaxHiddenItemLogLines = 48;
 
-    // signature dedupe so identical state isn't logged every frame
-    private string? _lastFilterSummarySignature; // RebuildFilterMap summary
-    private string? _lastPreFilterSignature; // full snapshot item list
-    private string? _lastPostFilterSignature; // visible item list
-    private string? _lastHiddenItemsSignature; // per-row hide reasons
-    private string? _lastApplyPipelineSignature; // post-apply slot counts
-    private string? _lastFilterOffStateSignature; // filters-disabled tree state
-    private string? _lastFilterOnStateSignature; // filters-enabled tree state
+    private string? _lastFilterSummary;
+    private string? _lastPreFilter;
+    private string? _lastPostFilter;
+    private string? _lastHiddenItems;
+    private string? _lastApplyPipeline;
+    private string? _lastFilterOffState;
+    private string? _lastFilterOnState;
 
     private void ClearFilterLogSignatures() {
-        _lastFilterSummarySignature = null;
-        _lastPreFilterSignature = null;
-        _lastPostFilterSignature = null;
-        _lastHiddenItemsSignature = null;
-        _lastApplyPipelineSignature = null;
-        _lastFilterOffStateSignature = null;
-        _lastFilterOnStateSignature = null;
+        _lastFilterSummary = null;
+        _lastPreFilter = null;
+        _lastPostFilter = null;
+        _lastHiddenItems = null;
+        _lastApplyPipeline = null;
+        _lastFilterOffState = null;
+        _lastFilterOnState = null;
     }
 
     private static void LogFilterDebug(string phase, string message)
         => Svc.Log.Information($"[{nameof(CrystallizeListHandler)}.{phase}] {message}");
 
-    private unsafe void LogNativeListMetrics(AtkUnitBase* addon) {
-        if (addon is null)
-            return;
-        ResolveNativeTree(addon);
-        if (_nativeTreeList is null)
-            return;
-        var list = (AtkComponentList*)_nativeTreeList;
-        LogFilterDebug(nameof(LogNativeListMetrics),
-            $"native itemHeight={list->ItemHeight} rowStepY={list->RowStepY} listHeight={list->ListHeight} numVisible={list->NumVisibleItems} numVisibleRows={list->NumVisibleRows} listLength={list->ListLength}");
-    }
-
     private unsafe void LogApplyPipelineResult(AtkComponentTreeList* tree, MiragePrismPrismBoxData* data) {
         var itemsCount = tree->Items.Count;
         var listLength = ((AtkComponentList*)tree)->ListLength;
         var getItemCount = ((AtkComponentList*)tree)->GetItemCount();
-        var applySummary = $"leaves={_displayToSource.Length} nativeAtkSlots={_nativeAtkSlotCount} filteredAtkSlots={_filteredAtkSlotCount} items.Count={itemsCount} listLength={listLength} getItemCount={getItemCount} agentCount={data->CrystallizeItemCount} filterFlags={_crystallizeFilterFlagsSnapshot} flagsChangedThisRefresh={_crystallizeFilterFlagsChangedThisRefresh}";
-        if (applySummary == _lastApplyPipelineSignature)
+        var applySummary =
+            $"leaves={_displayToSource.Length} nativeAtkSlots={_nativeTree.NativeSlotCount} filteredAtkSlots={_nativeTree.FilteredSlotCount} " +
+            $"items.Count={itemsCount} listLength={listLength} getItemCount={getItemCount} agentCount={data->CrystallizeItemCount} " +
+            $"filterFlags={_crystallizeFilterFlagsSnapshot} flagsChangedThisRefresh={_filterFlagsChangedThisRefresh}";
+        if (applySummary == _lastApplyPipeline)
             return;
-        _lastApplyPipelineSignature = applySummary;
-        LogFilterDebug(nameof(ApplyFilterAfterNativeRefresh), $"applied {applySummary}");
+        _lastApplyPipeline = applySummary;
+        LogFilterDebug(nameof(TryApplyFilterPipeline), $"applied {applySummary}");
     }
 
     private unsafe void LogFilterOnState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
-        ResolveNativeTree(addon);
-        var tree = _nativeTreeList;
-        var nativeVisible = _nativeTreeResNode is not null && _nativeTreeResNode->IsVisible();
+        _nativeTree.Resolve(addon);
+        var tree = _nativeTree.TreeList;
+        var nativeVisible = tree is not null && ((AtkResNode*)tree)->IsVisible();
         var items = tree is not null ? tree->Items.Count : -1;
         var listLength = tree is not null ? ((AtkComponentList*)tree)->ListLength : -1;
         var numVisible = tree is not null ? ((AtkComponentList*)tree)->NumVisibleItems : (short)-1;
@@ -64,29 +55,28 @@ internal sealed partial class CrystallizeListHandler {
         var hasScrollBar = tree is not null && ((AtkComponentList*)tree)->ScrollBarComponent is not null;
         var summary =
             $"leaves={_displayToSource.Length} agentCount={data->CrystallizeItemCount} " +
-            $"nativeNodeId={(_nativeTreeResNode is not null ? _nativeTreeResNode->NodeId : 0u)} nativeVisible={nativeVisible} " +
-            $"nativeItems={items} nativeListLength={listLength} nativeNumVisible={numVisible} " +
+            $"nativeVisible={nativeVisible} nativeItems={items} nativeListLength={listLength} nativeNumVisible={numVisible} " +
             $"itemHeight={itemHeight} listHeight={listHeight} hasRenderer={hasRenderer} hasScrollBar={hasScrollBar}";
-        if (summary == _lastFilterOnStateSignature)
+        if (summary == _lastFilterOnState)
             return;
-        _lastFilterOnStateSignature = summary;
+        _lastFilterOnState = summary;
         LogFilterDebug(phase, summary);
     }
 
     private unsafe void LogFilterOffState(string phase, AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
-        ResolveNativeTree(addon);
-        var nativeVisible = _nativeTreeResNode is not null && _nativeTreeResNode->IsVisible();
-        var nativeItems = _nativeTreeList is not null ? _nativeTreeList->Items.Count : -1;
-        var nativeListLength = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->ListLength : -1;
-        var nativeGetItemCount = _nativeTreeList is not null ? ((AtkComponentList*)_nativeTreeList)->GetItemCount() : -1;
+        _nativeTree.Resolve(addon);
+        var tree = _nativeTree.TreeList;
+        var nativeVisible = tree is not null && ((AtkResNode*)tree)->IsVisible();
+        var nativeItems = tree is not null ? tree->Items.Count : -1;
+        var nativeListLength = tree is not null ? ((AtkComponentList*)tree)->ListLength : -1;
+        var nativeGetItemCount = tree is not null ? ((AtkComponentList*)tree)->GetItemCount() : -1;
         var summary =
             $"snapshot={_categoryRows.Length} agentCount={data->CrystallizeItemCount} inferred={InferCategoryItemCount(data)} " +
-            $"nativeNodeId={(_nativeTreeResNode is not null ? _nativeTreeResNode->NodeId : 0u)} " +
             $"nativeVisible={nativeVisible} nativeItems={nativeItems} nativeListLength={nativeListLength} nativeGetItemCount={nativeGetItemCount} " +
-            $"nativeAtkSlots={_nativeAtkSlotCount} addonAtkValues={addon->AtkValuesCount}";
-        if (summary == _lastFilterOffStateSignature)
+            $"nativeAtkSlots={_nativeTree.NativeSlotCount} addonAtkValues={addon->AtkValuesCount}";
+        if (summary == _lastFilterOffState)
             return;
-        _lastFilterOffStateSignature = summary;
+        _lastFilterOffState = summary;
         LogFilterDebug(phase, summary);
     }
 
@@ -96,8 +86,8 @@ internal sealed partial class CrystallizeListHandler {
         summary.Append($"category={_crystallizeCategory} snapshot={_categoryRows.Length} visible={_displayToSource.Length} hidden={hiddenCount}");
         summary.Append($" filters=[{DescribeEnabledFilters()}]");
         var signature = summary.ToString();
-        if (signature != _lastFilterSummarySignature) {
-            _lastFilterSummarySignature = signature;
+        if (signature != _lastFilterSummary) {
+            _lastFilterSummary = signature;
             LogFilterDebug(nameof(RebuildFilterMap), signature);
             if (hiddenCount > 0)
                 LogHiddenItemDecisions();
@@ -107,13 +97,13 @@ internal sealed partial class CrystallizeListHandler {
 
     private void LogPrePostFilterItemSets() {
         var pre = FormatIndexedItemSet(Enumerable.Range(0, _categoryRows.Length));
-        if (pre != _lastPreFilterSignature) {
-            _lastPreFilterSignature = pre;
+        if (pre != _lastPreFilter) {
+            _lastPreFilter = pre;
             LogFilterDebug("pre-filter", pre);
         }
         var post = FormatIndexedItemSet(_displayToSource);
-        if (post != _lastPostFilterSignature) {
-            _lastPostFilterSignature = post;
+        if (post != _lastPostFilter) {
+            _lastPostFilter = post;
             LogFilterDebug("post-filter", post);
         }
     }
@@ -137,9 +127,9 @@ internal sealed partial class CrystallizeListHandler {
             lines.Add($"{FormatFilterRow(i, itemId)} => {DescribeHideReasons(itemId)}");
         }
         var signature = string.Join('\n', lines);
-        if (signature == _lastHiddenItemsSignature)
+        if (signature == _lastHiddenItems)
             return;
-        _lastHiddenItemsSignature = signature;
+        _lastHiddenItems = signature;
         var logCount = Math.Min(lines.Count, MaxHiddenItemLogLines);
         for (var i = 0; i < logCount; i++)
             LogFilterDebug("hidden", lines[i]);

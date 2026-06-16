@@ -73,7 +73,7 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
 
         EnsureCategoryTracked(addon, agent);
 
-        // Re-filter from the existing category snapshot when possible (instant, correct indices).
+        // re-filter from the existing category snapshot when possible
         if (HasValidCategorySnapshot(addon) && TryApplyFilterPipeline(addon, agent))
             return;
 
@@ -398,12 +398,10 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
         if (_disposed)
             return;
         _disposed = true;
-        await Svc.Framework.RunOnFrameworkThread(DisposeCore);
-    }
-
-    private void DisposeCore() {
-        Svc.Get<OwnershipService>().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
-        _addonController.Dispose();
-        ClearFilterState();
+        await Svc.Framework.RunOnFrameworkThread(() => {
+            Svc.Get<OwnershipService>().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
+            _addonController.Dispose();
+            ClearFilterState();
+        });
     }
 }

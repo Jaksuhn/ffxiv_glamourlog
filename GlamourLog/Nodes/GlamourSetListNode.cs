@@ -4,14 +4,12 @@ namespace GlamourLog.Nodes;
 
 internal sealed class GlamourSetListNode : ListNode<SetListRowData, GlamourSetListItemNode> {
     public Action<GlamourSet>? OnRowRightClick {
-        get => onRowRightClick;
+        get;
         set {
-            onRowRightClick = value;
+            field = value;
             SyncRowCallbacks();
         }
     }
-
-    private Action<GlamourSet>? onRowRightClick;
 
     protected override void OnSizeChanged() {
         base.OnSizeChanged();
@@ -20,6 +18,6 @@ internal sealed class GlamourSetListNode : ListNode<SetListRowData, GlamourSetLi
 
     private void SyncRowCallbacks() {
         foreach (var node in OptionNodes)
-            node.OnRowRightClick = onRowRightClick;
+            node.OnRowRightClick = OnRowRightClick;
     }
 }

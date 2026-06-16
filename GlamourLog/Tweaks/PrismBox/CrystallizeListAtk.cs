@@ -4,8 +4,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.PrismBox;
 
-// ATK buffer helpers for MiragePrismPrismBoxCrystallize node 11 — parse, compact, reload via LoadAtkValues.
-
+// ATK buffer helpers for crystallize tree node; manage via LoadAtkValues.
 internal readonly struct CrystallizeAtkSlot {
     internal bool IsLeaf { get; init; }
     internal AtkComponentTreeListItemType ItemType { get; init; }
@@ -20,20 +19,13 @@ internal readonly struct CrystallizeAtkBufferLayout {
     internal int StringValuesPerItem { get; init; }
 
     internal bool IsValid
-        => UintValuesPerItem > 0
-        && StringValuesPerItem >= 0
-        && UintValuesOffset >= 0
-        && StringValuesOffset > UintValuesOffset;
+        => UintValuesPerItem > 0 && StringValuesPerItem >= 0 && UintValuesOffset >= 0 && StringValuesOffset > UintValuesOffset;
 
     internal bool Matches(CrystallizeAtkBufferLayout other)
-        => UintValuesOffset == other.UintValuesOffset
-            && StringValuesOffset == other.StringValuesOffset
-            && UintValuesPerItem == other.UintValuesPerItem
-            && StringValuesPerItem == other.StringValuesPerItem;
+        => UintValuesOffset == other.UintValuesOffset && StringValuesOffset == other.StringValuesOffset && UintValuesPerItem == other.UintValuesPerItem && StringValuesPerItem == other.StringValuesPerItem;
 }
 
 internal static unsafe class CrystallizeListAtk {
-
     internal static AtkValue[] Clone(AtkValue[] source) {
         var copy = new AtkValue[source.Length];
         Array.Copy(source, copy, source.Length);
@@ -212,16 +204,13 @@ internal static unsafe class CrystallizeListAtk {
     }
 
     private static bool IsRealHeader(CrystallizeAtkSlot entry)
-        => !entry.IsLeaf && entry.ItemType is AtkComponentTreeListItemType.GroupHeader
-            or AtkComponentTreeListItemType.CollapsibleGroupHeader;
+        => !entry.IsLeaf && entry.ItemType is AtkComponentTreeListItemType.GroupHeader or AtkComponentTreeListItemType.CollapsibleGroupHeader;
 
     private static bool IsHeaderType(uint value)
-        => value is (uint)AtkComponentTreeListItemType.GroupHeader
-            or (uint)AtkComponentTreeListItemType.CollapsibleGroupHeader;
+        => value is (uint)AtkComponentTreeListItemType.GroupHeader or (uint)AtkComponentTreeListItemType.CollapsibleGroupHeader;
 
     private static bool IsLeafType(uint value)
-        => value is (uint)AtkComponentTreeListItemType.Leaf
-            or (uint)AtkComponentTreeListItemType.LastLeafInGroup;
+        => value is (uint)AtkComponentTreeListItemType.Leaf or (uint)AtkComponentTreeListItemType.LastLeafInGroup;
 
     internal static void CopySlotToTreeItem(AtkValue[] atkValues, int slot, AtkComponentTreeListItem* item, CrystallizeAtkBufferLayout layout) {
         var uintBase = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
@@ -250,12 +239,7 @@ internal static unsafe class CrystallizeListAtk {
         strings[0] = atkString.String;
     }
 
-    internal static bool TryReadCategoryRow(
-        AtkValue[] atkValues,
-        int slot,
-        CrystallizeAtkSlot entry,
-        CrystallizeAtkBufferLayout layout,
-        out PrismBoxCrystallizeItem row) {
+    internal static bool TryReadCategoryRow(AtkValue[] atkValues, int slot, CrystallizeAtkSlot entry, CrystallizeAtkBufferLayout layout, out PrismBoxCrystallizeItem row) {
         row = default;
         var baseIndex = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
         if (baseIndex + 5 >= atkValues.Length || !entry.IsLeaf)
@@ -315,12 +299,7 @@ internal static unsafe class CrystallizeListAtk {
         return itemId is not (0 or uint.MaxValue);
     }
 
-    private static bool TryReadCategoryRowFieldsFromTreeItem(
-        AtkComponentTreeListItem* item,
-        bool isTreeLeaf,
-        out InventoryType inventory,
-        out int itemSlot,
-        out uint itemId) {
+    private static bool TryReadCategoryRowFieldsFromTreeItem(AtkComponentTreeListItem* item, bool isTreeLeaf, out InventoryType inventory, out int itemSlot, out uint itemId) {
         inventory = default;
         itemSlot = 0;
         itemId = 0;
@@ -362,13 +341,7 @@ internal static unsafe class CrystallizeListAtk {
     }
 
     // keep headers when includeHeaders and section has a visible leaf (shouldExcludeSource, not shouldHideLeaf)
-    private static List<int> BuildKeepSlots(
-        CrystallizeAtkSlot[] layout,
-        Func<int, bool> shouldHideLeaf,
-        int slotLimit,
-        bool includeHeaders,
-        HashSet<int>? visibleSources,
-        Func<int, bool>? shouldExcludeSource) {
+    private static List<int> BuildKeepSlots(CrystallizeAtkSlot[] layout, Func<int, bool> shouldHideLeaf, int slotLimit, bool includeHeaders, HashSet<int>? visibleSources, Func<int, bool>? shouldExcludeSource) {
         if (slotLimit <= 0)
             slotLimit = layout.Length;
 
@@ -414,13 +387,7 @@ internal static unsafe class CrystallizeListAtk {
     }
 
     // header check: skip shouldHideLeaf so duplicate suppression doesn't run here
-    private static bool SectionHasVisibleLeaf(
-        CrystallizeAtkSlot[] layout,
-        int headerIndex,
-        int slotLimit,
-        HashSet<int> visibleSources,
-        Func<int, bool> shouldExcludeSource) {
-
+    private static bool SectionHasVisibleLeaf(CrystallizeAtkSlot[] layout, int headerIndex, int slotLimit, HashSet<int> visibleSources, Func<int, bool> shouldExcludeSource) {
         for (var i = headerIndex + 1; i < slotLimit; i++) {
             ref readonly var entry = ref layout[i];
             if (IsRealHeader(entry))
