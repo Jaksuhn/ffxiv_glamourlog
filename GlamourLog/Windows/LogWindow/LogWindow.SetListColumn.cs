@@ -89,11 +89,7 @@ internal unsafe partial class LogWindow {
 
         var nodeCount = Math.Max(1, (int)(SetList.Height / stride));
         var maxScroll = Math.Max(0, SetList.OptionsList.Count - nodeCount);
-        var scroll = SetList.ScrollBarNode.ScrollPosition / stride;
-        if (index < scroll)
-            scroll = index;
-        else if (index >= scroll + nodeCount)
-            scroll = Math.Min(index - nodeCount + 1, maxScroll);
+        var scroll = Math.Clamp(index, 0, maxScroll);
 
         SetList.ScrollBarNode.OnValueChanged?.Invoke(scroll * stride);
     }

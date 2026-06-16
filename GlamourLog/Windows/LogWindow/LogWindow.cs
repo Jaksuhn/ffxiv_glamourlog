@@ -261,11 +261,6 @@ internal unsafe partial class LogWindow : NativeAddon {
                 _pendingRefreshListsAndDetails = true;
             }
 
-            if (_pendingResetDetailScroll) {
-                _pendingResetDetailScroll = false;
-                DetailList.ResetScrollToTop();
-            }
-
             if (_pendingRefreshListsAndDetails) {
                 _pendingRefreshListsAndDetails = false;
                 _pendingPaintDetailsOnly = false;
@@ -280,6 +275,11 @@ internal unsafe partial class LogWindow : NativeAddon {
             if (_pendingPaintDetailsOnly) {
                 _pendingPaintDetailsOnly = false;
                 PaintDetailsOnlyNow();
+            }
+
+            if (_pendingResetDetailScroll) {
+                _pendingResetDetailScroll = false;
+                DetailList.ResetScrollToTop();
             }
 
             if (_pendingResetSetScroll) {

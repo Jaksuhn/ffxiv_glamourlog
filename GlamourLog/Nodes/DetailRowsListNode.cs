@@ -46,11 +46,7 @@ internal sealed unsafe class DetailRowsListNode : ListNode<DetailListRowData, De
         }
     }
 
-    public void ResetScrollToTop() {
-        ScrollBarNode.ScrollPosition = 0;
-        // don't repopulate here: caller replaces OptionsList next frame; repainting the old list
-        // re-applies SourceChest narrow text widths that atk keeps until scroll/rebind
-    }
+    public void ResetScrollToTop() => ResetScroll();
 
     public void AttachInteractivity() => SyncNodeCallbacks();
 
