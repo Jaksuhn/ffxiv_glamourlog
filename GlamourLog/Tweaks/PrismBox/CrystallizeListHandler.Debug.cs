@@ -4,6 +4,7 @@ using System.Text;
 
 namespace GlamourLog.Features.PrismBox;
 
+// verbose filter debug logging for CrystallizeListHandler (signatures dedupe repeated lines)
 internal sealed partial class CrystallizeListHandler {
     private const int MaxHiddenItemLogLines = 48;
 
@@ -14,6 +15,7 @@ internal sealed partial class CrystallizeListHandler {
     private string? _lastApplyPipeline;
     private string? _lastFilterOffState;
     private string? _lastFilterOnState;
+    private string? _lastSnapshotUnavailableSignature;
 
     private void ClearFilterLogSignatures() {
         _lastFilterSummary = null;
@@ -23,10 +25,22 @@ internal sealed partial class CrystallizeListHandler {
         _lastApplyPipeline = null;
         _lastFilterOffState = null;
         _lastFilterOnState = null;
+        _lastSnapshotUnavailableSignature = null;
     }
 
     private static void LogFilterDebug(string phase, string message)
         => Svc.Log.Information($"[{nameof(CrystallizeListHandler)}.{phase}] {message}");
+
+    private unsafe void LogSnapshotUnavailableOnce(MiragePrismPrismBoxData* data) {
+        var reported = data->CrystallizeItemCount;
+        var scanned = InferPopulatedCategoryItemCount(data);
+        var signature = $"cat={data->CrystallizeCategory} reported={reported} scanned={scanned}";
+        if (signature == _lastSnapshotUnavailableSignature)
+            return;
+        _lastSnapshotUnavailableSignature = signature; // one line per distinct wait state
+        LogFilterDebug(nameof(OnPostRefresh),
+            $"category snapshot unavailable after native refresh ({signature})");
+    }
 
     private unsafe void LogApplyPipelineResult(AtkComponentTreeList* tree, MiragePrismPrismBoxData* data) {
         var itemsCount = tree->Items.Count;
@@ -71,7 +85,7 @@ internal sealed partial class CrystallizeListHandler {
         var nativeListLength = tree is not null ? ((AtkComponentList*)tree)->ListLength : -1;
         var nativeGetItemCount = tree is not null ? ((AtkComponentList*)tree)->GetItemCount() : -1;
         var summary =
-            $"snapshot={_categoryRows.Length} agentCount={data->CrystallizeItemCount} inferred={InferCategoryItemCount(data)} " +
+            $"snapshot={_categoryRows.Length} agentCount={data->CrystallizeItemCount} populated={InferPopulatedCategoryItemCount(data)} " +
             $"nativeVisible={nativeVisible} nativeItems={nativeItems} nativeListLength={nativeListLength} nativeGetItemCount={nativeGetItemCount} " +
             $"nativeAtkSlots={_nativeTree.NativeSlotCount} addonAtkValues={addon->AtkValuesCount}";
         if (summary == _lastFilterOffState)

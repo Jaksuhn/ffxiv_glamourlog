@@ -1,9 +1,9 @@
 using Dalamud.Hooking;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.PrismBox;
 
+// atk tree list (node #11) on MiragePrismPrismBoxCrystallize — hook LoadAtkValues for buffer layout, repopulate from filtered snapshot
 internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     internal const string AddonName = "MiragePrismPrismBoxCrystallize";
     private const uint ItemTreeListNodeId = 11;
@@ -11,15 +11,15 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     private readonly Hook<AtkComponentTreeList.Delegates.LoadAtkValues>? _loadAtkValuesHook;
 
     private AtkResNode* _treeResNode;
-    private CrystallizeAtkBufferLayout _bufferLayout;
+    private CrystallizeAtkBufferLayout _bufferLayout; // uint/string offsets captured from LoadAtkValues detour
 
     internal bool HasBufferLayout => _bufferLayout.IsValid;
-    internal bool HasSnapshot => Snapshot.Length > 0;
+    internal bool HasSnapshot => Snapshot.Length > 0; // clone of addon->AtkValues
     internal bool HasLayout => Layout.Length > 0;
     internal int NativeSlotCount { get; private set; }
     internal int FilteredSlotCount { get; private set; }
     internal AtkComponentTreeList* TreeList { get; private set; }
-    internal CrystallizeAtkSlot[] Layout { get; private set; } = [];
+    internal CrystallizeAtkSlot[] Layout { get; private set; } = []; // parsed tree/leaf slots from Snapshot
     internal AtkValue[] Snapshot { get; private set; } = [];
 
     internal CrystallizeNativeTree() {
@@ -52,7 +52,9 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         TreeList = nativeNode->GetAsAtkComponentTreeList();
     }
 
-    internal void EnsureVisible(AtkUnitBase* addon) {
+    internal void EnsureVisible(AtkUnitBase* addon) => SetTreeListVisible(addon, true);
+
+    private void SetTreeListVisible(AtkUnitBase* addon, bool visible) {
         Resolve(addon);
         foreach (var nodePtr in addon->UldManager.Nodes) {
             var node = nodePtr.Value;
@@ -60,11 +62,11 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
             if (tree is null)
                 continue;
             if (node != _treeResNode && !node->IsDuplicatedNode())
-                continue;
-            var visible = _treeResNode is not null && node == _treeResNode;
-            SetNodeVisible(node, visible);
-            SetTreeScrollBarVisible(tree, visible);
-            ((AtkComponentList*)tree)->IsItemInteractionEnabled = visible;
+                continue; // addon has duplicate tree list nodes; only touch node 11 + its clones
+            var show = visible && _treeResNode is not null && node == _treeResNode;
+            SetNodeVisible(node, show);
+            SetTreeScrollBarVisible(tree, show);
+            ((AtkComponentList*)tree)->IsItemInteractionEnabled = show;
         }
         addon->UldManager.UpdateDrawNodeList();
     }
@@ -92,53 +94,12 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         var inferred = CrystallizeListAtk.InferItemCount(Snapshot, _bufferLayout);
         var includeHeaders = categoryRowCount > 0;
         NativeSlotCount = categoryRowCount > 0
-            ? CrystallizeListAtk.InferBoundedItemCount(Snapshot, inferred, categoryRowCount, includeHeaders, _bufferLayout)
+            ? CrystallizeListAtk.InferBoundedItemCount(Snapshot, inferred, categoryRowCount, includeHeaders, _bufferLayout) // clip stale slots from prior tab
             : inferred;
         Layout = CrystallizeListAtk.Parse(Snapshot, NativeSlotCount, _bufferLayout, categoryRowCount);
     }
 
-    internal int GetLayoutMaxSourceIndex() {
-        var maxSource = -1;
-        for (var i = 0; i < Layout.Length; i++) {
-            if (!Layout[i].IsLeaf)
-                continue;
-            if (Layout[i].SourceIndex > maxSource)
-                maxSource = Layout[i].SourceIndex;
-        }
-        return maxSource >= 0 ? maxSource + 1 : 0;
-    }
-
-    internal int ListLength => TreeList is not null ? ((AtkComponentList*)TreeList)->ListLength : 0;
-
-    internal bool IsTruncatedVersus(int categoryRowCount, int agentCount)
-        => categoryRowCount > 0
-           && ListLength > 0
-           && agentCount >= categoryRowCount
-           && ListLength < agentCount;
-
-    internal void FillMissingRows(PrismBoxCrystallizeItem[] rows, MiragePrismPrismBoxData* data) {
-        for (var slot = 0; slot < Layout.Length; slot++) {
-            ref readonly var entry = ref Layout[slot];
-            if (!entry.IsLeaf)
-                continue;
-            var sourceIndex = entry.SourceIndex;
-            if (sourceIndex < 0 || sourceIndex >= rows.Length)
-                continue;
-            if (rows[sourceIndex].ItemId != 0)
-                continue;
-            if (data->CrystallizeItems[sourceIndex].ItemId != 0) {
-                rows[sourceIndex] = data->CrystallizeItems[sourceIndex];
-                continue;
-            }
-            if (CrystallizeListAtk.TryReadCategoryRow(Snapshot, slot, entry, _bufferLayout, out var row))
-                rows[sourceIndex] = row;
-            else if (TreeList is not null
-                     && CrystallizeListAtk.TryReadCategoryRowFromTreeItem(TreeList->GetItem(slot), entry, out row))
-                rows[sourceIndex] = row;
-        }
-    }
-
-    internal void RepopulateFiltered(bool isFilteringActive, int displayCount, HashSet<int> visibleSources, Func<int, bool> shouldHideLeaf, Func<int, bool> shouldExcludeSource) {
+    internal void RepopulateFiltered(AtkUnitBase* addon, bool isFilteringActive, int displayCount, HashSet<int> visibleSources, Func<int, bool> shouldHideLeaf, Func<int, bool> shouldExcludeSource) {
         var tree = TreeList;
         if (tree is null || !HasBufferLayout)
             return;
@@ -154,15 +115,38 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         }
 
         if (FilteredSlotCount <= 0) {
+            if (isFilteringActive && displayCount > 0)
+                return; // ApplyToBuffer failed while rows should be visible — keep last tree state
+
             var clearedAtk = CrystallizeListAtk.Clone(Snapshot);
-            var clearThrough = Math.Max(NativeSlotCount, 1);
+            // clear inferred atk slots (not tree->Items.Count) so ghost rows don't survive tab loopback
+            var inferred = CrystallizeListAtk.InferItemCount(Snapshot, _bufferLayout);
+            var clearThrough = Math.Max(inferred, NativeSlotCount);
+            if (clearThrough <= 0)
+                clearThrough = 1;
             CrystallizeListAtk.ClearSlots(clearedAtk, 0, clearThrough, _bufferLayout);
             LoadTreeFromAtkSnapshot(tree, clearedAtk, 0);
+            if (addon is not null && addon->AtkValues is not null)
+                CrystallizeListAtk.WriteSlotsToAtkBuffer(clearedAtk, addon->AtkValues, addon->AtkValuesCount, _bufferLayout, 0, clearThrough); // native refresh reads addon->AtkValues
+            Snapshot = CrystallizeListAtk.Clone(clearedAtk);
+            for (var slot = 0; slot < tree->Items.Count; slot++)
+                CrystallizeListAtk.ClearTreeItemDisplay(tree->GetItem(slot)); // LoadAtkValues(0) leaves renderer slots from prior tab
             ResetTreeScroll(tree);
+            RefreshTreeListLayout(tree);
             return;
         }
 
         LoadTreeFromAtkSnapshot(tree, workingAtk, FilteredSlotCount);
+        var trailingInferred = CrystallizeListAtk.InferItemCount(Snapshot, _bufferLayout);
+        var trailingClearThrough = Math.Max(trailingInferred, NativeSlotCount);
+        if (trailingClearThrough > FilteredSlotCount) {
+            CrystallizeListAtk.ClearSlots(workingAtk, FilteredSlotCount, trailingClearThrough, _bufferLayout); // zero tail slots after compacted visible rows
+            if (addon is not null && addon->AtkValues is not null)
+                CrystallizeListAtk.WriteSlotsToAtkBuffer(workingAtk, addon->AtkValues, addon->AtkValuesCount, _bufferLayout, FilteredSlotCount, trailingClearThrough);
+        }
+        if (addon is not null && addon->AtkValues is not null)
+            CrystallizeListAtk.WriteSlotsToAtkBuffer(workingAtk, addon->AtkValues, addon->AtkValuesCount, _bufferLayout, 0, FilteredSlotCount);
+        Snapshot = CrystallizeListAtk.Clone(workingAtk); // keep Snapshot aligned with what tree now shows
         ResetTreeScroll(tree);
         RefreshTreeListLayout(tree);
     }
@@ -180,7 +164,7 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         int itemCount,
         ListComponentCallBackInterface* callBackInterface) {
         if (itemCount > 0)
-            TryCaptureBufferLayout(thisPtr, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, atkValuesCount);
+            TryCaptureBufferLayout(thisPtr, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, atkValuesCount); // first native populate reveals per-item layout
 
         _loadAtkValuesHook!.Original(thisPtr, atkValuesCount, atkValues, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, itemCount, callBackInterface);
     }
@@ -196,7 +180,7 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
 
         var nativeTree = node->GetAsAtkComponentTreeList();
         if (nativeTree != tree)
-            return false;
+            return false; // ignore LoadAtkValues from other tree lists on same addon
 
         var candidate = new CrystallizeAtkBufferLayout {
             UintValuesOffset = uintValuesOffset,
@@ -234,7 +218,7 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
             for (var slot = 0; slot < itemCount; slot++) {
                 var item = tree->GetItem(slot);
                 if (item is not null)
-                    CrystallizeListAtk.CopySlotToTreeItem(atkSnapshot, slot, item, _bufferLayout);
+                    CrystallizeListAtk.CopySlotToTreeItem(atkSnapshot, slot, item, _bufferLayout); // LoadAtkValues doesn't always fill renderer uint/string arrays
             }
         }
 
