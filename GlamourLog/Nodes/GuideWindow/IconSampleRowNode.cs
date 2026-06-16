@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Nodes;
 using GlamourLog.Windows.GuideWindow;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Enums;
@@ -10,7 +11,7 @@ namespace GlamourLog.Nodes.GuideWindow;
 internal sealed class IconSampleRowNode : ResNode {
     private const uint SampleItemId = 13066;
     private const float SetListIconSize = 29f;
-    private static readonly Vector4 TextColor = new(204f / 255f, 204f / 255f, 204f / 255f, 1f);
+    private static readonly Vector4 TextColor = ColourPalette.BodyGrey;
 
     private readonly IconExampleKind _kind;
     private readonly ReadOnlySeString _description;

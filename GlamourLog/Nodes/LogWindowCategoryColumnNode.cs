@@ -9,8 +9,8 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
     private const float CategoryHeadingHeight = 26f;
     private const float CategoryCountWidth = 44f;
     private const float CategoryCountRightInset = 4f;
-    private static readonly Vector4 GatheringHeadingGrey = new(160f / 255f, 160f / 255f, 160f / 255f, 1f);
-    private static readonly Vector4 CategoryNameGold = new(216f / 255f, 187f / 255f, 125f / 255f, 1f);
+    private static readonly Vector4 GatheringHeadingGrey = ColourPalette.HeadingGrey;
+    private static readonly Vector4 CategoryNameGold = ColourPalette.CategoryGold;
 
     private readonly List<ListButtonNode> buttons = [];
     private readonly Dictionary<ListButtonNode, TextNode> countByButton = [];

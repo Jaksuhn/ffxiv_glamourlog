@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Nodes;
 using KamiToolKit.Classes;
 using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
@@ -10,8 +11,8 @@ internal sealed class SidebarCategoryRowNode : ListButtonNode {
     public const float RowHeight = 36f;
     private const float LabelX = 12f;
 
-    private static readonly Vector4 TextColor = new(1f, 1f, 1f, 1f);
-    private static readonly Vector4 EdgeColor = new(230f / 255f, 167f / 255f, 58f / 255f, 1f);
+    private static readonly Vector4 TextColor = ColourPalette.TitleWhite;
+    private static readonly Vector4 EdgeColor = ColourPalette.SidebarEdgeGold;
 
     public SidebarCategoryRowNode(string title, System.Action onClick) {
         Height = RowHeight;

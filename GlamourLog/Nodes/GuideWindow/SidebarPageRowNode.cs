@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Nodes;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes.GuideWindow;
@@ -7,7 +8,7 @@ internal sealed class SidebarPageRowNode : ListButtonNode {
     public const float RowHeight = 26f;
     private const float LabelX = 30f;
 
-    private static readonly Vector4 TextColor = new(238f / 255f, 225f / 255f, 197f / 255f, 1f);
+    private static readonly Vector4 TextColor = ColourPalette.Cream;
 
     private bool _showSelected;
 

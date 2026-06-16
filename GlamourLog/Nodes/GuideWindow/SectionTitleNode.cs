@@ -1,11 +1,12 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Nodes;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes.GuideWindow;
 
 internal sealed class SectionTitleNode : ResNode {
     private const float HeadingHeight = 26f;
-    private static readonly Vector4 TextColor = new(238f / 255f, 225f / 255f, 197f / 255f, 1f);
+    private static readonly Vector4 TextColor = ColourPalette.Cream;
 
     private readonly TextNode _titleText;
 

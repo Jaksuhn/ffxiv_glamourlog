@@ -1,11 +1,12 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Nodes;
 using KamiToolKit.Nodes;
 using Lumina.Text.ReadOnly;
 
 namespace GlamourLog.Nodes.GuideWindow;
 
 internal sealed class ParagraphNode : ResNode {
-    private static readonly Vector4 TextColor = new(204f / 255f, 204f / 255f, 204f / 255f, 1f);
+    private static readonly Vector4 TextColor = ColourPalette.BodyGrey;
 
     private readonly ReadOnlySeString _content;
     private readonly float _textLeftInset;

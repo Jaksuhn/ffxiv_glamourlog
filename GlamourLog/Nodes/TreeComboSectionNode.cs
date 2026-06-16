@@ -28,7 +28,7 @@ public sealed class TreeComboSectionNode : TreeListCategoryNode {
                 Height = 24f,
                 String = journalTitle,
             };
-            JournalHeader.LabelNode.TextColor = new Vector4(0, 0, 0, 1);
+            JournalHeader.LabelNode.TextColor = ColourPalette.JournalHeaderBlack;
             JournalHeader.LabelNode.Position = new Vector2(22f, 0f);
             JournalHeader.LabelNode.RemoveTextFlags(TextFlags.Emboss);
             AddNode(JournalHeader);

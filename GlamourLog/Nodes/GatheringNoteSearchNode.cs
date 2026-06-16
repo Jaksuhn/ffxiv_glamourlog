@@ -37,7 +37,7 @@ public sealed class GatheringNoteSearchNode : ResNode {
             FontSize = 20,
             LineSpacing = 20,
             AlignmentType = AlignmentType.Left,
-            TextColor = new Vector4(160f / 255f, 160f / 255f, 160f / 255f, 1f),
+            TextColor = ColourPalette.HeadingGrey,
             String = Addon.GetRow(1470).Text, // Item Search
         }.AttachNode(this);
 
