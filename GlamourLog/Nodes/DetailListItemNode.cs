@@ -54,8 +54,11 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     public static float ItemHeight => 30f;
     private const float PieceIconSize = 22f;
     private const float PieceTextBoxHeight = 19f; // ellipsis needs extra height vs line size
-    private const float DetailIconX = 2f;
-    private const float DetailIconTextX = 30f;
+    private const float DetailContentLeftInset = 6f; // align icon rows with journal/source content (DutyChestLabelX); section chrome draws its own inset.
+    private const float DetailIconTextGap = 6f;
+    private const float DetailIconX = DetailContentLeftInset;
+    private const float DetailIconTextX = DetailIconX + PieceIconSize + DetailIconTextGap;
+    private const float DetailTextRightReserve = 24f;
     private const float DutyChestLabelX = 6f;
     private const float DutyChestLabelPadding = 4f;
     private const float DutyChestLabelIconGap = 16f;
@@ -192,8 +195,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     protected override void OnSizeChanged() {
         base.OnSizeChanged();
 
-        _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
-        _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+        _primary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
+        _secondary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
         _sectionChrome.Width = Width;
         _sectionChrome.Size = new Vector2(Width, _sectionChrome.Height);
         _sectionChrome.Position = new Vector2(0f, 3f);
@@ -233,18 +236,20 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 _primary.Size = new Vector2(Math.Max(20f, Width - 8f), 19f);
                 break;
             case DetailRowKind.Piece:
+                LayoutIconRow();
                 var pieceTextRightReserve = 8f;
                 if (_storageBadge.IsVisible)
                     pieceTextRightReserve = _storageBadge.Size.X + 16f;
                 else if (_inventoryBadge.IsVisible)
                     pieceTextRightReserve = _inventoryBadge.Size.X + 16f;
-                _primary.Size = new Vector2(Math.Max(20f, Width - 30f - pieceTextRightReserve), PieceTextBoxHeight);
+                _primary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - pieceTextRightReserve), PieceTextBoxHeight);
                 _primary.Position = new Vector2(DetailIconTextX, PieceIconY + (PieceIconSize - PieceTextBoxHeight) * 0.5f);
                 break;
             case DetailRowKind.Cost:
             case DetailRowKind.SharedModelSet:
-                _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
-                _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+                LayoutIconRow();
+                _primary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
+                _secondary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
                 break;
             case DetailRowKind.SourceChest:
                 float iconOriginX;
@@ -344,8 +349,8 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _inputCollision.ShowClickableCursor = false;
 
         // pooled rows keep SourceChest's narrow primary width; reset before kind-specific layout
-        _primary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
-        _secondary.Size = new Vector2(Math.Max(20f, Width - 54f), 14f);
+        _primary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
+        _secondary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
 
         // piece branch strips this; atk ellipsis on names was wrong more often than clip
         _primary.AddTextFlags(TextFlags.Ellipsis);
@@ -379,6 +384,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                 var itemRow = Item.GetRow(itemData.ItemId);
                 _pieceIcon.SetItemId(itemData.ItemId);
                 _pieceIcon.IsVisible = true;
+                LayoutIconRow();
                 // Left = middle-left in atk; Center also centers horizontally in the text box
                 _primary.AlignmentType = AlignmentType.Left;
                 _primary.FontSize = 14;
