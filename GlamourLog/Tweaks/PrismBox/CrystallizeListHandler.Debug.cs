@@ -16,6 +16,13 @@ internal sealed partial class CrystallizeListHandler {
     private string? _lastFilterOffState;
     private string? _lastFilterOnState;
     private string? _lastSnapshotUnavailableSignature;
+    private bool _filterFlagsChangedThisRefresh;
+
+    private void ResetFilterFlagsChangedThisRefresh()
+        => _filterFlagsChangedThisRefresh = false;
+
+    private void MarkFilterFlagsChangedThisRefresh()
+        => _filterFlagsChangedThisRefresh = true;
 
     private void ClearFilterLogSignatures() {
         _lastFilterSummary = null;

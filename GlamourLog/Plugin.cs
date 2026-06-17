@@ -12,16 +12,14 @@ namespace GlamourLog;
 
 /*
  * TODO
- * Try On should clear the existing items
- * setting: ignore armoire warning if item in dresser is dyed
+ * setting: ignore armoire warning if item in dresser is dyed (can't really do as dyed info isn't cached in itemfinder
  * rename glam plates tweak
  * loot window alert for missing pieces (and/or just general inventory change alert)
- * armoire store hide gearset pieces
  */
 public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;
-
-    private readonly string[] _commands = ["/glamourlog", "/gl"];
+    private static readonly CommandRouter<object> Router = new(BuildRoot());
+    private static readonly string[] _commands = ["/glamourlog", "/gl"];
 
     public async Task LoadAsync(CancellationToken cancellationToken) {
         dalamud.Create<Svc>();
@@ -56,7 +54,28 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
         await Svc.Framework.RunOnFrameworkThread(KamiToolKitLibrary.Dispose);
     }
 
-    private void OnCommand(string command, string arguments) {
-        Svc.Get<WindowsService>().ToggleMainWindow();
+    internal static void OnCommand(string command, string arguments) {
+        var result = Router.Execute(arguments, null!, _commands[1]);
+        if (!result.Success) {
+            if (result.Error is not null)
+                Svc.Chat.PrintError(result.Error);
+            if (result.Usage is not null)
+                Svc.Chat.Print(result.Usage);
+            return;
+        }
+
+        if (result.Help is not null)
+            Svc.Chat.Print(result.Help);
     }
+
+    private static CommandNode<object> BuildRoot()
+        => CommandNode<object>.Root("Glamour Log commands")
+            .Default(_ => Svc.Get<WindowsService>().ToggleMainWindow())
+            .Sub("stop", "Cancel any running tasks", stop => stop
+                .Handle((_, _) => Svc.Automation.Stop()))
+            .Sub("store", string.Empty, store => store
+                .Sub("a", "Store all armoire items", armoire => armoire
+                    .Handle((_, _) => Svc.Automation.Start(new StoreAllArmoireTask())))
+                .Sub("d", "Store all dresser items", dresser => dresser
+                    .Handle((_, _) => Svc.Automation.Start(new StoreAllDresserTask()))));
 }
