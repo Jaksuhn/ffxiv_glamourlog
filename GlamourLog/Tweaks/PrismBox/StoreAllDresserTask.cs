@@ -1,5 +1,5 @@
+using clib.TaskSystem;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Services;
@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace GlamourLog.Features.PrismBox;
 
-internal sealed class StoreAllDresserTask : AutoTask {
+internal sealed class StoreAllDresserTask : TaskBase {
     private const string Crystallize = "MiragePrismPrismBoxCrystallize";
     private const string PrismBox = "MiragePrismPrismBox";
     private const string SetConvert = "MiragePrismPrismSetConvert";
@@ -18,8 +18,10 @@ internal sealed class StoreAllDresserTask : AutoTask {
     private const int CloseConvertButtonId = 26;
     private const uint OutfitAlreadyStoredNodeId = 12;
 
+    private unsafe bool OutfitAlreadyStored => Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvert, out var addon) && addon->TryGetNodeById<AtkResNode>(OutfitAlreadyStoredNodeId, out _);
+
     protected override async Task Execute() {
-        ErrorIf(!IsDresserUiReady(), "Dresser not ready");
+        ErrorIf(!IsPrismBoxReady(), "Dresser not ready");
         for (var categoryIndex = 0; categoryIndex < CategoryCount; categoryIndex++) {
             await SelectCategory(categoryIndex);
             await StoreAllInCurrentCategory();
@@ -38,78 +40,83 @@ internal sealed class StoreAllDresserTask : AutoTask {
     private async Task StoreAllInCurrentCategory() {
         using var scope = BeginScope(nameof(StoreAllInCurrentCategory));
         while (true) {
-            RestoreFullCategoryForCurrentTab();
+            unsafe {
+                if (GetData() is not null and var data)
+                    Svc.Get<CrystallizeListHandler>().RestoreCategory(data, data->CrystallizeCategory);
+            }
+
             if (!TryGetNextDresserItem(out var row))
                 break;
 
             var itemId = ItemUtil.GetBaseId(row.ItemId).ItemId;
-            Log($"Storing dresser item {itemId}");
+            Log($"Storing dresser item #{itemId}");
             await StoreItem(row, itemId);
         }
     }
 
+    // flow is yesno (sometimes) -> convert -> confirm
     private async Task StoreItem(PrismBoxCrystallizeItem row, uint itemId) {
         using var scope = BeginScope(nameof(StoreItem));
-        ErrorIf(!TryOpenConvert(row), "Failed to open dresser convert flow");
 
-        await WaitUnlessYesno(() => IsItemStored(itemId)
-            || AtkUnitBase.IsAddonReady(SetConvert) && IsSetConvertReady(), "WaitForConvert");
-
-        if (IsItemStored(itemId))
-            return;
-
-        ErrorIf(!AtkUnitBase.IsAddonReady(SetConvert), "Dresser convert window closed unexpectedly");
-
-        if (IsOutfitAlreadyStored()) {
-            Log("Outfit already stored in dresser");
-            ErrorIf(!TryClickAddonButton(SetConvert, CloseConvertButtonId), "Failed to close dresser convert window");
-            await WaitUntil(() => AtkUnitBase.IsAddonReady(Crystallize), "WaitForCrystallizeReturn");
+        if (IsDresserStoreComplete(itemId)) {
+            await ResyncCategoryAfterStore();
             return;
         }
 
-        ErrorIf(!TryClickAddonButton(SetConvert, StoreAsGlamourButtonId), "Failed to click dresser store button");
+        ErrorIf(!TryOpenConvert(row), $"Failed to open {nameof(SetConvert)}");
 
-        await WaitUnlessYesno(() => AtkUnitBase.IsAddonReady(SetConvertC), "WaitForStoreConfirm");
-        ErrorIf(!TryConfirmDresserStore(), "Failed to confirm dresser store");
+        // items part of an already started outfit have a yesno prompt before the convert addon
+        await WaitUntilSkipping(() => IsConvertDoneOrReady(itemId), "WaitForConvert", UiSkipOptions.YesNo);
 
-        await WaitUnlessYesno(() => IsDresserStoreComplete(itemId), "WaitForStored");
+        if (IsDresserStoreComplete(itemId)) {
+            await ResyncCategoryAfterStore();
+            return;
+        }
+
+        if (!AtkUnitBase.IsAddonReady(SetConvert))
+            ErrorIf(!IsDresserStoreComplete(itemId), "SetConvert closed unexpectedly");
+
+        if (OutfitAlreadyStored) {
+            Log("Outfit already stored in dresser");
+            if (AtkUnitBase.IsAddonReady(SetConvert))
+                TryClickAddonButton(SetConvert, CloseConvertButtonId);
+            await WaitUntil(() => AtkUnitBase.IsAddonReady(Crystallize) || !AtkUnitBase.IsAddonReady(SetConvert), "WaitForCrystallizeReturn");
+            return;
+        }
+
+        // callback can dismiss SetConvert before confirm opens or something so click the button
+        if (!IsDresserStoreComplete(itemId))
+            ErrorIf(!TryClickAddonButton(SetConvert, StoreAsGlamourButtonId) && !IsDresserStoreComplete(itemId), "Failed to click Store as Glamour");
+
+        if (!IsDresserStoreComplete(itemId)) {
+            await WaitUntilSkipping(() => AtkUnitBase.IsAddonReady(SetConvertC) || IsDresserStoreComplete(itemId), "WaitForStoreConfirm", UiSkipOptions.YesNo);
+            if (!IsDresserStoreComplete(itemId))
+                ErrorIf(!TryConfirmDresserStore(itemId), "Failed to confirm dresser store");
+        }
+
+        await WaitUntilSkipping(() => IsDresserStoreComplete(itemId), "WaitForStored", UiSkipOptions.YesNo);
         await ResyncCategoryAfterStore();
     }
 
-    private async Task WaitUnlessYesno(Func<bool> done, string scopeName) {
-        await WaitUntil(() => {
-            if (TryAcceptSelectYesno())
-                return false;
-            return done();
-        }, scopeName);
+    private static unsafe bool IsConvertDoneOrReady(uint itemId) {
+        if (IsDresserStoreComplete(itemId))
+            return true;
+        if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvert, out var addon))
+            return false;
+        var button = addon->GetComponentButtonById(StoreAsGlamourButtonId);
+        return button is not null && button->IsEnabled;
     }
 
-    private static bool IsDresserStoreComplete(uint itemId)
-        => IsStoreFlowIdle() && (IsItemStored(itemId) || IsItemRemovedFromCategory(itemId));
-
-    private static bool IsStoreFlowIdle()
-        => AtkUnitBase.IsAddonReady(Crystallize)
-            && !AtkUnitBase.IsAddonReady(SetConvert)
-            && !AtkUnitBase.IsAddonReady(SetConvertC);
-
-    private static bool TryAcceptSelectYesno() {
-        if (!AtkUnitBase.IsAddonReady("SelectYesno"))
+    private static bool IsDresserStoreComplete(uint itemId) {
+        if (!Svc.Get<OwnershipService>().IsCrystallizeItemFullyDeposited(itemId) && !IsItemRemovedFromCategory(itemId))
             return false;
 
-        AddonSelectYesno.Yes();
-        return true;
+        // move on once convert addon is gone regardless of how it was closed
+        return !AtkUnitBase.IsAddonReady(SetConvert) && !AtkUnitBase.IsAddonReady(SetConvertC);
     }
 
-    private static unsafe bool IsDresserUiReady()
+    private static unsafe bool IsPrismBoxReady()
         => AtkUnitBase.IsAddonReady(Crystallize) && AtkUnitBase.IsAddonReady(PrismBox) && MirageManager.Instance()->PrismBoxLoaded;
-
-    private static unsafe void RestoreFullCategoryForCurrentTab() {
-        var data = GetData();
-        if (data is null)
-            return;
-
-        Svc.Get<CrystallizeListHandler>().RestoreFullCategoryForAutomation(data, data->CrystallizeCategory);
-    }
 
     private static unsafe bool TrySelectCategory(int categoryIndex) {
         var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(Crystallize);
@@ -145,9 +152,8 @@ internal sealed class StoreAllDresserTask : AutoTask {
         if (dropDown is null)
             return false;
 
-        return data->CrystallizeCategory == categoryIndex
-            && dropDown->GetSelectedItemIndex() == categoryIndex
-            && Svc.Get<CrystallizeListHandler>().IsCategoryLoaded(categoryIndex);
+        // make sure agent category, addon category, and ListHandler snapshot all match before doing anything
+        return data->CrystallizeCategory == categoryIndex && dropDown->GetSelectedItemIndex() == categoryIndex && Svc.Get<CrystallizeListHandler>().IsCategoryLoaded(categoryIndex);
     }
 
     private static unsafe AtkComponentDropDownList* FindCategoryDropDown(AtkUnitBase* addon) {
@@ -175,18 +181,14 @@ internal sealed class StoreAllDresserTask : AutoTask {
     }
 
     private static unsafe bool TryOpenConvert(PrismBoxCrystallizeItem row) {
-        if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(Crystallize, out var crystallizeAddon)
-            || !Svc.GameGui.TryGetAddon<AtkUnitBase>(PrismBox, out var prismBoxAddon)
-            || !TrySelectCrystallizeItem(row))
+        if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(Crystallize, out var crystallizeAddon) || !Svc.GameGui.TryGetAddon<AtkUnitBase>(PrismBox, out var prismBoxAddon) || !TrySelectCrystallizeItem(row))
             return false;
 
-        var inventory = row.Inventory;
-        var slot = row.Slot;
-        if (inventory == InventoryType.Invalid && !TryFindInventorySlot(row.ItemId, out inventory, out slot))
+        var handle = (ItemHandle)row.ItemId;
+        if (row.Inventory == InventoryType.Invalid || !handle.TrySetItemLocation())
             return false;
 
-        return AgentMiragePrismPrismSetConvert.Instance()->Open(
-            row.ItemId, inventory, slot, crystallizeAddon->Id, prismBoxAddon->Id, enableStoring: true);
+        return AgentMiragePrismPrismSetConvert.Instance()->Open(row.ItemId, handle.ItemLocation.Container, handle.ItemLocation.Slot, crystallizeAddon->Id, prismBoxAddon->Id, enableStoring: true);
     }
 
     private static unsafe bool TrySelectCrystallizeItem(PrismBoxCrystallizeItem row) {
@@ -200,8 +202,7 @@ internal sealed class StoreAllDresserTask : AutoTask {
             if (candidate.ItemId != row.ItemId)
                 continue;
 
-            if (row.Inventory != InventoryType.Invalid
-                && (candidate.Inventory != row.Inventory || candidate.Slot != row.Slot))
+            if (row.Inventory != InventoryType.Invalid && (candidate.Inventory != row.Inventory || candidate.Slot != row.Slot))
                 continue;
 
             data->CrystallizeItemIndex = (ushort)i;
@@ -212,19 +213,9 @@ internal sealed class StoreAllDresserTask : AutoTask {
         return false;
     }
 
-    private static bool IsItemStored(uint itemId)
-        => Svc.Get<OwnershipService>().IsCrystallizeItemFullyDeposited(itemId);
-
-    private static unsafe bool IsOutfitAlreadyStored() {
-        if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvert, out var addon))
-            return false;
-
-        var node = addon->GetNodeById<AtkResNode>(OutfitAlreadyStoredNodeId);
-        return node is not null && node->IsVisible();
-    }
-
+    // storing changes the native list (obv), so invalidate the ListHandler snapshot and wait for a recapture so TryGetNextDresserItem sees the updated rows
     private async Task ResyncCategoryAfterStore() {
-        unsafe int GetCategory() {
+        static unsafe int GetCategory() {
             var data = GetData();
             return data is null ? -1 : data->CrystallizeCategory;
         }
@@ -249,25 +240,19 @@ internal sealed class StoreAllDresserTask : AutoTask {
         return true;
     }
 
-    // Callback bypasses the "don't show again" checkbox on MiragePrismPrismSetConvertC.
-    private static unsafe bool TryConfirmDresserStore() {
+    // gotta do a callback and not button click to bypass the checkbox cause cba clicking it
+    private static unsafe bool TryConfirmDresserStore(uint itemId) {
+        if (IsDresserStoreComplete(itemId))
+            return true;
+
         if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvertC, out var addon))
             return false;
 
         Span<AtkValue> values = stackalloc AtkValue[1];
-        values[0].Type = AtkValueType.Int;
-        values[0].Int = 0;
+        values[0].SetInt(0);
 
         fixed (AtkValue* ptr = values)
             return addon->FireCallback(1, ptr, close: true);
-    }
-
-    private static unsafe bool IsSetConvertReady() {
-        if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvert, out var addon))
-            return false;
-
-        var button = addon->GetComponentButtonById(StoreAsGlamourButtonId);
-        return button is not null && button->IsEnabled;
     }
 
     private static unsafe bool TryGetNextDresserItem(out PrismBoxCrystallizeItem item) {
@@ -292,7 +277,8 @@ internal sealed class StoreAllDresserTask : AutoTask {
             if (ownership.IsCrystallizeItemFullyDeposited(itemId) || ownership.IsArmoireEligible(itemId))
                 continue;
 
-            if (row.Inventory == InventoryType.Invalid && !TryFindInventorySlot(row.ItemId, out _, out _))
+            var handle = (ItemHandle)itemId;
+            if (row.Inventory == InventoryType.Invalid || !handle.TrySetItemLocation())
                 continue;
 
             item = row;
@@ -321,62 +307,13 @@ internal sealed class StoreAllDresserTask : AutoTask {
         return true;
     }
 
-    private static unsafe bool TryFindInventorySlot(uint itemId, out InventoryType container, out int slot) {
-        container = InventoryType.Invalid;
-        slot = 0;
-
-        var baseItemId = ItemUtil.GetBaseId(itemId).ItemId;
-        if (baseItemId == 0)
-            return false;
-
-        ReadOnlySpan<InventoryType> containers = [
-            InventoryType.Inventory1,
-            InventoryType.Inventory2,
-            InventoryType.Inventory3,
-            InventoryType.Inventory4,
-            InventoryType.EquippedItems,
-            InventoryType.ArmoryMainHand,
-            InventoryType.ArmoryHead,
-            InventoryType.ArmoryBody,
-            InventoryType.ArmoryHands,
-            InventoryType.ArmoryWaist,
-            InventoryType.ArmoryLegs,
-            InventoryType.ArmoryFeets,
-            InventoryType.ArmoryOffHand,
-            InventoryType.ArmoryEar,
-            InventoryType.ArmoryNeck,
-            InventoryType.ArmoryWrist,
-            InventoryType.ArmoryRings,
-            InventoryType.ArmorySoulCrystal,
-        ];
-
-        foreach (var inventoryType in containers) {
-            var inventoryContainer = InventoryManager.Instance()->GetInventoryContainer(inventoryType);
-            if (inventoryContainer is null || !inventoryContainer->IsLoaded)
-                continue;
-
-            for (var slotIndex = 0; slotIndex < inventoryContainer->GetSize(); slotIndex++) {
-                var inventorySlot = inventoryContainer->GetInventorySlot(slotIndex);
-                if (inventorySlot is null || inventorySlot->IsEmpty())
-                    continue;
-
-                if (ItemUtil.GetBaseId(inventorySlot->GetItemId()).ItemId != baseItemId)
-                    continue;
-
-                container = inventorySlot->GetInventoryType();
-                slot = slotIndex;
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static unsafe MiragePrismPrismBoxData* GetData() {
         var agent = AgentMiragePrismPrismBox.Instance();
         return agent is null ? null : agent->Data;
     }
 
+    // after RestoreCategory, the agent buffer holds the full tab
+    // CrystallizeItemCount can lag behind or be zero while slots are still populated so scan all slots and use the highest populated index + 1.
     private static unsafe int InferPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
         var lastIndex = -1;
         for (var i = 0; i < MaxCategoryItems; i++) {

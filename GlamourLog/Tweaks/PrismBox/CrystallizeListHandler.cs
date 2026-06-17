@@ -86,7 +86,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _nativeTree.InvalidateAtkCache();
     }
 
-    internal unsafe void RestoreFullCategoryForAutomation(MiragePrismPrismBoxData* data, int categoryIndex) {
+    internal unsafe void RestoreCategory(MiragePrismPrismBoxData* data, int categoryIndex) {
         if (data is null || data->CrystallizeCategory != categoryIndex)
             return;
         if (_categoryRows.Length == 0 || _snapshottedCategory != categoryIndex)
