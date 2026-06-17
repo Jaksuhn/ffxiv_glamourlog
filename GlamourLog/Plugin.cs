@@ -1,5 +1,6 @@
 using clib;
 using Dalamud.Plugin;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Features.Cabinet;
 using GlamourLog.Features.PrismBox;
 using GlamourLog.Services;
@@ -73,9 +74,11 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
             .Default(_ => Svc.Get<WindowsService>().ToggleMainWindow())
             .Sub("stop", "Cancel any running tasks", stop => stop
                 .Handle((_, _) => Svc.Automation.Stop()))
-            .Sub("store", string.Empty, store => store
-                .Sub("a", "Store all armoire items", armoire => armoire
-                    .Handle((_, _) => Svc.Automation.Start(new StoreAllArmoireTask())))
-                .Sub("d", "Store all dresser items", dresser => dresser
-                    .Handle((_, _) => Svc.Automation.Start(new StoreAllDresserTask()))));
+            .Sub("store", "Store all eligible items in your armoire/dresser", store => store
+                .Handle((_, _) => {
+                    if (AtkUnitBase.IsAddonReady("Cabinet"))
+                        Svc.Automation.Start(new StoreAllArmoireTask());
+                    if (AtkUnitBase.IsAddonReady("MiragePrismPrismBoxCrystallize"))
+                        Svc.Automation.Start(new StoreAllDresserTask());
+                }));
 }
