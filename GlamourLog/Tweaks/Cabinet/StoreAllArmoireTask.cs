@@ -31,7 +31,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
     private async Task StoreAllInCurrentCategory() {
         using var scope = BeginScope(nameof(StoreAllInCurrentCategory));
         while (TryGetNextCabinetId(out var cabinetId)) {
-            Svc.Log.Debug($"Storing cabinet item {cabinetId}");
+            Svc.Log.Debug($"Storing cabinet item #{cabinetId}");
             ErrorIf(!StoreCabinetItem(cabinetId), "Failed to store item");
 
             await WaitUntil(() => IsCabinetItemStored(cabinetId) && IsStoreConfirmationClear(), "WaitForStored");
