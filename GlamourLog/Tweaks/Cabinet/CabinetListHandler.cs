@@ -9,7 +9,7 @@ using static FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule;
 
 namespace GlamourLog.Features.Cabinet;
 
-internal sealed class CabinetListHandler : IAsyncDisposable {
+internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private bool _disposed;
     private const string AddonName = "Cabinet";
     private const int MaxCategoryItems = 140;
@@ -87,6 +87,7 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
 
         Svc.Framework.RunOnFrameworkThread(() => {
             _needsCategorySnapshot = true;
+            ClearFilterLogSignatures();
             if (Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName) is not null and var addon)
                 addon->OnRefresh(0, null);
         });
@@ -124,6 +125,9 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
             ApplyFullListLayout(addon, _pendingFullListCount);
             _pendingFullListCount = 0;
         }
+
+        if (AgentCabinet.Instance() is not null and var filterOffAgent)
+            LogFilterOffState(nameof(OnPostRefresh), addon, filterOffAgent);
     }
 
     private unsafe void OnFinalize(AddonCabinet* addon) {
@@ -134,10 +138,16 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
     private unsafe void ApplyFilterAfterNativeRefresh(AddonCabinet* addon, AgentCabinet* agent) {
         EnsureCategoryTracked(addon, agent);
 
-        if (_needsCategorySnapshot || !HasValidCategorySnapshot(addon))
+        if (_needsCategorySnapshot || !HasValidCategorySnapshot(addon)) {
             CaptureCategorySnapshot(agent, addon);
+            if (_categoryRows.Length == 0) {
+                LogSnapshotUnavailableOnce(addon, agent);
+                return;
+            }
+        }
 
         TryApplyFilterPipeline(addon, agent);
+        LogFilterOnState(nameof(OnPostRefresh), addon, agent);
     }
 
     private unsafe bool HasValidCategorySnapshot(AddonCabinet* addon)
@@ -150,6 +160,7 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
         RebuildFilterMap();
         ProjectVisibleRows(agent, addon);
         ApplyFilteredListLayout(addon);
+        LogApplyPipelineResult(addon);
         return true;
     }
 
@@ -160,6 +171,7 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
         _categoryIndex = addon->CategoryIndex;
         _categoryItemCount = InferCategoryItemCount(addon, agent);
         _needsCategorySnapshot = true;
+        ClearFilterLogSignatures();
     }
 
     private unsafe void CaptureCategorySnapshot(AgentCabinet* agent, AddonCabinet* addon) {
@@ -204,6 +216,7 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
         }
 
         _displayToSource = [.. visible];
+        LogFilterRebuildSummary();
     }
 
     private unsafe void ProjectVisibleRows(AgentCabinet* agent, AddonCabinet* addon) {
@@ -392,6 +405,7 @@ internal sealed class CabinetListHandler : IAsyncDisposable {
         _displayToSource = [];
         _pendingFullListCount = 0;
         _needsCategorySnapshot = false;
+        ClearFilterLogSignatures();
     }
 
     public async ValueTask DisposeAsync() {
