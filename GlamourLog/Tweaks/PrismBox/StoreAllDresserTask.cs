@@ -39,80 +39,139 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
     private async Task StoreAllInCurrentCategory() {
         using var scope = BeginScope(nameof(StoreAllInCurrentCategory));
+        var idlePasses = 0;
         while (true) {
-            unsafe {
-                if (GetData() is not null and var data)
-                    Svc.Get<CrystallizeListHandler>().RestoreCategory(data, data->CrystallizeCategory);
+            if (!TryGetNextDresserItem(out var row)) {
+                if (++idlePasses > 1 || !await TryWaitForCategorySnapshot())
+                    break;
+                continue;
             }
 
-            if (!TryGetNextDresserItem(out var row))
-                break;
-
+            idlePasses = 0;
             var itemId = ItemUtil.GetBaseId(row.ItemId).ItemId;
             Log($"Storing dresser item #{itemId}");
             await StoreItem(row, itemId);
         }
     }
 
+    private async Task<bool> TryWaitForCategorySnapshot() {
+        var categoryIndex = GetCurrentCategoryIndex();
+        if (categoryIndex < 0)
+            return false;
+
+        var handler = Svc.Get<CrystallizeListHandler>();
+        if (handler.IsCategorySnapshotReady(categoryIndex))
+            return false;
+
+        await WaitUntil(() => handler.IsCategorySnapshotReady(categoryIndex), "WaitForCategorySnapshot");
+        return true;
+    }
+
     // flow is yesno (sometimes) -> convert -> confirm
     private async Task StoreItem(PrismBoxCrystallizeItem row, uint itemId) {
         using var scope = BeginScope(nameof(StoreItem));
 
-        if (IsDresserStoreComplete(itemId)) {
-            await ResyncCategoryAfterStore();
+        if (IsDresserStoreComplete(row, itemId)) {
+            ResyncCategoryAfterStore(itemId);
             return;
         }
 
+        RestoreCategoryForSelection(row);
         ErrorIf(!TryOpenConvert(row), $"Failed to open {nameof(SetConvert)}");
 
         // items part of an already started outfit have a yesno prompt before the convert addon
-        await WaitUntilSkipping(() => IsConvertDoneOrReady(itemId), "WaitForConvert", UiSkipOptions.YesNo);
+        await WaitUntilSkipping(() => IsConvertDoneOrReady(row, itemId), "WaitForConvert", UiSkipOptions.YesNo);
 
-        if (IsDresserStoreComplete(itemId)) {
-            await ResyncCategoryAfterStore();
+        if (IsDresserStoreComplete(row, itemId)) {
+            ResyncCategoryAfterStore(itemId);
             return;
         }
 
-        if (!AtkUnitBase.IsAddonReady(SetConvert))
-            ErrorIf(!IsDresserStoreComplete(itemId), "SetConvert closed unexpectedly");
+        ErrorIf(!AtkUnitBase.IsAddonReady(SetConvert), "SetConvert did not open");
 
         if (OutfitAlreadyStored) {
             Log("Outfit already stored in dresser");
             if (AtkUnitBase.IsAddonReady(SetConvert))
                 TryClickAddonButton(SetConvert, CloseConvertButtonId);
             await WaitUntil(() => AtkUnitBase.IsAddonReady(Crystallize) || !AtkUnitBase.IsAddonReady(SetConvert), "WaitForCrystallizeReturn");
+            ResyncCategoryAfterStore(itemId);
             return;
         }
 
         // callback can dismiss SetConvert before confirm opens or something so click the button
-        if (!IsDresserStoreComplete(itemId))
-            ErrorIf(!TryClickAddonButton(SetConvert, StoreAsGlamourButtonId) && !IsDresserStoreComplete(itemId), "Failed to click Store as Glamour");
+        ErrorIf(!TryClickAddonButton(SetConvert, StoreAsGlamourButtonId), "Failed to click Store as Glamour");
+        await NextFrame(2);
 
-        if (!IsDresserStoreComplete(itemId)) {
-            await WaitUntilSkipping(() => AtkUnitBase.IsAddonReady(SetConvertC) || IsDresserStoreComplete(itemId), "WaitForStoreConfirm", UiSkipOptions.YesNo);
-            if (!IsDresserStoreComplete(itemId))
-                ErrorIf(!TryConfirmDresserStore(itemId), "Failed to confirm dresser store");
+        await WaitUntilSkipping(
+            () => IsSetConvertConfirmVisible(row, itemId),
+            "WaitForStoreConfirm",
+            UiSkipOptions.YesNo);
+
+        if (!IsDresserStoreComplete(row, itemId)) {
+            ErrorIf(!IsSetConvertConfirmVisible(row, itemId), "Store confirm addon did not open");
+            await NextFrame(2);
+            ErrorIf(!TryConfirmDresserStore(), "Failed to confirm dresser store");
         }
 
-        await WaitUntilSkipping(() => IsDresserStoreComplete(itemId), "WaitForStored", UiSkipOptions.YesNo);
-        await ResyncCategoryAfterStore();
+        // wait until source slot is empty; retry confirm if it's still up
+        await WaitUntil(() => {
+            if (IsDresserStoreComplete(row, itemId))
+                return true;
+
+            if (IsSetConvertConfirmVisible(row, itemId))
+                TryConfirmDresserStore();
+
+            return false;
+        }, "WaitForStored");
+        await WaitUntil(
+            () => AtkUnitBase.IsAddonReady(Crystallize) && !AtkUnitBase.IsAddonReady(SetConvert) && !AtkUnitBase.IsAddonReady(SetConvertC),
+            "WaitForCrystallizeReturn");
+
+        ResyncCategoryAfterStore(itemId);
+
+        var categoryIndex = GetCurrentCategoryIndex();
+        if (categoryIndex >= 0)
+            await WaitUntil(() => Svc.Get<CrystallizeListHandler>().IsCategorySnapshotReady(categoryIndex), "WaitForListResync");
     }
 
-    private static unsafe bool IsConvertDoneOrReady(uint itemId) {
-        if (IsDresserStoreComplete(itemId))
+    // done when the source inventory slot we converted from is empty
+    private static unsafe bool IsDresserStoreComplete(PrismBoxCrystallizeItem row, uint itemId) {
+        if (row.Inventory != InventoryType.Invalid)
+            return IsInventorySlotEmpty(row.Inventory, row.Slot);
+
+        var handle = (ItemHandle)itemId;
+        return !handle.TrySetItemLocation();
+    }
+
+    private static unsafe bool IsInventorySlotEmpty(InventoryType inventory, int slot) {
+        var item = InventoryManager.Instance()->GetInventorySlot(inventory, slot);
+        return item is null || item->ItemId == 0;
+    }
+
+    private static unsafe void RestoreCategoryForSelection(PrismBoxCrystallizeItem row) {
+        var data = GetData();
+        if (data is null)
+            return;
+
+        Svc.Get<CrystallizeListHandler>().RestoreCategory(data, data->CrystallizeCategory);
+        TrySelectCrystallizeItem(row);
+    }
+
+    private unsafe bool IsSetConvertConfirmVisible(PrismBoxCrystallizeItem row, uint itemId) {
+        if (IsDresserStoreComplete(row, itemId))
+            return true;
+
+        return Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvertC, out var addon) && addon->IsVisible;
+    }
+
+    private unsafe bool IsConvertDoneOrReady(PrismBoxCrystallizeItem row, uint itemId) {
+        if (IsDresserStoreComplete(row, itemId))
             return true;
         if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvert, out var addon))
             return false;
+
         var button = addon->GetComponentButtonById(StoreAsGlamourButtonId);
         return button is not null && button->IsEnabled;
-    }
-
-    private static bool IsDresserStoreComplete(uint itemId) {
-        if (!Svc.Get<OwnershipService>().IsCrystallizeItemFullyDeposited(itemId) && !IsItemRemovedFromCategory(itemId))
-            return false;
-
-        // move on once convert addon is gone regardless of how it was closed
-        return !AtkUnitBase.IsAddonReady(SetConvert) && !AtkUnitBase.IsAddonReady(SetConvertC);
     }
 
     private static unsafe bool IsPrismBoxReady()
@@ -213,19 +272,12 @@ internal sealed class StoreAllDresserTask : TaskBase {
         return false;
     }
 
-    // storing changes the native list (obv), so invalidate the ListHandler snapshot and wait for a recapture so TryGetNextDresserItem sees the updated rows
-    private async Task ResyncCategoryAfterStore() {
-        static unsafe int GetCategory() {
-            var data = GetData();
-            return data is null ? -1 : data->CrystallizeCategory;
-        }
-
-        var category = GetCategory();
-        if (category < 0)
+    private static unsafe void ResyncCategoryAfterStore(uint storedItemId) {
+        var data = GetData();
+        if (data is null)
             return;
 
-        Svc.Get<CrystallizeListHandler>().NotifyCategoryItemStored(category);
-        await WaitUntil(() => IsCategoryReady(category), "WaitForListResync");
+        Svc.Get<CrystallizeListHandler>().NotifyCategoryItemStored(data->CrystallizeCategory, storedItemId);
     }
 
     private static unsafe bool TryClickAddonButton(string addonName, uint buttonId) {
@@ -241,10 +293,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
     }
 
     // gotta do a callback and not button click to bypass the checkbox cause cba clicking it
-    private static unsafe bool TryConfirmDresserStore(uint itemId) {
-        if (IsDresserStoreComplete(itemId))
-            return true;
-
+    private static unsafe bool TryConfirmDresserStore() {
         if (!Svc.GameGui.TryGetAddon<AtkUnitBase>(SetConvertC, out var addon))
             return false;
 
@@ -261,6 +310,13 @@ internal sealed class StoreAllDresserTask : TaskBase {
         var data = GetData();
         if (data is null)
             return false;
+
+        var handler = Svc.Get<CrystallizeListHandler>();
+        if (handler.TryGetNextVisibleAutomationTarget(data->CrystallizeCategory, out item))
+            return true;
+
+        // Agent buffer is often still filtered after a store — restore the full snapshot before scanning.
+        handler.RestoreCategory(data, data->CrystallizeCategory);
 
         var ownership = Svc.Get<OwnershipService>();
         var count = InferPopulatedCategoryItemCount(data);
@@ -288,23 +344,9 @@ internal sealed class StoreAllDresserTask : TaskBase {
         return false;
     }
 
-    private static unsafe bool IsItemRemovedFromCategory(uint itemId) {
+    private static unsafe int GetCurrentCategoryIndex() {
         var data = GetData();
-        if (data is null)
-            return false;
-
-        var targetId = ItemUtil.GetBaseId(itemId).ItemId;
-        var count = InferPopulatedCategoryItemCount(data);
-        for (var i = 0; i < count; i++) {
-            var rowId = data->CrystallizeItems[i].ItemId;
-            if (rowId == 0)
-                break;
-
-            if (ItemUtil.GetBaseId(rowId).ItemId == targetId)
-                return false;
-        }
-
-        return true;
+        return data is null ? -1 : data->CrystallizeCategory;
     }
 
     private static unsafe MiragePrismPrismBoxData* GetData() {

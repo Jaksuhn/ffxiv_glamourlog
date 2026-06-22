@@ -115,8 +115,8 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         }
 
         if (FilteredSlotCount <= 0) {
-            if (isFilteringActive && displayCount > 0)
-                return; // ApplyToBuffer failed while rows should be visible — keep last tree state
+            if (isFilteringActive && displayCount > 0 && NativeSlotCount >= displayCount)
+                return; // apply failed but layout still big enough — keep last tree state
 
             var clearedAtk = CrystallizeListAtk.Clone(Snapshot);
             // clear inferred atk slots (not tree->Items.Count) so ghost rows don't survive tab loopback

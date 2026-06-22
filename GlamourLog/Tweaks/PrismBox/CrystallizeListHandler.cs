@@ -1,6 +1,7 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Services;
 using KamiToolKit.Controllers;
 using System.Threading.Tasks;
 
@@ -29,6 +30,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
     private readonly bool[] _categoryNativeRefreshCompleted = new bool[CategorySlotCount];
     private int _emptyCategoryRefreshPasses;
     private readonly CachedCategorySnapshot?[] _categorySnapshotByIndex = new CachedCategorySnapshot?[CategorySlotCount]; // tab revisit cache
+    private readonly HashSet<uint> _pendingDresserStoredBaseIds = []; // hide until dresser ownership catches up
 
     private sealed class CachedCategorySnapshot {
         public required PrismBoxCrystallizeItem[] Rows;
@@ -70,20 +72,63 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         return _categoryNativeRefreshCompleted[categoryIndex];
     }
 
+    internal bool IsCategorySnapshotReady(int categoryIndex)
+        => IsCategoryLoaded(categoryIndex) && !_needsCategorySnapshot && _snapshottedCategory == categoryIndex;
+
     internal void PrepareAutomationCategorySwitch(int categoryIndex)
         => BeginCategoryRecapture(categoryIndex, setTrackedCategory: true, clearLogSignatures: true);
 
-    internal void NotifyCategoryItemStored(int categoryIndex) {
+    internal unsafe void NotifyCategoryItemStored(int categoryIndex, uint storedItemId) {
         if (!IsValidCategory(categoryIndex))
             return;
 
-        InvalidateCategorySnapshotCache(categoryIndex);
-        if (_snapshottedCategory != categoryIndex)
-            return;
+        var baseId = ItemUtil.GetBaseId(storedItemId).ItemId;
+        if (baseId != 0)
+            _pendingDresserStoredBaseIds.Add(baseId);
 
-        ResetCategoryCaptureState();
+        // don't mutate snapshot here — agent buffer is still filtered and recapture truncates
         MarkCategoryAwaitingNativeRefresh(categoryIndex);
-        _nativeTree.InvalidateAtkCache();
+        _needsCategorySnapshot = true;
+
+        var addon = GetAddon();
+        if (addon is not null)
+            RequestAddonRefresh(addon);
+    }
+
+    internal bool TryGetNextVisibleAutomationTarget(int categoryIndex, out PrismBoxCrystallizeItem row) {
+        row = default;
+        if (!IsFilteringActive || _snapshottedCategory != categoryIndex || _categoryRows.Length == 0)
+            return false;
+
+        RebuildFilterMap();
+
+        foreach (var sourceIndex in _displayToSource) {
+            if ((uint)sourceIndex >= (uint)_categoryRows.Length)
+                continue;
+
+            var candidate = _categoryRows[sourceIndex];
+            if (candidate.ItemId == 0)
+                continue;
+
+            var itemId = ItemUtil.GetBaseId(candidate.ItemId).ItemId;
+            if (itemId == 0 || !MirageStoreSetItemLookup.TryGetRow(itemId, out _))
+                continue;
+
+            var handle = (ItemHandle)candidate.ItemId;
+            if (candidate.Inventory == InventoryType.Invalid || !handle.TrySetItemLocation())
+                continue;
+
+            row = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private unsafe void RequestCategoryRefresh() {
+        var addon = GetAddon();
+        if (addon is not null)
+            RequestAddonRefresh(addon);
     }
 
     internal unsafe void RestoreCategory(MiragePrismPrismBoxData* data, int categoryIndex) {
@@ -148,13 +193,11 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             _needsCategorySnapshot = true;
         }
 
-        // native refresh builds tree from agent buffer — restore full snapshot first, filter in OnPostRefresh
-        if (_categoryRows.Length > 0
-            && !_needsCategorySnapshot
-            && data->CrystallizeCategory == _snapshottedCategory
-            && !AgentMatchesCategorySnapshot(data)) {
+        // Recapture needs the full category in the agent buffer, not the filtered projection left after a store.
+        if (_needsCategorySnapshot && _categoryRows.Length > 0 && data->CrystallizeCategory == _snapshottedCategory)
+            RestoreFullCategory(data);
+        else if (ShouldRestoreAgentBufferBeforeNativeRefresh(data))
             RestoreAgentBufferFromSnapshot(data);
-        }
     }
 
     private unsafe void OnPostRefresh(AtkUnitBase* addon) {
@@ -262,6 +305,19 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         if (_nativeTree.TreeList is null)
             return false;
 
+        RebuildFilterMap(); // _displayToSource from _categoryRows + filters
+
+        if (_displayToSource.Length == 0)
+            ApplyEmptyCategory(data); // all rows hidden
+        else
+            ProjectVisibleRows(data); // compact agent CrystallizeItems to visible subset
+
+        // setconvert open collapses the list — skip atk repopulate until we're back on crystallize
+        if (!IsCrystallizeListUiStable()) {
+            _nativeTree.EnsureVisible(addon);
+            return true;
+        }
+
         _nativeTree.CaptureAtkSnapshot(addon);
         if (!_nativeTree.HasBufferLayout)
             return false;
@@ -269,13 +325,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _nativeTree.ParseLayout(_categoryRows.Length, force: true);
         if (!_nativeTree.HasLayout)
             return false;
-
-        RebuildFilterMap(); // _displayToSource from _categoryRows + filters
-
-        if (_displayToSource.Length == 0)
-            ApplyEmptyCategory(data); // all rows hidden
-        else
-            ProjectVisibleRows(data); // compact agent CrystallizeItems to visible subset
 
         RepopulateDisplayTree(addon); // mirror projected rows into atk tree
         _nativeTree.EnsureVisible(addon);
@@ -291,6 +340,17 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
         for (var i = 0; i < reported; i++) {
             if (data->CrystallizeItems[i].ItemId == 0) // wait until native fills every slot
+                return false;
+        }
+
+        var scanned = ScanPopulatedCategoryItemCount(data);
+        if (scanned > reported)
+            return false;
+
+        if (_categoryRows.Length > 0 && data->CrystallizeCategory == _snapshottedCategory) {
+            // allow one row to drop after a store; bigger drops are partial native refreshes
+            var minExpected = _categoryRows.Length - 1;
+            if (reported < minExpected && scanned < minExpected)
                 return false;
         }
 
@@ -474,6 +534,8 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
     }
 
     private void RebuildFilterMap() {
+        PrunePendingDresserStoredBaseIds();
+
         if (_categoryRows.Length == 0) {
             _displayToSource = [];
             return;
@@ -536,8 +598,61 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         return true;
     }
 
-    private bool ShouldExcludeLeaf(uint itemId)
-        => _filters.Any(f => f.IsEnabled && f.ShouldHide(ItemUtil.GetBaseId(itemId).ItemId));
+    private unsafe bool ShouldRestoreAgentBufferBeforeNativeRefresh(MiragePrismPrismBoxData* data) {
+        if (_categoryRows.Length == 0 || _needsCategorySnapshot)
+            return false;
+        if (data->CrystallizeCategory != _snapshottedCategory)
+            return false;
+        if (AgentMatchesCategorySnapshot(data))
+            return false;
+
+        // Only undo ProjectVisibleRows — when agent count matches our filtered display map.
+        if (_displayToSource.Length == 0)
+            return false;
+
+        var agentCount = data->CrystallizeItemCount;
+        if (agentCount != _displayToSource.Length)
+            return false;
+
+        for (var i = 0; i < agentCount; i++) {
+            var sourceIndex = _displayToSource[i];
+            if ((uint)sourceIndex >= (uint)_categoryRows.Length)
+                return false;
+            if (data->CrystallizeItems[i].ItemId != _categoryRows[sourceIndex].ItemId)
+                return false;
+        }
+
+        return true;
+    }
+
+    private bool ShouldExcludeLeaf(uint itemId) {
+        var baseId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (baseId != 0 && _pendingDresserStoredBaseIds.Contains(baseId))
+            return true;
+
+        return _filters.Any(f => f.IsEnabled && f.ShouldHide(baseId));
+    }
+
+    private void PrunePendingDresserStoredBaseIds() {
+        if (_pendingDresserStoredBaseIds.Count == 0)
+            return;
+
+        var ownership = Svc.Get<OwnershipService>();
+        _pendingDresserStoredBaseIds.RemoveWhere(ownership.IsCrystallizeItemFullyDeposited);
+    }
+
+    private static unsafe bool IsCrystallizeListUiStable() {
+        if (!AtkUnitBase.IsAddonReady(CrystallizeNativeTree.AddonName))
+            return false;
+
+        if (AtkUnitBase.IsAddonReady("MiragePrismPrismSetConvert"))
+            return false;
+
+        if (Svc.GameGui.TryGetAddon<AtkUnitBase>("MiragePrismPrismSetConvertC", out var confirm) && confirm->IsVisible)
+            return false;
+
+        return true;
+    }
 
     private Func<int, bool> BuildShouldHideLeafPredicate(HashSet<int> visibleSources) {
         var seenSources = new HashSet<int>();
@@ -611,17 +726,20 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         return agent is null ? null : agent->Data;
     }
 
-    private static unsafe int InferPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
-        // debug: count leading populated slots under CrystallizeItemCount
-        var reported = data->CrystallizeItemCount;
-        if (reported == 0)
-            return 0;
+    private static unsafe int InferPopulatedCategoryItemCount(MiragePrismPrismBoxData* data)
+        => ScanPopulatedCategoryItemCount(data);
 
-        for (var i = 0; i < reported; i++) {
-            if (data->CrystallizeItems[i].ItemId == 0)
-                return i;
+    private static unsafe int ScanPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
+        var lastIndex = -1;
+        for (var i = 0; i < MaxCategoryItems; i++) {
+            if (data->CrystallizeItems[i].ItemId != 0)
+                lastIndex = i;
         }
-        return reported;
+
+        if (lastIndex >= 0)
+            return lastIndex + 1;
+
+        return data->CrystallizeItemCount > 0 ? data->CrystallizeItemCount : 0;
     }
 
     private void ClearFilterState() {
@@ -635,6 +753,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _prismBoxItemIdsInitialized = false;
         _crystallizeFilterFlagsSnapshot = byte.MaxValue;
         ClearCategorySnapshotCache();
+        _pendingDresserStoredBaseIds.Clear();
         _nativeTree.InvalidateAll();
         ClearFilterLogSignatures();
     }
