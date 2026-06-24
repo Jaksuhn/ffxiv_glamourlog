@@ -37,6 +37,8 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         _addonController.Enable();
         Svc.Get<OwnershipService>().ArmoireOwnershipChanged += OnArmoireOwnershipChanged;
+        Svc.ClientState.Logout += OnClientLogout;
+        Svc.ClientState.Login += OnClientLogin;
     }
 
     private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
@@ -91,6 +93,14 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             if (Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName) is not null and var addon)
                 addon->OnRefresh(0, null);
         });
+    }
+
+    private void OnClientLogout(int type, int code) => Svc.Framework.RunOnFrameworkThread(ResetSessionState);
+    private void OnClientLogin() => Svc.Framework.RunOnFrameworkThread(ResetSessionState);
+
+    private void ResetSessionState() {
+        CabinetGearsetLookup.Invalidate();
+        ClearFilterState();
     }
 
     private unsafe void OnPreRefresh(AddonCabinet* addon) {
@@ -413,6 +423,8 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             return;
         _disposed = true;
         await Svc.Framework.RunOnFrameworkThread(() => {
+            Svc.ClientState.Logout -= OnClientLogout;
+            Svc.ClientState.Login -= OnClientLogin;
             Svc.Get<OwnershipService>().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
             _addonController.Dispose();
             ClearFilterState();

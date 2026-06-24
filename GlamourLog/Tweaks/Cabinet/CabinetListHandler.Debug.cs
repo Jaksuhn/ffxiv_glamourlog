@@ -37,8 +37,7 @@ internal sealed partial class CabinetListHandler {
         if (signature == _lastSnapshotUnavailableSignature)
             return;
         _lastSnapshotUnavailableSignature = signature;
-        LogFilterDebug(nameof(OnPostRefresh),
-            $"category snapshot unavailable after native refresh ({signature})");
+        LogFilterDebug(nameof(OnPostRefresh), $"category snapshot unavailable after native refresh ({signature})");
     }
 
     private unsafe void LogApplyPipelineResult(AddonCabinet* addon) {
@@ -173,14 +172,6 @@ internal sealed partial class CabinetListHandler {
     }
 
     private static string FormatFilterRow(int index, uint itemId) {
-        if (itemId == 0)
-            return $"[{index}] itemId=0";
-        try {
-            var name = Item.GetRow(itemId).Name.ToString().Trim();
-            return $"[{index}] itemId={itemId} name=\"{name}\"";
-        }
-        catch {
-            return $"[{index}] itemId={itemId}";
-        }
+        return $"[{index}] {(ItemHandle)itemId}";
     }
 }
