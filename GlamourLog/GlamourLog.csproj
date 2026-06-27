@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>15.28</Version>
+    <Version>15.31</Version>
     <LangVersion>preview</LangVersion>
     <Author>croizat</Author>
     <Name>Glamour Log</Name>
@@ -10,13 +10,33 @@
     <Description>A log for all your glamours and other glam-related tweaks</Description>
     <RepoUrl>https://github.com/Jaksuhn/ffxiv_glamourlog</RepoUrl>
     <Tags>glamour</Tags>
+	<CanUnloadAsync>true</CanUnloadAsync>
+	<LocalCS>true</LocalCS>
   </PropertyGroup>
+
   <ItemGroup>
     <None Include="DalamudPackager.targets" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="croizat.clib" Version="1.0.48" />
+    <PackageReference Include="croizat.clib" Version="1.0.50" />
     <PackageReference Include="KamiToolKit" Version="2.0.9" />
   </ItemGroup>
+
+  <PropertyGroup Condition="'$(LocalCS)'=='true'">
+    <DefineConstants>$(DefineConstants);LOCAL_CS</DefineConstants>
+    <Use_Dalamud_FFXIVClientStructs>false</Use_Dalamud_FFXIVClientStructs>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(LocalCS)'=='true'">
+    <ProjectReference Include="..\..\..\FFXIVClientStructs\FFXIVClientStructs\FFXIVClientStructs.csproj" Private="true" />
+    <ProjectReference Include="..\..\..\FFXIVClientStructs\InteropGenerator.Runtime\InteropGenerator.Runtime.csproj" Private="true" />
+    <ProjectReference Include="..\..\..\FFXIVClientStructs\InteropGenerator\InteropGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="Clean CS" Condition="'$(Configuration)'!='LocalCS' and $([MSBuild]::IsOSPlatform('Windows'))" BeforeTargets="PreBuildEvent">
+    <Exec Command="if exist &quot;$(TargetDir)FFXIVClientStructs.dll&quot; del &quot;$(TargetDir)FFXIVClientStructs.dll&quot;" EchoOff="true" StandardErrorImportance="low" StandardOutputImportance="low" />
+    <Exec Command="if exist &quot;$(TargetDir)InteropGenerator.Runtime.dll&quot; del &quot;$(TargetDir)InteropGenerator.Runtime.dll&quot;" EchoOff="true" StandardErrorImportance="low" StandardOutputImportance="low" />
+  </Target>
+  <Target Name="Ensure CExporter" Condition="'$(Configuration)'=='LocalCS'" BeforeTargets="PreBuildEvent">
+    <Exec Command="dotnet run --no-restore -v q --project ..\..\..\FFXIVClientStructs\CExporter\CExporter.csproj --quiet --no-write --strip-color" />
+  </Target>
 </Project>

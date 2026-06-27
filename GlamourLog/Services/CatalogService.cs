@@ -1,3 +1,5 @@
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,7 +56,7 @@ internal sealed class CatalogService : IDisposable {
         RequestCatalogBuild();
     }
 
-    private void RequestCatalogBuild() {
+    private unsafe void RequestCatalogBuild() {
         if (_catalogBuilt)
             return;
         lock (_catalogRequestLock) {
@@ -64,14 +66,20 @@ internal sealed class CatalogService : IDisposable {
             _catalogCts?.Dispose();
             _catalogCts = new CancellationTokenSource();
             var token = _catalogCts.Token;
-            _ = Task.Run(() => RunCatalogBuild(token), token);
+            Svc.Framework.RunOnFrameworkThread(() => {
+                if (token.IsCancellationRequested)
+                    return;
+                var pvpSeries = PvPProfile.Instance() is not null and var pvp ? pvp->Series : (byte)0;
+                uint[] tradecraftIds = CurrencyManager.Instance() is not null and var cm ? [.. new byte[] { 1, 2, 3, 4, 6, 7 }.Select(sid => cm->GetItemIdBySpecialId(sid)).Where(id => id != 0).Distinct()] : [];
+                _ = Task.Run(() => RunCatalogBuild(pvpSeries, tradecraftIds, token), token);
+            });
         }
     }
 
-    private void RunCatalogBuild(CancellationToken token) {
+    private void RunCatalogBuild(byte pvpSeries, uint[] tradecraftIds, CancellationToken token) {
         try {
             token.ThrowIfCancellationRequested();
-            var built = CatalogBuilder.Run(CostsLookup);
+            var built = CatalogBuilder.Run(CostsLookup, pvpSeries, tradecraftIds);
             token.ThrowIfCancellationRequested();
 
             lock (_glamourDataLock) {

@@ -3,6 +3,8 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.PrismBox;
 
+internal unsafe delegate void CrystallizeNativePopulateHandler(AtkUnitBase* addon, int nativeItemCount);
+
 // atk tree list (node #11) on MiragePrismPrismBoxCrystallize — hook LoadAtkValues for buffer layout, repopulate from filtered snapshot
 internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     internal const string AddonName = "MiragePrismPrismBoxCrystallize";
@@ -21,6 +23,8 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     internal AtkComponentTreeList* TreeList { get; private set; }
     internal CrystallizeAtkSlot[] Layout { get; private set; } = []; // parsed tree/leaf slots from Snapshot
     internal AtkValue[] Snapshot { get; private set; } = [];
+
+    internal CrystallizeNativePopulateHandler? AfterNativePopulate;
 
     internal CrystallizeNativeTree() {
         _loadAtkValuesHook = Svc.Hook.HookFromAddress<AtkComponentTreeList.Delegates.LoadAtkValues>((nint)AtkComponentTreeList.MemberFunctionPointers.LoadAtkValues, LoadAtkValuesDetour);
@@ -52,23 +56,43 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         TreeList = nativeNode->GetAsAtkComponentTreeList();
     }
 
-    internal void EnsureVisible(AtkUnitBase* addon) => SetTreeListVisible(addon, true);
+    internal void EnsureVisible(AtkUnitBase* addon, bool hideOtherTreeLists = false)
+        => SetTreeListVisible(addon, true, hideOtherTreeLists);
 
-    private void SetTreeListVisible(AtkUnitBase* addon, bool visible) {
+    private void SetTreeListVisible(AtkUnitBase* addon, bool visible, bool hideOtherTreeLists) {
         Resolve(addon);
         foreach (var nodePtr in addon->UldManager.Nodes) {
             var node = nodePtr.Value;
             var tree = node is not null ? node->GetAsAtkComponentTreeList() : null;
             if (tree is null)
                 continue;
-            if (node != _treeResNode && !node->IsDuplicatedNode())
-                continue; // addon has duplicate tree list nodes; only touch node 11 + its clones
-            var show = visible && _treeResNode is not null && node == _treeResNode;
+
+            var isFilteredTree = _treeResNode is not null && (node == _treeResNode || node->IsDuplicatedNode());
+            if (!isFilteredTree) {
+                if (hideOtherTreeLists)
+                    SetNodeVisible(node, false);
+                continue;
+            }
+
+            var show = visible;
             SetNodeVisible(node, show);
             SetTreeScrollBarVisible(tree, show);
             ((AtkComponentList*)tree)->IsItemInteractionEnabled = show;
         }
         addon->UldManager.UpdateDrawNodeList();
+    }
+
+    internal void ClearStaleDisplay(AtkUnitBase* addon) {
+        var tree = TreeList;
+        if (tree is null || !HasBufferLayout)
+            return;
+
+        CaptureAtkSnapshot(addon);
+        if (Snapshot.Length == 0)
+            return;
+
+        ParseLayout(0, force: true);
+        RepopulateFiltered(addon, true, 0, [], _ => true, _ => false);
     }
 
     internal void CaptureAtkSnapshot(AtkUnitBase* addon) {
@@ -119,7 +143,6 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
                 return; // apply failed but layout still big enough — keep last tree state
 
             var clearedAtk = CrystallizeListAtk.Clone(Snapshot);
-            // clear inferred atk slots (not tree->Items.Count) so ghost rows don't survive tab loopback
             var inferred = CrystallizeListAtk.InferItemCount(Snapshot, _bufferLayout);
             var clearThrough = Math.Max(inferred, NativeSlotCount);
             if (clearThrough <= 0)
@@ -127,10 +150,11 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
             CrystallizeListAtk.ClearSlots(clearedAtk, 0, clearThrough, _bufferLayout);
             LoadTreeFromAtkSnapshot(tree, clearedAtk, 0);
             if (addon is not null && addon->AtkValues is not null)
-                CrystallizeListAtk.WriteSlotsToAtkBuffer(clearedAtk, addon->AtkValues, addon->AtkValuesCount, _bufferLayout, 0, clearThrough); // native refresh reads addon->AtkValues
+                CrystallizeListAtk.WriteSlotsToAtkBuffer(clearedAtk, addon->AtkValues, addon->AtkValuesCount, _bufferLayout, 0, clearThrough);
             Snapshot = CrystallizeListAtk.Clone(clearedAtk);
             for (var slot = 0; slot < tree->Items.Count; slot++)
-                CrystallizeListAtk.ClearTreeItemDisplay(tree->GetItem(slot)); // LoadAtkValues(0) leaves renderer slots from prior tab
+                CrystallizeListAtk.ClearTreeItemDisplay(tree->GetItem(slot));
+            ((AtkComponentList*)tree)->SetItemCount(0);
             ResetTreeScroll(tree);
             RefreshTreeListLayout(tree);
             return;
@@ -163,10 +187,20 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         int stringValuesCountPerItem,
         int itemCount,
         ListComponentCallBackInterface* callBackInterface) {
-        if (itemCount > 0)
-            TryCaptureBufferLayout(thisPtr, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, atkValuesCount); // first native populate reveals per-item layout
+        var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(AddonName);
+        var isTargetTree = addon is not null && IsTargetTree(thisPtr, addon);
+        if (itemCount > 0 && isTargetTree)
+            TryCaptureBufferLayout(thisPtr, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, atkValuesCount);
 
         _loadAtkValuesHook!.Original(thisPtr, atkValuesCount, atkValues, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, itemCount, callBackInterface);
+
+        if (itemCount > 0 && isTargetTree)
+            AfterNativePopulate?.Invoke(addon, itemCount);
+    }
+
+    private static bool IsTargetTree(AtkComponentTreeList* tree, AtkUnitBase* addon) {
+        var node = addon->GetNodeById(ItemTreeListNodeId);
+        return node is not null && node->GetAsAtkComponentTreeList() == tree;
     }
 
     private bool TryCaptureBufferLayout(AtkComponentTreeList* tree, int uintValuesOffset, int stringValuesOffset, int uintValuesPerItem, int stringValuesPerItem, int atkValuesCount) {
@@ -259,8 +293,13 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     }
 
     private static void SetNodeVisible(AtkResNode* node, bool visible) {
-        if (node is not null)
-            node->ToggleVisibility(visible);
+        if (node is null)
+            return;
+        node->ToggleVisibility(visible);
+        if (visible)
+            node->NodeFlags |= NodeFlags.Visible;
+        else
+            node->NodeFlags &= ~NodeFlags.Visible;
     }
 
     private static void SetTreeScrollBarVisible(AtkComponentTreeList* tree, bool visible) {

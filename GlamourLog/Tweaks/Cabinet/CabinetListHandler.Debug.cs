@@ -32,8 +32,13 @@ internal sealed partial class CabinetListHandler {
         => Svc.Log.Information($"[{nameof(CabinetListHandler)}.{phase}] {message}");
 
     private unsafe void LogSnapshotUnavailableOnce(AddonCabinet* addon, AgentCabinet* agent) {
+        var list = addon->ItemList;
+        var listCount = list is not null ? list->GetItemCount() : -1;
+        var contiguous = ScanContiguousPopulatedCategoryItemCount(agent);
         var inferred = _categoryItemCount > 0 ? _categoryItemCount : InferCategoryItemCount(addon, agent);
-        var signature = $"cat={addon->CategoryIndex} inferred={inferred} needsSnapshot={_needsCategorySnapshot}";
+        var signature =
+            $"cat={addon->CategoryIndex} inferred={inferred} list={listCount} contiguous={contiguous} " +
+            $"pendingUpdate={agent->PendingUpdate} needsSnapshot={_needsCategorySnapshot} pass={_snapshotCapturePasses}";
         if (signature == _lastSnapshotUnavailableSignature)
             return;
         _lastSnapshotUnavailableSignature = signature;

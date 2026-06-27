@@ -1,5 +1,6 @@
 using clib;
 using Dalamud.Plugin;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Features.Cabinet;
 using GlamourLog.Features.PrismBox;
@@ -17,13 +18,14 @@ namespace GlamourLog;
  * rename glam plates tweak
  * loot window alert for missing pieces (and/or just general inventory change alert)
  */
-public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugin {
+public sealed class Plugin(IDalamudPluginInterface dalamud, ISigScanner sigs, IDataManager data) : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;
     private static readonly CommandRouter<object> Router = new(BuildRoot());
     private static readonly string[] _commands = ["/glamourlog", "/gl"];
 
     public async Task LoadAsync(CancellationToken cancellationToken) {
         dalamud.Create<Svc>();
+        dalamud.InitCustomClientStructs(sigs, data);
         CLibMain.Init(dalamud, this, CLibModule.All);
         await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(dalamud));
 

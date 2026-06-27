@@ -118,7 +118,7 @@ internal sealed class Catalog {
         return items.Any(id => costsLookup.GetItemCosts(id).Any(c => chest.Contains(c.ItemId)));
     }
 
-    /// <summary> Placeholder until <see cref="Build"/> runs after login (Tradecraft needs <see cref="CurrencyManager"/>).</summary>
+    /// <summary> Placeholder until <see cref="Build"/> runs after login (Tradecraft needs <see cref="CurrencyManager"/> on the framework thread).</summary>
     internal static Catalog CreateEmptyStub() {
         var uncategorized = new OutfitCategory("Unsorted", int.MinValue) { IsSyntheticBucket = true };
         var miscArmoire = new OutfitCategory("Misc Armoire", 17) { IsSyntheticBucket = true };
@@ -130,7 +130,7 @@ internal sealed class Catalog {
         return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire, unobtainableBucket);
     }
 
-    // tradecraftCurrencyItemIds must be resolved via CurrencyManager after login. It's not populated before
+    // tradecraftCurrencyItemIds must be resolved via CurrencyManager on the framework thread after login
     public static Catalog Build(ItemCostLookup costs, IReadOnlyList<uint> tradecraftCurrencyItemIds) {
         _ = costs;
         var dungeonChestPieces = BuildDungeonChestPieceIdsFromSupplemental();

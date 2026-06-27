@@ -1,22 +1,14 @@
 using AllaganLib.GameSheets.Sheets;
-using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace GlamourLog;
 
 internal readonly record struct CatalogBuildResult(Catalog Catalog, ReadOnlyCollection<GlamourSet> Sets, HashSet<uint> ArmoireItemIds);
 
-internal static unsafe class CatalogBuilder {
-    internal static uint[] GetTradecraftDiscriminators()
-        => [.. new byte[] { 1, 2, 3, 4, 6, 7 }
-            .Select(sid => CurrencyManager.Instance()->GetItemIdBySpecialId(sid))
-            .Where(id => id != 0)
-            .Distinct()];
-
+internal static class CatalogBuilder {
     internal static HashSet<uint> LoadArmoireItemIds()
         => [.. Cabinet.Where(x => x.RowId > 0 && x.Item.RowId > 0).Select(x => x.Item.RowId)];
 
-    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog, ItemCostLookup costsLookup) {
-        var pvpSeries = FFXIVClientStructs.FFXIV.Client.Game.UI.PvPProfile.Instance()->Series;
+    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog, ItemCostLookup costsLookup, byte pvpSeries) {
         var itemSheet = Svc.SheetManager.GetSheet<ItemSheet>();
         var specialShopByItemId = Catalog.BuildSpecialShopByReceiveItemId();
         var itemByRowId = Item.Where(i => i.RowId > 0).ToDictionary(i => i.RowId);
@@ -92,12 +84,12 @@ internal static unsafe class CatalogBuilder {
         return entries;
     }
 
-    internal static CatalogBuildResult Run(ItemCostLookup costsLookup) {
-        var catalog = Catalog.Build(costsLookup, GetTradecraftDiscriminators());
+    internal static CatalogBuildResult Run(ItemCostLookup costsLookup, byte pvpSeries, IReadOnlyList<uint> tradecraftCurrencyItemIds) {
+        var catalog = Catalog.Build(costsLookup, tradecraftCurrencyItemIds);
         var armoireItemIds = LoadArmoireItemIds();
-        var mirageSets = BuildClassifiedSets(catalog, costsLookup);
+        var mirageSets = BuildClassifiedSets(catalog, costsLookup, pvpSeries);
         var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets);
-        var allSets = ApplySharedModelMetadata(mirageSets.Concat(miscArmoireEntries).ToList()).AsReadOnly();
+        var allSets = ApplySharedModelMetadata([.. mirageSets, .. miscArmoireEntries]).AsReadOnly();
         return new CatalogBuildResult(catalog, allSets, armoireItemIds);
     }
 

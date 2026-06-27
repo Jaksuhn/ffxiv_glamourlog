@@ -16,6 +16,8 @@ internal sealed partial class CrystallizeListHandler {
     private string? _lastFilterOffState;
     private string? _lastFilterOnState;
     private string? _lastSnapshotUnavailableSignature;
+    private string? _lastNativePopulate;
+    private string? _lastMissingAgentData;
     private bool _filterFlagsChangedThisRefresh;
 
     private void ResetFilterFlagsChangedThisRefresh()
@@ -33,10 +35,32 @@ internal sealed partial class CrystallizeListHandler {
         _lastFilterOffState = null;
         _lastFilterOnState = null;
         _lastSnapshotUnavailableSignature = null;
+        _lastNativePopulate = null;
+        _lastMissingAgentData = null;
+    }
+
+    private unsafe void LogMissingAgentDataOnce() {
+        var agent = AgentMiragePrismPrismBox.Instance();
+        var signature = agent is null ? "agent=null" : "agent ok, data=null";
+        if (signature == _lastMissingAgentData)
+            return;
+        _lastMissingAgentData = signature;
+        LogFilterDebug(nameof(OnPostRefresh), $"cannot read prism box data ({signature})");
     }
 
     private static void LogFilterDebug(string phase, string message)
         => Svc.Log.Information($"[{nameof(CrystallizeListHandler)}.{phase}] {message}");
+
+    private unsafe void LogNativeTreePopulated(MiragePrismPrismBoxData* data, int nativeItemCount) {
+        var scanned = ScanPopulatedCategoryItemCount(data);
+        var summary =
+            $"nativeItemCount={nativeItemCount} cat={data->CrystallizeCategory} agentReported={data->CrystallizeItemCount} agentScanned={scanned} " +
+            $"snapshotRows={_categoryRows.Length} needsSnapshot={_needsCategorySnapshot}";
+        if (summary == _lastNativePopulate)
+            return;
+        _lastNativePopulate = summary;
+        LogFilterDebug(nameof(OnNativeTreePopulated), summary);
+    }
 
     private unsafe void LogSnapshotUnavailableOnce(MiragePrismPrismBoxData* data) {
         var reported = data->CrystallizeItemCount;
