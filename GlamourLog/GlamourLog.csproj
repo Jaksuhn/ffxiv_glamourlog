@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>15.28</Version>
+    <Version>15.29</Version>
     <LangVersion>preview</LangVersion>
     <Author>croizat</Author>
     <Name>Glamour Log</Name>
@@ -9,6 +9,7 @@
     <Punchline>Gotta collect 'em all</Punchline>
     <Description>A log for all your glamours and other glam-related tweaks</Description>
     <RepoUrl>https://github.com/Jaksuhn/ffxiv_glamourlog</RepoUrl>
+	<IconUrl>https://puni.sh/api/plugins/icon/136</IconUrl>
     <Tags>glamour</Tags>
   </PropertyGroup>
   <ItemGroup>
