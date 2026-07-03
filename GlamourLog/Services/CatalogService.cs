@@ -1,3 +1,4 @@
+using FFXIVClientStructs.FFXIV.Client.Game;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -64,7 +65,12 @@ internal sealed class CatalogService : IDisposable {
             _catalogCts?.Dispose();
             _catalogCts = new CancellationTokenSource();
             var token = _catalogCts.Token;
-            _ = Task.Run(() => RunCatalogBuild(token), token);
+            _ = Task.Run(async () => {
+                static unsafe bool CurrencyManagerReady() => CurrencyManager.Instance() != null; // unnecessary unsafe modifier my fucking ass, microslop
+                while (!CurrencyManagerReady())
+                    await Task.Delay(1000, token);
+                RunCatalogBuild(token);
+            }, token);
         }
     }
 
