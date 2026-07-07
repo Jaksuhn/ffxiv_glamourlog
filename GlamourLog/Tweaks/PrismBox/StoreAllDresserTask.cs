@@ -11,7 +11,9 @@ internal sealed class StoreAllDresserTask : TaskBase {
     private const string Crystallize = "MiragePrismPrismBoxCrystallize";
     private const string PrismBox = "MiragePrismPrismBox";
     private const ushort FullCondition = 30000;
-    private const int MaxStoreSlots = 9; // maybe this is stored in the struct somewhere
+    /// <summary>MirageManager store packets hold 9 parallel slots (head through ring).</summary>
+    private const int MaxStoreSlots = 9;
+    private const int MirageStoreSetSheetSlotCount = 11;
 
     private readonly HashSet<uint> _pendingStoredBaseIds = [];
     private readonly HashSet<uint> _visitedInventoryBaseIds = [];
@@ -21,22 +23,23 @@ internal sealed class StoreAllDresserTask : TaskBase {
         ErrorIf(!IsPrismBoxReady(), "Dresser not ready");
 
         while (true) {
-            if (!TryGetNextTarget(out var first))
+            if (!TryGetNextTarget(out var catalogSet, out var first))
                 break;
 
-            if (!MirageStoreSetItemLookup.TryGetRow(ItemUtil.GetBaseId(first.ItemId).ItemId, out var lookup)) {
-                Log($"skipping item #{first.ItemId} - no matching set row was found");
+            var setRow = MirageStoreSetItem.GetRow(catalogSet.ItemId);
+            if (setRow.RowId == 0) {
+                Log($"Skipping item #{first.ItemId} - no matching set row was found");
                 continue;
             }
 
-            var setRow = MirageStoreSetItem.GetRow(lookup.RowId);
+            var setName = catalogSet.Name;
             var group = CollectStorablePiecesInSet(setRow);
             var batchable = CountBatchableSetPieces(setRow, group);
             Log($"set=#{setRow.RowId} first=#{ItemUtil.GetBaseId(first.ItemId).ItemId} batchable={batchable} group={group.Count} canBatch={batchable >= 2}");
 
             if (CanBatchStore(setRow, group)) {
-                Log($"Storing outfit batch ({group.Count} pieces) for set #{setRow.RowId}");
-                await StorePieces(group, setRow);
+                Log($"Storing outfit batch ({group.Count} pieces) for set {setName}#{setRow.RowId}");
+                await StorePieces(group, setRow, setName);
                 continue;
             }
 
@@ -48,7 +51,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
                         continue;
 
                     Log($"Storing dresser item #{pieceId}");
-                    await StorePieces([piece], setRow);
+                    await StorePieces([piece], setRow, setName);
                     await NextFrame(2);
                 }
                 continue;
@@ -56,11 +59,11 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
             var itemId = ItemUtil.GetBaseId(first.ItemId).ItemId;
             Log($"Storing dresser item #{itemId}");
-            await StorePieces([first], setRow);
+            await StorePieces([first], setRow, setName);
         }
     }
 
-    private async Task StorePieces(List<PrismBoxCrystallizeItem> rows, MirageStoreSetItem setRow) {
+    private async Task StorePieces(List<PrismBoxCrystallizeItem> rows, MirageStoreSetItem setRow, string setName) {
         using var scope = BeginScope(nameof(StorePieces));
 
         if (IsBatchStoreComplete(rows))
@@ -70,11 +73,11 @@ internal sealed class StoreAllDresserTask : TaskBase {
         ErrorIf(result.FilledCount == 0, "No store slots populated");
         ErrorIf(result.FilledCount < 0, "Store rejected");
 
-        var sentPieces = result.SentPieces;
-        Log($"Stored {result.FilledCount} slot(s) for set #{setRow.RowId} (requested {rows.Count})");
+        Log($"Stored {result.FilledCount} slot(s) for set {setName}#{setRow.RowId} (requested {rows.Count})");
 
-        await WaitForStored(sentPieces);
-        MarkStored(sentPieces.Select(p => p.ItemId));
+        await WaitForStored(result.SentPieces);
+        MarkStored(result.SentPieces.Select(p => p.ItemId));
+        Svc.Toasts.ShowQuest($"Stored {result.FilledCount} items in set {setName}");
 
         await NextFrame(2);
     }
@@ -108,7 +111,8 @@ internal sealed class StoreAllDresserTask : TaskBase {
         PrunePendingStored();
     }
 
-    private bool TryGetNextTarget(out PrismBoxCrystallizeItem item) {
+    private bool TryGetNextTarget(out GlamourSet catalogSet, out PrismBoxCrystallizeItem item) {
+        catalogSet = null!;
         item = default;
         PrunePendingStored();
         _visitedInventoryBaseIds.Clear();
@@ -127,6 +131,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
                 _visitedInventoryBaseIds.Add(baseId);
                 item = row;
+                catalogSet = set;
                 RefreshInventoryLocation(ref item);
                 return true;
             }
@@ -260,7 +265,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
             return default;
 
         var pieceByBaseId = BuildPieceMap(pieces);
-        var storeIntoExisting = TryFindPrismBoxIndex(mirage, setRow.RowId, out var prismBoxIndex);
+        var storeIntoExisting = TryFindPrismBoxIndexForStore(mirage, setRow, pieceByBaseId, out var prismBoxIndex);
 
         Span<InventoryType> containers = stackalloc InventoryType[MaxStoreSlots];
         Span<ushort> slots = stackalloc ushort[MaxStoreSlots];
@@ -269,7 +274,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
         var filledCount = 0;
         List<PrismBoxCrystallizeItem>? sentPieces = null;
-        var sheetSlotLimit = Math.Min(setRow.Items.Count, Svc.Data.GetSheet<MirageStoreSetItem>().Columns.Count);
+        var sheetSlotLimit = Math.Min(setRow.Items.Count, MirageStoreSetSheetSlotCount);
         for (var sheetSlot = 0; sheetSlot < sheetSlotLimit; sheetSlot++) {
             if (filledCount >= MaxStoreSlots)
                 break;
@@ -278,7 +283,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
             if (itemRef.RowId == 0)
                 continue;
 
-            if (storeIntoExisting && setRow.IsSetSlotCollected(sheetSlot))
+            if (storeIntoExisting && mirage->IsSetSlotUnlocked(prismBoxIndex, sheetSlot))
                 continue;
 
             var requiredBaseId = ItemUtil.GetBaseId(itemRef.RowId).ItemId;
@@ -287,7 +292,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
             containers[filledCount] = row.Inventory;
             slots[filledCount] = (ushort)row.Slot;
-            sentPieces ??= [with(MaxStoreSlots)];
+            sentPieces ??= [];
             sentPieces.Add(row);
             filledCount++;
         }
@@ -299,7 +304,9 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
         fixed (InventoryType* containerPtr = containers)
         fixed (ushort* slotPtr = slots) {
-            var sent = storeIntoExisting ? mirage->StoreExistingOutfit(prismBoxIndex, containerPtr, slotPtr) : mirage->StoreNewOutfit(setRow.RowId, containerPtr, slotPtr);
+            var sent = storeIntoExisting
+                ? mirage->StoreExistingOutfit(prismBoxIndex, containerPtr, slotPtr)
+                : mirage->StoreNewOutfit(setRow.RowId, containerPtr, slotPtr);
             return new DirectStoreResult {
                 FilledCount = sent ? filledCount : -1,
                 SentPieces = sentPieces ?? [],
@@ -307,7 +314,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         }
     }
 
-    private static void LogPackedStoreRequest(Action<string> Log, uint setRowId, bool storeIntoExisting, uint prismBoxIndex, ReadOnlySpan<InventoryType> containers, ReadOnlySpan<ushort> slots, int filledCount) {
+    private static void LogPackedStoreRequest(Action<string> log, uint setRowId, bool storeIntoExisting, uint prismBoxIndex, ReadOnlySpan<InventoryType> containers, ReadOnlySpan<ushort> slots, int filledCount) {
         var target = storeIntoExisting ? $"existing#{prismBoxIndex}" : $"new#{setRowId}";
         var packedParts = new List<string>(filledCount);
         for (var i = 0; i < filledCount; i++)
@@ -317,7 +324,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         for (var i = filledCount; i < MaxStoreSlots; i++)
             padParts.Add($"{containers[i]}:{slots[i]}");
 
-        Log($"[DresserStore] packed store for {target}: [{string.Join(", ", packedParts)}] pad=[{string.Join(", ", padParts)}]");
+        log($"[DresserStore] plugin packed store for {target}: [{string.Join(", ", packedParts)}] pad=[{string.Join(", ", padParts)}]");
     }
 
     private static Dictionary<uint, PrismBoxCrystallizeItem> BuildPieceMap(IReadOnlyList<PrismBoxCrystallizeItem> pieces) {
@@ -335,15 +342,32 @@ internal sealed class StoreAllDresserTask : TaskBase {
         return pieceByBaseId;
     }
 
-    private static unsafe bool TryFindPrismBoxIndex(MirageManager* mirage, uint setItemId, out uint index) {
+    private static unsafe bool TryFindPrismBoxIndexForStore(
+        MirageManager* mirage,
+        MirageStoreSetItem setRow,
+        IReadOnlyDictionary<uint, PrismBoxCrystallizeItem> pieceByBaseId,
+        out uint index) {
         index = 0;
+        var sheetSlotLimit = Math.Min(setRow.Items.Count, MirageStoreSetSheetSlotCount);
         var ids = mirage->PrismBoxItemIds;
+
         for (var i = 0; i < ids.Length; i++) {
-            if (ids[i] != setItemId)
+            if (ids[i] != setRow.RowId)
                 continue;
 
-            index = (uint)i;
-            return true;
+            for (var sheetSlot = 0; sheetSlot < sheetSlotLimit; sheetSlot++) {
+                var itemRef = setRow.Items[sheetSlot];
+                if (itemRef.RowId == 0)
+                    continue;
+                if (mirage->IsSetSlotUnlocked((uint)i, sheetSlot))
+                    continue;
+
+                var baseId = ItemUtil.GetBaseId(itemRef.RowId).ItemId;
+                if (baseId != 0 && pieceByBaseId.ContainsKey(baseId)) {
+                    index = (uint)i;
+                    return true;
+                }
+            }
         }
 
         return false;
