@@ -1,5 +1,4 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using GlamourLog.Nodes;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes.GuideWindow;

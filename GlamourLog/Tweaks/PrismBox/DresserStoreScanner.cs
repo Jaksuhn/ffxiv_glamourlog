@@ -1,17 +1,13 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Services;
-using Lumina.Excel.Sheets;
 
 namespace GlamourLog.Features.PrismBox;
 
 /// <summary>
-/// Reads crystallize agent data and inventory for store automation.
-/// Category readiness uses the filter handler's native-load hook (ATK tree item count is 0 while filtered).
+/// Reads the active crystallize category and inventory state for direct dresser-store automation.
 /// </summary>
 internal sealed class DresserStoreScanner {
-    private const string Crystallize = "MiragePrismPrismBoxCrystallize";
     private const int MaxCategoryItems = 140;
 
     private readonly IPrismBoxRowFilter[] _filters;
@@ -23,65 +19,6 @@ internal sealed class DresserStoreScanner {
             new HideArmoireEligibleFilter(),
             new HideNonOutfitItemsFilter(),
         ];
-    }
-
-    internal unsafe bool TrySelectCategory(int categoryIndex) {
-        var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(Crystallize);
-        var data = GetData();
-        if (addon is null || data is null)
-            return false;
-
-        var nextBtn = addon->GetComponentButtonById(7);
-        var dropDown = FindCategoryDropDown(addon);
-        if (nextBtn is null || dropDown is null)
-            return false;
-
-        if (IsCategoryTabAligned(categoryIndex) && IsCategoryReady(categoryIndex))
-            return true;
-
-        data->CrystallizeCategory = categoryIndex;
-        ClearAgentBufferTail(data);
-
-        if (dropDown->GetSelectedItemIndex() != categoryIndex)
-            nextBtn->Click();
-        else
-            addon->OnRefresh(0, null);
-
-        Svc.Log.Debug(
-            $"[DresserStore] requested category {categoryIndex}: dropdown={dropDown->GetSelectedItemIndex()}, agent={data->CrystallizeCategory}");
-        return true;
-    }
-
-    internal unsafe bool IsCategoryTabAligned(int categoryIndex) {
-        var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(Crystallize);
-        var data = GetData();
-        if (addon is null || data is null)
-            return false;
-
-        var dropDown = FindCategoryDropDown(addon);
-        if (dropDown is null)
-            return false;
-
-        return data->CrystallizeCategory == categoryIndex
-            && dropDown->GetSelectedItemIndex() == categoryIndex;
-    }
-
-    internal unsafe bool IsCategoryReady(int categoryIndex) {
-        if (!IsCategoryTabAligned(categoryIndex))
-            return false;
-
-        var handler = Svc.Get<CrystallizeListHandler>();
-        if (!handler.IsCategoryUsableForStore(categoryIndex))
-            return false;
-
-        var data = GetData();
-        if (data is null)
-            return false;
-
-        var reported = (int)data->CrystallizeItemCount;
-        var scanned = ScanPopulatedCategoryItemCount(data);
-        Svc.Log.Debug($"[DresserStore] category {categoryIndex} ready: agent={reported} scanned={scanned}");
-        return true;
     }
 
     internal void MarkStored(IEnumerable<uint> itemIds) {
@@ -102,15 +39,7 @@ internal sealed class DresserStoreScanner {
         if (data is null)
             return false;
 
-        var handler = Svc.Get<CrystallizeListHandler>();
-        var categoryIndex = data->CrystallizeCategory;
-
-        if (handler.TryGetNextVisibleStorableFromSnapshot(categoryIndex, IsStorableRow, out item)) {
-            Svc.Log.Debug($"[DresserStore] target from filter snapshot in category {categoryIndex}");
-            return true;
-        }
-
-        var count = InferPopulatedCategoryItemCount(data);
+        var count = ScanPopulatedCategoryItemCount(data);
         for (var i = 0; i < count; i++) {
             var row = data->CrystallizeItems[i];
             if (row.ItemId == 0)
@@ -121,12 +50,8 @@ internal sealed class DresserStoreScanner {
 
             item = row;
             DresserStore.RefreshInventoryLocation(ref item);
-            Svc.Log.Debug($"[DresserStore] target from agent buffer in category {categoryIndex}");
             return true;
         }
-
-        if (count > 0)
-            Svc.Log.Debug($"[DresserStore] no storable target in category {categoryIndex} ({count} agent row(s))");
 
         return false;
     }
@@ -138,19 +63,8 @@ internal sealed class DresserStoreScanner {
             return false;
 
         var data = GetData();
-        var handler = Svc.Get<CrystallizeListHandler>();
-        var categoryIndex = data is not null ? data->CrystallizeCategory : -1;
-
-        if (categoryIndex >= 0
-            && handler.TryFindSnapshotRow(categoryIndex, itemId, out var snapshotRow)
-            && IsStorableRow(snapshotRow)) {
-            row = snapshotRow;
-            DresserStore.RefreshInventoryLocation(ref row);
-            return true;
-        }
-
         if (data is not null) {
-            var count = InferPopulatedCategoryItemCount(data);
+            var count = ScanPopulatedCategoryItemCount(data);
             for (var i = 0; i < count; i++) {
                 var candidate = data->CrystallizeItems[i];
                 if (candidate.ItemId == 0)
@@ -234,39 +148,6 @@ internal sealed class DresserStoreScanner {
         var ownership = Svc.Get<OwnershipService>();
         _pendingStoredBaseIds.RemoveWhere(ownership.IsCrystallizeItemFullyDeposited);
     }
-
-    private static unsafe void ClearAgentBufferTail(MiragePrismPrismBoxData* data) {
-        var reported = data->CrystallizeItemCount;
-        for (var i = reported; i < MaxCategoryItems; i++)
-            data->CrystallizeItems[i] = default;
-    }
-
-    private static unsafe AtkComponentDropDownList* FindCategoryDropDown(AtkUnitBase* addon) {
-        AtkComponentDropDownList* fallback = null;
-        var data = GetData();
-        var currentCategory = data is not null ? data->CrystallizeCategory : -1;
-
-        foreach (var nodePtr in addon->UldManager.Nodes) {
-            var node = nodePtr.Value;
-            if (node is null)
-                continue;
-
-            var dropDown = node->GetAsAtkComponentDropdownList();
-            if (dropDown is null)
-                continue;
-
-            if (currentCategory >= 0 && dropDown->GetSelectedItemIndex() == currentCategory)
-                return dropDown;
-
-            if (fallback is null)
-                fallback = dropDown;
-        }
-
-        return fallback;
-    }
-
-    private static unsafe int InferPopulatedCategoryItemCount(MiragePrismPrismBoxData* data)
-        => ScanPopulatedCategoryItemCount(data);
 
     private static unsafe int ScanPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
         var lastIndex = -1;

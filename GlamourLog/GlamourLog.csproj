@@ -16,8 +16,17 @@
     <None Include="DalamudPackager.targets" />
   </ItemGroup>
 
+	<PropertyGroup>
+		<Use_Dalamud_FFXIVClientStructs>false</Use_Dalamud_FFXIVClientStructs>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\..\FFXIVClientStructs\FFXIVClientStructs\FFXIVClientStructs.csproj" Private="True" />
+		<ProjectReference Include="..\..\..\FFXIVClientStructs\InteropGenerator.Runtime\InteropGenerator.Runtime.csproj" Private="True" />
+	</ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="croizat.clib" Version="1.0.48" />
-    <PackageReference Include="KamiToolKit" Version="2.0.9" />
+    <PackageReference Include="croizat.clib" Version="1.0.51" />
+    <PackageReference Include="KamiToolKit" Version="2.0.10" />
   </ItemGroup>
 </Project>

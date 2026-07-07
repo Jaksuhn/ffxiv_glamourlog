@@ -1,14 +1,24 @@
 using AllaganLib.GameSheets.Sheets;
+using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace GlamourLog;
 
 internal readonly record struct CatalogBuildResult(Catalog Catalog, ReadOnlyCollection<GlamourSet> Sets, HashSet<uint> ArmoireItemIds);
 
-internal static class CatalogBuilder {
+internal static unsafe class CatalogBuilder {
+    internal static uint[] GetTradecraftDiscriminators() {
+        if (CurrencyManager.Instance() == null) {
+            Svc.Log.Warning($"CurrencyManager was somehow null. Tradecraft categories will probably be incorrect.");
+            return [];
+        }
+        return [.. new byte[] { 1, 2, 3, 4, 6, 7 }.Select(sid => CurrencyManager.Instance()->GetItemIdBySpecialId(sid)).Where(id => id != 0).Distinct()];
+    }
+
     internal static HashSet<uint> LoadArmoireItemIds()
         => [.. Cabinet.Where(x => x.RowId > 0 && x.Item.RowId > 0).Select(x => x.Item.RowId)];
 
-    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog, ItemCostLookup costsLookup, byte pvpSeries) {
+    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog, ItemCostLookup costsLookup) {
+        var pvpSeries = FFXIVClientStructs.FFXIV.Client.Game.UI.PvPProfile.Instance()->Series;
         var itemSheet = Svc.SheetManager.GetSheet<ItemSheet>();
         var specialShopByItemId = Catalog.BuildSpecialShopByReceiveItemId();
         var itemByRowId = Item.Where(i => i.RowId > 0).ToDictionary(i => i.RowId);
@@ -84,20 +94,17 @@ internal static class CatalogBuilder {
         return entries;
     }
 
-    internal static CatalogBuildResult Run(ItemCostLookup costsLookup, byte pvpSeries, IReadOnlyList<uint> tradecraftCurrencyItemIds) {
-        var catalog = Catalog.Build(costsLookup, tradecraftCurrencyItemIds);
+    internal static CatalogBuildResult Run(ItemCostLookup costsLookup) {
+        var catalog = Catalog.Build(costsLookup, GetTradecraftDiscriminators());
         var armoireItemIds = LoadArmoireItemIds();
-        var mirageSets = BuildClassifiedSets(catalog, costsLookup, pvpSeries);
+        var mirageSets = BuildClassifiedSets(catalog, costsLookup);
         var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets);
         var allSets = ApplySharedModelMetadata([.. mirageSets, .. miscArmoireEntries]).AsReadOnly();
         return new CatalogBuildResult(catalog, allSets, armoireItemIds);
     }
 
     internal static Dictionary<ItemModelInfo, List<uint>> BuildSharedModelItemGroups(IEnumerable<uint> itemIds)
-        => itemIds
-            .Distinct()
-            .GroupBy(static itemId => (ItemModelInfo)itemId)
-            .ToDictionary(g => g.Key, g => g.OrderBy(id => id).ToList());
+        => itemIds.Distinct().GroupBy(static itemId => (ItemModelInfo)itemId).ToDictionary(g => g.Key, g => g.OrderBy(id => id).ToList());
 
     internal static bool PieceHasSharedModelSiblings(uint itemId, Dictionary<ItemModelInfo, List<uint>> itemGroups) {
         ItemModelInfo model = itemId;

@@ -1,6 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using Lumina.Excel.Sheets;
 
 namespace GlamourLog.Features.PrismBox;
 
@@ -113,7 +112,7 @@ internal static unsafe class DresserStore {
 
             containers[filledCount] = row.Inventory;
             slots[filledCount] = (ushort)row.Slot;
-            sentPieces ??= new List<PrismBoxCrystallizeItem>(MaxStoreSlots);
+            sentPieces ??= [with(MaxStoreSlots)];
             sentPieces.Add(row);
             filledCount++;
         }
@@ -126,8 +125,8 @@ internal static unsafe class DresserStore {
         fixed (InventoryType* containerPtr = containers)
         fixed (ushort* slotPtr = slots) {
             var sent = storeIntoExisting
-                ? mirage->StoreOutfitIntoExistingPrismBoxEntry(prismBoxIndex, containerPtr, slotPtr)
-                : mirage->StoreOutfitAsNewPrismBoxEntry(setRow.RowId, containerPtr, slotPtr);
+                ? mirage->StoreExistingOutfit(prismBoxIndex, containerPtr, slotPtr)
+                : mirage->StoreNewOutfit(setRow.RowId, containerPtr, slotPtr);
             return new DirectStoreResult {
                 FilledCount = sent ? filledCount : -1,
                 SentPieces = sentPieces ?? [],

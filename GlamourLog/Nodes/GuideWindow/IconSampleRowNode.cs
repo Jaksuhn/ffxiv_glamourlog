@@ -1,5 +1,4 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using GlamourLog.Nodes;
 using GlamourLog.Windows.GuideWindow;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Enums;

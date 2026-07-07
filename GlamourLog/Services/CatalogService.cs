@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -74,9 +75,10 @@ internal sealed class CatalogService : IDisposable {
         }
     }
 
-    private void RunCatalogBuild(CancellationToken token) {
+    private unsafe void RunCatalogBuild(CancellationToken token) {
         try {
             token.ThrowIfCancellationRequested();
+            var pvpSeries = PvPProfile.Instance()->Series;
             var built = CatalogBuilder.Run(CostsLookup);
             token.ThrowIfCancellationRequested();
 

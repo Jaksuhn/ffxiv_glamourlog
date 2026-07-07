@@ -3,8 +3,6 @@ using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using GlamourLog.Windows.LogWindow;
-using KamiToolKit.Enums;
-using KamiToolKit.Nodes;
 
 namespace GlamourLog;
 

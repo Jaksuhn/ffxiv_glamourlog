@@ -4,9 +4,9 @@
     "net10.0-windows7.0": {
       "croizat.clib": {
         "type": "Direct",
-        "requested": "[1.0.50, )",
-        "resolved": "1.0.50",
-        "contentHash": "XOv06bOqYYxl1MVflW1yLhP6+KB6m0/LDM/4nJ9ofwifwRoDhaZnvvFcCeNXqJPjiBWrRKB5O1I89kgD3N33ww==",
+        "requested": "[1.0.51, )",
+        "resolved": "1.0.51",
+        "contentHash": "kwzuB8f8hxMR69xqLE2STb7dtqL4/D6/ZUb61CpvpXUMjrkYaIB1tY3/ggPkt+DtVEgPdisAHk98JjYsohagIA==",
         "dependencies": {
           "AllaganLib.GameSheets": "2.2.2",
           "LuminaSupplemental.Excel": "4.3.3"
@@ -26,9 +26,9 @@
       },
       "KamiToolKit": {
         "type": "Direct",
-        "requested": "[2.0.9, )",
-        "resolved": "2.0.9",
-        "contentHash": "ZpBHxoe1GY5ZME+Mh7wZM46u3miijTWK0MFArYzR1Pko7UM6oQNcnPAXCG94XkvMgY4pYtTeR+mvZiHqnPpaUw=="
+        "requested": "[2.0.10, )",
+        "resolved": "2.0.10",
+        "contentHash": "UgidPrUSf4yvpBnVwmBeNnRgHctyyKV0XL+tXdCxGpBDOeabhhRru/ijGwq+kAmzI0hAEoRdriE5pRSW3QyJ1Q=="
       },
       "AllaganLib.GameSheets": {
         "type": "Transitive",
