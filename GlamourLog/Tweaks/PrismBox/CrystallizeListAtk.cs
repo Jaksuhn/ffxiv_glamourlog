@@ -5,7 +5,7 @@ namespace GlamourLog.Features.PrismBox;
 // atk buffer read/write for crystallize tree node 11; layout captured from LoadAtkValues
 internal readonly struct CrystallizeAtkSlot {
     internal bool IsLeaf { get; init; }
-    internal AtkComponentTreeListItemType ItemType { get; init; }
+    internal TreeListItemType ItemType { get; init; }
     internal int SourceIndex { get; init; } // index into agent CrystallizeItems / _categoryRows
 }
 
@@ -112,8 +112,8 @@ internal static unsafe class CrystallizeListAtk {
             var u1 = ReadUInt(atkValues, baseIndex + 1);
 
             if (IsTreeItemType(u0)) {
-                var itemType = (AtkComponentTreeListItemType)u0;
-                var isLeaf = itemType is AtkComponentTreeListItemType.Leaf or AtkComponentTreeListItemType.LastLeafInGroup;
+                var itemType = (TreeListItemType)u0;
+                var isLeaf = itemType is TreeListItemType.None or TreeListItemType.LastItemInGroup;
                 var sourceIndex = isLeaf ? (int)u1 : -1;
                 if (isLeaf && !IsValidSourceIndex(sourceIndex, categoryRowCount))
                     isLeaf = false;
@@ -130,7 +130,7 @@ internal static unsafe class CrystallizeListAtk {
             var flatIsLeaf = IsValidSourceIndex(flatIndex, categoryRowCount);
             slots[slot] = new CrystallizeAtkSlot {
                 IsLeaf = flatIsLeaf,
-                ItemType = AtkComponentTreeListItemType.Leaf,
+                ItemType = TreeListItemType.None,
                 SourceIndex = flatIsLeaf ? flatIndex : -1,
             };
         }
@@ -208,13 +208,13 @@ internal static unsafe class CrystallizeListAtk {
     }
 
     private static bool IsRealHeader(CrystallizeAtkSlot entry)
-        => !entry.IsLeaf && entry.ItemType is AtkComponentTreeListItemType.GroupHeader or AtkComponentTreeListItemType.CollapsibleGroupHeader;
+        => !entry.IsLeaf && entry.ItemType is TreeListItemType.SectionHeader or TreeListItemType.Group;
 
     private static bool IsHeaderType(uint value)
-        => value is (uint)AtkComponentTreeListItemType.GroupHeader or (uint)AtkComponentTreeListItemType.CollapsibleGroupHeader;
+        => value is (uint)TreeListItemType.SectionHeader or (uint)TreeListItemType.Group;
 
     private static bool IsLeafType(uint value)
-        => value is (uint)AtkComponentTreeListItemType.Leaf or (uint)AtkComponentTreeListItemType.LastLeafInGroup;
+        => value is (uint)TreeListItemType.None or (uint)TreeListItemType.LastItemInGroup;
 
     internal static void CopySlotToTreeItem(AtkValue[] atkValues, int slot, AtkComponentTreeListItem* item, CrystallizeAtkBufferLayout layout) {
         var uintBase = layout.UintValuesOffset + slot * layout.UintValuesPerItem;
@@ -366,7 +366,7 @@ internal static unsafe class CrystallizeListAtk {
 
         // flat row: coerce u0 to Leaf type so u0=2..4 isn't treated as header
         atkValues[baseIndex].Type = AtkValueType.UInt;
-        atkValues[baseIndex].UInt = (uint)AtkComponentTreeListItemType.Leaf;
+        atkValues[baseIndex].UInt = (uint)TreeListItemType.None;
         atkValues[baseIndex + 1].Type = AtkValueType.UInt;
         atkValues[baseIndex + 1].UInt = (uint)displayLeafIndex;
     }
@@ -375,7 +375,7 @@ internal static unsafe class CrystallizeListAtk {
         => sourceIndex >= 0 && (categoryRowCount <= 0 || sourceIndex < categoryRowCount);
 
     private static bool IsTreeItemType(uint value)
-        => value is <= (uint)AtkComponentTreeListItemType.GroupHeader;
+        => value is <= (uint)TreeListItemType.SectionHeader;
 
     private static uint ReadUInt(AtkValue[] atkValues, int index) {
         if ((uint)index >= (uint)atkValues.Length)

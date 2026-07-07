@@ -157,7 +157,7 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
                 _displayToSource = [];
                 _needsSnapshot = false;
                 _preserveCategoryRowsForRefresh = false;
-                Svc.Log.Information($"[PrismBox] keeping full snapshot for category {data->CrystallizeCategory} (current count {currentCount}, snapshot { _categoryRows.Length})");
+                Svc.Log.Information($"[PrismBox] keeping full snapshot for category {data->CrystallizeCategory} (current count {currentCount}, snapshot {_categoryRows.Length})");
                 return true;
             }
         }
@@ -276,7 +276,8 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
             _categoryRows = [];
             _displayToSource = [];
             _snapshotCategory = int.MinValue;
-        } else {
+        }
+        else {
             _displayToSource = [];
         }
 
