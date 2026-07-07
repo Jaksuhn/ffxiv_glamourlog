@@ -19,7 +19,6 @@ namespace GlamourLog;
  * ipc for entrusting
  * ipc to check if a dungeon is done
  * smarter AD loops
- * mark hq outfits as owned
  */
 public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugin {
     public static Configuration C { get; set; } = null!;
