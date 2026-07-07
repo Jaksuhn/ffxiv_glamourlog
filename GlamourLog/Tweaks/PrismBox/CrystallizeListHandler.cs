@@ -7,19 +7,28 @@ namespace GlamourLog.Features.PrismBox;
 
 internal sealed class CrystallizeListHandler : IAsyncDisposable {
     private const int MaxCategoryItems = 140;
+    private const int CategorySlotCount = 6;
 
     private readonly IPrismBoxRowFilter[] _filters;
     private readonly CrystallizeNativeTree _nativeTree;
     private readonly AddonController<AtkUnitBase> _addonController;
+    private readonly CachedCategorySnapshot?[] _categorySnapshotByIndex = new CachedCategorySnapshot?[CategorySlotCount];
 
     private PrismBoxCrystallizeItem[] _categoryRows = [];
     private int[] _displayToSource = [];
     private int _snapshotCategory = int.MinValue;
-    private bool _needsSnapshot;
+    private int _trackedCategory = int.MinValue;
+    private bool _needsSnapshot = true;
     private bool _disposed;
     private byte _filterFlagsSnapshot = byte.MaxValue;
     private int _refreshRecursionDepth;
     private bool _preserveCategoryRowsForRefresh;
+    private int _emptyCategoryRefreshPasses;
+
+    private sealed class CachedCategorySnapshot {
+        public required PrismBoxCrystallizeItem[] Rows;
+        public required byte FilterFlags;
+    }
 
     public unsafe CrystallizeListHandler() {
         _filters = [
@@ -32,6 +41,7 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
             AddonName = CrystallizeNativeTree.AddonName,
             OnPreRefresh = OnPreRefresh,
             OnRefresh = OnPostRefresh,
+            OnUpdate = OnAddonUpdate,
             OnFinalize = OnFinalize,
         };
         _addonController.Enable();
@@ -40,6 +50,31 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
     private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
 
     internal void OnConfigChanged() => Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
+
+    internal ReadOnlySpan<PrismBoxCrystallizeItem> GetFullCategorySnapshot(int categoryIndex)
+        => _snapshotCategory == categoryIndex ? _categoryRows : ReadOnlySpan<PrismBoxCrystallizeItem>.Empty;
+
+    internal unsafe void RestoreAgentBufferForCurrentCategory(MiragePrismPrismBoxData* data) {
+        if (data is null || _categoryRows.Length == 0 || data->CrystallizeCategory != _snapshotCategory)
+            return;
+
+        RestoreFullCategory(data);
+    }
+
+    internal unsafe void NotifyItemStored(uint itemId) {
+        var baseId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (baseId == 0)
+            return;
+
+        _needsSnapshot = true;
+        _preserveCategoryRowsForRefresh = false;
+        if (_snapshotCategory is >= 0 and < CategorySlotCount)
+            _categorySnapshotByIndex[_snapshotCategory] = null;
+
+        var addon = GetAddon();
+        if (addon is not null)
+            RequestAddonRefresh(addon);
+    }
 
     private unsafe void ApplyConfigChange() {
         var addon = GetAddon();
@@ -50,7 +85,8 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
         }
 
         if (!IsFilteringActive) {
-            RestoreFullCategory(data);
+            if (_categoryRows.Length > 0 && data->CrystallizeCategory == _snapshotCategory)
+                RestoreFullCategory(data);
             _displayToSource = [];
             Svc.Log.Information($"[PrismBox] filters disabled; restored full category {data->CrystallizeCategory}");
             addon->OnRefresh(0, null);
@@ -74,6 +110,8 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
         var data = GetData();
         if (data is null)
             return;
+
+        EnsureCategoryTracked(data);
 
         if (TryDetectFilterFlagsChange(data)) {
             _needsSnapshot = true;
@@ -114,12 +152,17 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
     }
 
     private unsafe void ApplyFilterAfterRefresh(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        EnsureCategoryTracked(data);
+
         if (TryDetectFilterFlagsChange(data)) {
             ResetSnapshotState(preserveCategoryRows: true);
             Svc.Log.Information($"[PrismBox] preserving snapshot while refreshing after filter toggle");
         }
 
+        InvalidateSnapshotIfAgentStillLoading(data);
+
         if (_needsSnapshot && !TryCaptureCategorySnapshot(data)) {
+            TryCommitEmptyCategoryIfNativeSettled(addon, data);
             RequestAddonRefresh(addon);
             return;
         }
@@ -138,6 +181,24 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
 
         if (!TryApplyFilterPipeline(addon, data)) {
             Svc.Log.Warning($"[PrismBox] filter pipeline stalled for category {data->CrystallizeCategory}");
+            RequestAddonRefresh(addon);
+        }
+    }
+
+    private unsafe void OnAddonUpdate(AtkUnitBase* addon) {
+        if (addon is null || !addon->IsVisible || !IsFilteringActive)
+            return;
+
+        var data = GetData();
+        if (data is null)
+            return;
+
+        if (TryDetectCategoryDrift(addon, data))
+            return;
+
+        if (TryDetectFilterFlagsChange(data)) {
+            if (_categoryRows.Length > 0)
+                RestoreFullCategory(data);
             RequestAddonRefresh(addon);
         }
     }
@@ -166,33 +227,156 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
         ClearStaleCrystallizeTail(data);
 
         var reported = (int)data->CrystallizeItemCount;
-        var scanned = ScanPopulatedCategoryItemCount(data);
-        var count = Math.Max(reported, scanned);
+        if (reported == 0)
+            return false;
 
-        if (count == 0) {
-            _categoryRows = [];
-            _displayToSource = [];
-            _needsSnapshot = false;
-            _snapshotCategory = data->CrystallizeCategory;
-            return true;
-        }
-
-        for (var i = 0; i < count; i++) {
+        for (var i = 0; i < reported; i++) {
             if (data->CrystallizeItems[i].ItemId == 0)
                 return false;
         }
 
-        var rows = new PrismBoxCrystallizeItem[count];
-        for (var i = 0; i < count; i++)
+        var scanned = ScanPopulatedCategoryItemCount(data);
+        if (scanned > reported)
+            return false;
+
+        if (_categoryRows.Length > 0 && data->CrystallizeCategory == _snapshotCategory) {
+            var minExpected = _categoryRows.Length - 1;
+            if (reported < minExpected && scanned < minExpected)
+                return false;
+        }
+
+        var rows = new PrismBoxCrystallizeItem[reported];
+        for (var i = 0; i < reported; i++)
             rows[i] = data->CrystallizeItems[i];
 
         _categoryRows = rows;
         _displayToSource = [];
         _needsSnapshot = false;
         _snapshotCategory = data->CrystallizeCategory;
+        _trackedCategory = data->CrystallizeCategory;
+        _emptyCategoryRefreshPasses = 0;
+        SaveCategorySnapshotToCache(data);
         Svc.Log.Information($"[PrismBox] captured {rows.Length} rows for category {data->CrystallizeCategory} (flags=0x{data->CrystallizeFilterFlags:X2})");
         return true;
     }
+
+    private unsafe void TryCommitEmptyCategoryIfNativeSettled(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        if (data->CrystallizeCategory != _trackedCategory)
+            return;
+
+        var reported = (int)data->CrystallizeItemCount;
+        var scanned = ScanPopulatedCategoryItemCount(data);
+        if (reported != 0 || scanned != 0) {
+            _emptyCategoryRefreshPasses = 0;
+            return;
+        }
+
+        _nativeTree.Resolve(addon);
+        _nativeTree.CaptureAtkSnapshot(addon);
+        if (addon->AtkValuesCount > 0)
+            _nativeTree.ParseLayout(0, force: true);
+
+        if (_nativeTree.NativeSlotCount > 0) {
+            _emptyCategoryRefreshPasses = 0;
+            return;
+        }
+
+        _emptyCategoryRefreshPasses++;
+        if (_emptyCategoryRefreshPasses < 2)
+            return;
+
+        _categoryRows = [];
+        _displayToSource = [];
+        _needsSnapshot = false;
+        _snapshotCategory = data->CrystallizeCategory;
+        _trackedCategory = data->CrystallizeCategory;
+        _emptyCategoryRefreshPasses = 0;
+        SaveCategorySnapshotToCache(data);
+    }
+
+    private unsafe void InvalidateSnapshotIfAgentStillLoading(MiragePrismPrismBoxData* data) {
+        if (_needsSnapshot || _categoryRows.Length == 0)
+            return;
+        if (data->CrystallizeCategory != _snapshotCategory)
+            return;
+        if (data->CrystallizeItemCount <= _categoryRows.Length)
+            return;
+
+        InvalidateCategorySnapshotCache(data->CrystallizeCategory);
+        _needsSnapshot = true;
+    }
+
+    private unsafe void EnsureCategoryTracked(MiragePrismPrismBoxData* data) {
+        var category = data->CrystallizeCategory;
+
+        if (!_needsSnapshot && category == _snapshotCategory && _categoryRows.Length > 0)
+            return;
+
+        if (category == _trackedCategory)
+            return;
+
+        _trackedCategory = category;
+        _displayToSource = [];
+        _emptyCategoryRefreshPasses = 0;
+
+        if (TryRestoreCategorySnapshotFromCache(data, category)) {
+            _snapshotCategory = category;
+            _needsSnapshot = false;
+            return;
+        }
+
+        _categoryRows = [];
+        _snapshotCategory = int.MinValue;
+        _needsSnapshot = true;
+        _preserveCategoryRowsForRefresh = false;
+        ClearStaleCrystallizeTail(data);
+        _nativeTree.InvalidateAtkCache();
+    }
+
+    private unsafe bool TryDetectCategoryDrift(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
+        if (_needsSnapshot || _categoryRows.Length == 0)
+            return false;
+        if (data->CrystallizeCategory == _snapshotCategory)
+            return false;
+
+        EnsureCategoryTracked(data);
+        RequestAddonRefresh(addon);
+        return true;
+    }
+
+    private unsafe void SaveCategorySnapshotToCache(MiragePrismPrismBoxData* data) {
+        var category = data->CrystallizeCategory;
+        if (!IsValidCategory(category))
+            return;
+
+        _categorySnapshotByIndex[category] = new CachedCategorySnapshot {
+            Rows = [.. _categoryRows],
+            FilterFlags = data->CrystallizeFilterFlags,
+        };
+    }
+
+    private unsafe bool TryRestoreCategorySnapshotFromCache(MiragePrismPrismBoxData* data, int category) {
+        if (!IsValidCategory(category))
+            return false;
+
+        var cached = _categorySnapshotByIndex[category];
+        if (cached is null)
+            return false;
+        if (cached.FilterFlags != data->CrystallizeFilterFlags)
+            return false;
+
+        _categoryRows = [.. cached.Rows];
+        _displayToSource = [];
+        return true;
+    }
+
+    private void InvalidateCategorySnapshotCache(int category) {
+        if (IsValidCategory(category))
+            _categorySnapshotByIndex[category] = null;
+    }
+
+    private static bool IsValidCategory(int category)
+        => (uint)category < CategorySlotCount;
 
     private unsafe bool TryApplyFilterPipeline(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         _nativeTree.Resolve(addon);
@@ -276,6 +460,7 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
             _categoryRows = [];
             _displayToSource = [];
             _snapshotCategory = int.MinValue;
+            _trackedCategory = int.MinValue;
         }
         else {
             _displayToSource = [];
@@ -380,8 +565,12 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
         _displayToSource = [];
         _needsSnapshot = true;
         _snapshotCategory = int.MinValue;
+        _trackedCategory = int.MinValue;
         _preserveCategoryRowsForRefresh = false;
+        _emptyCategoryRefreshPasses = 0;
         _filterFlagsSnapshot = byte.MaxValue;
+        for (var i = 0; i < CategorySlotCount; i++)
+            _categorySnapshotByIndex[i] = null;
         _nativeTree.InvalidateAll();
     }
 
