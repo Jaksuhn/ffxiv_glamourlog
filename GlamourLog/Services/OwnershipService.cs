@@ -307,6 +307,13 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     internal bool IsItemInGlamourDresser(uint itemId) => ItemUtil.GetBaseId(itemId).ItemId is not 0 and var id && (IsLooseInDresser(id) || IsPieceInMirageOutfitSlot(id));
 
+    internal bool IsPieceOwned(uint itemId, OwnershipSnapshot snap) {
+        itemId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (itemId == 0)
+            return false;
+        return snap.OwnedItems.Contains(itemId) || IsPieceInMirageOutfitSlot(itemId);
+    }
+
     /// <summary>
     /// Crystallize picker: hide when loose in the dresser, or when every mirage outfit that includes
     /// this piece already has it deposited. Still show when at least one outfit set can accept it.

@@ -16,8 +16,6 @@ namespace GlamourLog;
  * setting: ignore armoire warning if item in dresser is dyed (can't really do as dyed info isn't cached in itemfinder
  * rename glam plates tweak
  * loot window alert for missing pieces (and/or just general inventory change alert)
- * ipc for entrusting
- * ipc to check if a dungeon is done
  * smarter AD loops
  */
 public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugin {

@@ -15,6 +15,8 @@ internal sealed class IpcProvider : IDisposable {
         RegisterFunc("IsItemInDresser", (uint itemId) => IsItemInDresser(itemId));
         RegisterFunc("IsSetComplete", (uint setItemId) => IsSetComplete(setItemId));
         RegisterFunc("GetItemsFromContent", (uint cfcId) => GetItemsFromContent(cfcId));
+        RegisterFunc("IsContentComplete", (uint cfcId) => IsContentComplete(cfcId));
+        RegisterFunc("EntrustAll", () => Svc.Commands.ProcessCommand("/glamourlog store"));
     }
 
     public void Dispose() {
@@ -76,6 +78,43 @@ internal sealed class IpcProvider : IDisposable {
         return snap.OwnedSets.Any(s => s.ItemId == setItemId);
     }
 
+    private static bool IsContentComplete(uint cfcId) {
+        if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })
+            return false;
+        var catalog = Svc.Get<CatalogService>();
+        if (!catalog.CatalogReady)
+            return false;
+
+        var pieces = GetOutfitPiecesFromContent(cfcId, catalog);
+        if (pieces.Count == 0)
+            return false;
+
+        var ownership = Svc.Get<OwnershipService>();
+        var snap = ownership.CaptureSnapshot();
+        return pieces.All(id => ownership.IsPieceOwned(id, snap));
+    }
+
+    private static List<uint> GetOutfitPiecesFromContent(uint cfcId, CatalogService catalog) {
+        var cache = Svc.SheetManager.ItemInfoCache;
+        var result = new HashSet<uint>();
+        foreach (var set in catalog.GlamourSets) {
+            foreach (var pieceId in set.Items) {
+                if (pieceId == 0 || result.Contains(pieceId))
+                    continue;
+                if (cache.GetItemSources(pieceId) is not { Count: > 0 } list)
+                    continue;
+                if (list.Any(src => SourcesFromContent(cfcId, src)))
+                    result.Add(pieceId);
+            }
+        }
+
+        return [.. result.OrderBy(x => x)];
+    }
+
+    private static bool SourcesFromContent(uint cfcId, ItemSource src)
+        => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId
+            || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId;
+
     private static List<uint> GetItemsFromContent(uint cfcId) {
         if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })
             return [];
@@ -84,12 +123,8 @@ internal sealed class IpcProvider : IDisposable {
         foreach (var row in Item.Where(i => i.RowId > 0)) {
             if (cache.GetItemSources(row.RowId) is not { Count: > 0 } list)
                 continue;
-            foreach (var src in list) {
-                if (src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId) {
-                    result.Add(row.RowId);
-                    break;
-                }
-            }
+            if (list.Any(src => SourcesFromContent(cfcId, src)))
+                result.Add(row.RowId);
         }
 
         return [.. result.OrderBy(x => x)];
