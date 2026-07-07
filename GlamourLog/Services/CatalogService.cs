@@ -1,5 +1,4 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -56,7 +55,7 @@ internal sealed class CatalogService : IDisposable {
         RequestCatalogBuild();
     }
 
-    private unsafe void RequestCatalogBuild() {
+    private void RequestCatalogBuild() {
         if (_catalogBuilt)
             return;
         lock (_catalogRequestLock) {
@@ -66,20 +65,19 @@ internal sealed class CatalogService : IDisposable {
             _catalogCts?.Dispose();
             _catalogCts = new CancellationTokenSource();
             var token = _catalogCts.Token;
-            Svc.Framework.RunOnFrameworkThread(() => {
-                if (token.IsCancellationRequested)
-                    return;
-                var pvpSeries = PvPProfile.Instance() is not null and var pvp ? pvp->Series : (byte)0;
-                uint[] tradecraftIds = CurrencyManager.Instance() is not null and var cm ? [.. new byte[] { 1, 2, 3, 4, 6, 7 }.Select(sid => cm->GetItemIdBySpecialId(sid)).Where(id => id != 0).Distinct()] : [];
-                _ = Task.Run(() => RunCatalogBuild(pvpSeries, tradecraftIds, token), token);
-            });
+            _ = Task.Run(async () => {
+                static unsafe bool CurrencyManagerReady() => CurrencyManager.Instance() != null; // unnecessary unsafe modifier my fucking ass, microslop
+                while (!CurrencyManagerReady())
+                    await Task.Delay(1000, token);
+                RunCatalogBuild(token);
+            }, token);
         }
     }
 
-    private void RunCatalogBuild(byte pvpSeries, uint[] tradecraftIds, CancellationToken token) {
+    private void RunCatalogBuild(CancellationToken token) {
         try {
             token.ThrowIfCancellationRequested();
-            var built = CatalogBuilder.Run(CostsLookup, pvpSeries, tradecraftIds);
+            var built = CatalogBuilder.Run(CostsLookup);
             token.ThrowIfCancellationRequested();
 
             lock (_glamourDataLock) {
