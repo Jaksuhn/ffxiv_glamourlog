@@ -23,3 +23,11 @@ internal sealed class HideNonOutfitItemsFilter : IPrismBoxRowFilter {
     public bool IsEnabled => C.HideCrystallizeNonOutfitItems;
     public bool ShouldHide(uint itemId) => !MirageStoreSetItemLookup.TryGetRow(itemId, out _);
 }
+
+internal static class PrismBoxFilters {
+    internal static IPrismBoxRowFilter[] Create() => [
+        new HideDresserDepositedFilter(),
+        new HideArmoireEligibleFilter(),
+        new HideNonOutfitItemsFilter(),
+    ];
+}

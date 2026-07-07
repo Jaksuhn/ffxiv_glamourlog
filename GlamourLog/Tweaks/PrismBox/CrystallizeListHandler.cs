@@ -31,11 +31,7 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
     }
 
     public unsafe CrystallizeListHandler() {
-        _filters = [
-            new HideDresserDepositedFilter(),
-            new HideArmoireEligibleFilter(),
-            new HideNonOutfitItemsFilter(),
-        ];
+        _filters = PrismBoxFilters.Create();
         _nativeTree = new CrystallizeNativeTree();
         _addonController = new AddonController<AtkUnitBase> {
             AddonName = CrystallizeNativeTree.AddonName,
@@ -50,16 +46,6 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
     private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
 
     internal void OnConfigChanged() => Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
-
-    internal ReadOnlySpan<PrismBoxCrystallizeItem> GetFullCategorySnapshot(int categoryIndex)
-        => _snapshotCategory == categoryIndex ? _categoryRows : ReadOnlySpan<PrismBoxCrystallizeItem>.Empty;
-
-    internal unsafe void RestoreAgentBufferForCurrentCategory(MiragePrismPrismBoxData* data) {
-        if (data is null || _categoryRows.Length == 0 || data->CrystallizeCategory != _snapshotCategory)
-            return;
-
-        RestoreFullCategory(data);
-    }
 
     internal unsafe void NotifyItemStored(uint itemId) {
         var baseId = ItemUtil.GetBaseId(itemId).ItemId;
@@ -521,16 +507,6 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
             Svc.Log.Debug($"[PrismBox] {phase}: category={data->CrystallizeCategory}, flags=0x{data->CrystallizeFilterFlags:X2}, rows={sourceCount}, visible={visibleCount}");
     }
 
-    private static unsafe int ScanPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
-        var lastIndex = -1;
-        for (var i = 0; i < MaxCategoryItems; i++) {
-            if (data->CrystallizeItems[i].ItemId != 0)
-                lastIndex = i;
-        }
-
-        return lastIndex >= 0 ? lastIndex + 1 : 0;
-    }
-
     private static unsafe void ClampCrystallizeSelection(MiragePrismPrismBoxData* data, uint previousSelectedItemId) {
         var count = data->CrystallizeItemCount;
         if (count == 0) {
@@ -583,6 +559,19 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
     private static unsafe MiragePrismPrismBoxData* GetData() {
         var agent = AgentMiragePrismPrismBox.Instance();
         return agent is null ? null : agent->Data;
+    }
+
+    private static unsafe int ScanPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
+        var lastIndex = -1;
+        for (var i = 0; i < MaxCategoryItems; i++) {
+            if (data->CrystallizeItems[i].ItemId != 0)
+                lastIndex = i;
+        }
+
+        if (lastIndex >= 0)
+            return lastIndex + 1;
+
+        return data->CrystallizeItemCount > 0 ? data->CrystallizeItemCount : 0;
     }
 
     public async ValueTask DisposeAsync() {

@@ -3,9 +3,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Features.PrismBox;
 
-internal unsafe delegate void CrystallizeNativePopulateHandler(AtkUnitBase* addon, int nativeItemCount);
-
-// atk tree list (node #11) on MiragePrismPrismBoxCrystallize — hook LoadAtkValues for buffer layout, repopulate from filtered snapshot
+// hook LoadAtkValues for buffer layout, repopulate from filtered snapshot
 internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     internal const string AddonName = "MiragePrismPrismBoxCrystallize";
     private const uint ItemTreeListNodeId = 11;
@@ -23,8 +21,6 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     internal AtkComponentTreeList* TreeList { get; private set; }
     internal CrystallizeAtkSlot[] Layout { get; private set; } = []; // parsed tree/leaf slots from Snapshot
     internal AtkValue[] Snapshot { get; private set; } = [];
-
-    internal CrystallizeNativePopulateHandler? AfterNativePopulate;
 
     internal CrystallizeNativeTree() {
         _loadAtkValuesHook = Svc.Hook.HookFromAddress<AtkComponentTreeList.Delegates.LoadAtkValues>((nint)AtkComponentTreeList.MemberFunctionPointers.LoadAtkValues, LoadAtkValuesDetour);
@@ -80,19 +76,6 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
             ((AtkComponentList*)tree)->IsItemInteractionEnabled = show;
         }
         addon->UldManager.UpdateDrawNodeList();
-    }
-
-    internal void ClearStaleDisplay(AtkUnitBase* addon) {
-        var tree = TreeList;
-        if (tree is null || !HasBufferLayout)
-            return;
-
-        CaptureAtkSnapshot(addon);
-        if (Snapshot.Length == 0)
-            return;
-
-        ParseLayout(0, force: true);
-        RepopulateFiltered(addon, true, 0, [], _ => true, _ => false);
     }
 
     internal void CaptureAtkSnapshot(AtkUnitBase* addon) {
@@ -177,25 +160,13 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
 
     public void Dispose() => _loadAtkValuesHook?.Dispose();
 
-    private void LoadAtkValuesDetour(
-        AtkComponentTreeList* thisPtr,
-        int atkValuesCount,
-        AtkValue* atkValues,
-        int uintValuesOffset,
-        int stringValuesOffset,
-        int uintValuesCountPerItem,
-        int stringValuesCountPerItem,
-        int itemCount,
-        ListComponentCallBackInterface* callBackInterface) {
+    private void LoadAtkValuesDetour(AtkComponentTreeList* thisPtr, int atkValuesCount, AtkValue* atkValues, int uintValuesOffset, int stringValuesOffset, int uintValuesCountPerItem, int stringValuesCountPerItem, int itemCount, ListComponentCallBackInterface* callBackInterface) {
         var addon = Svc.GameGui.GetAddonByName<AtkUnitBase>(AddonName);
         var isTargetTree = addon is not null && IsTargetTree(thisPtr, addon);
         if (itemCount > 0 && isTargetTree)
             TryCaptureBufferLayout(thisPtr, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, atkValuesCount);
 
         _loadAtkValuesHook!.Original(thisPtr, atkValuesCount, atkValues, uintValuesOffset, stringValuesOffset, uintValuesCountPerItem, stringValuesCountPerItem, itemCount, callBackInterface);
-
-        if (itemCount > 0 && isTargetTree)
-            AfterNativePopulate?.Invoke(addon, itemCount);
     }
 
     private static bool IsTargetTree(AtkComponentTreeList* tree, AtkUnitBase* addon) {
