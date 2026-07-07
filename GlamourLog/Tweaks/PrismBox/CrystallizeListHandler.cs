@@ -24,6 +24,7 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
     private int _refreshRecursionDepth;
     private bool _preserveCategoryRowsForRefresh;
     private int _emptyCategoryRefreshPasses;
+    private int _deferredRefreshDepth;
 
     private sealed class CachedCategorySnapshot {
         public required PrismBoxCrystallizeItem[] Rows;
@@ -47,11 +48,26 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
 
     internal void OnConfigChanged() => Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
 
+    /// <summary>Batch addon refreshes until disposed.</summary>
+    internal IDisposable DeferRefresh() {
+        _deferredRefreshDepth++;
+        return new DeferredRefreshScope(this);
+    }
+
     internal unsafe void NotifyItemStored(uint itemId) {
-        var baseId = ItemUtil.GetBaseId(itemId).ItemId;
-        if (baseId == 0)
+        if (ItemUtil.GetBaseId(itemId).ItemId == 0)
             return;
 
+        InvalidateCategoryCaches();
+        if (_deferredRefreshDepth > 0)
+            return;
+
+        var addon = GetAddon();
+        if (addon is not null)
+            RequestAddonRefresh(addon);
+    }
+
+    private void InvalidateCategoryCaches() {
         _needsSnapshot = true;
         _preserveCategoryRowsForRefresh = false;
         _categoryRows = [];
@@ -59,10 +75,26 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
         _snapshotCategory = int.MinValue;
         for (var i = 0; i < CategorySlotCount; i++)
             _categorySnapshotByIndex[i] = null;
+    }
+
+    private void FlushDeferredRefresh() {
+        if (--_deferredRefreshDepth > 0 || !_needsSnapshot)
+            return;
+
+        Svc.Framework.RunOnFrameworkThread(ApplyDeferredRefresh);
+    }
+
+    private unsafe void ApplyDeferredRefresh() {
+        if (!_needsSnapshot)
+            return;
 
         var addon = GetAddon();
         if (addon is not null)
             RequestAddonRefresh(addon);
+    }
+
+    private sealed class DeferredRefreshScope(CrystallizeListHandler owner) : IDisposable {
+        public void Dispose() => owner.FlushDeferredRefresh();
     }
 
     private unsafe void ApplyConfigChange() {
