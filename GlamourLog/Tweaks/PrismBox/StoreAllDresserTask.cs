@@ -14,6 +14,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
     private readonly DresserStoreScanner _scanner = new();
 
     protected override async Task Execute() {
+        using var scope = BeginScope(nameof(StoreAllDresserTask));
         ErrorIf(!IsPrismBoxReady(), "Dresser not ready");
 
         while (true) {

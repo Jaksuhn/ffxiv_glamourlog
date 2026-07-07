@@ -68,8 +68,11 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
 
         _needsSnapshot = true;
         _preserveCategoryRowsForRefresh = false;
-        if (_snapshotCategory is >= 0 and < CategorySlotCount)
-            _categorySnapshotByIndex[_snapshotCategory] = null;
+        _categoryRows = [];
+        _displayToSource = [];
+        _snapshotCategory = int.MinValue;
+        for (var i = 0; i < CategorySlotCount; i++)
+            _categorySnapshotByIndex[i] = null;
 
         var addon = GetAddon();
         if (addon is not null)
@@ -387,11 +390,11 @@ internal sealed class CrystallizeListHandler : IAsyncDisposable {
         if (_displayToSource.Length == 0) {
             ApplyEmptyCategory(data);
             Svc.Log.Information($"[PrismBox] no visible rows after filtering category {data->CrystallizeCategory}");
-            return true;
         }
-
-        ProjectVisibleRows(data);
-        LogFilterSummary("apply", data, _categoryRows.Length, _displayToSource.Length);
+        else {
+            ProjectVisibleRows(data);
+            LogFilterSummary("apply", data, _categoryRows.Length, _displayToSource.Length);
+        }
 
         _nativeTree.CaptureAtkSnapshot(addon);
         if (!_nativeTree.HasBufferLayout)
