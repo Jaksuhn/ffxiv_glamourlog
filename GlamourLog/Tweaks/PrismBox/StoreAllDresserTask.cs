@@ -1,4 +1,5 @@
 using clib.TaskSystem;
+using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -76,7 +77,13 @@ internal sealed class StoreAllDresserTask : TaskBase {
         Log($"Stored {result.FilledCount} slot(s) for set {setName}#{scan.Row.RowId} (requested {rows.Count})");
         await WaitForStored(result.SentPieces);
         MarkStored(result.SentPieces.Select(p => p.ItemId));
-        Svc.Toasts.ShowQuest($"Stored {result.FilledCount} items in set {setName}");
+
+        var builder = new SeStringBuilder()
+            .Append($"Stored {result.FilledCount} item{(result.FilledCount is 1 ? string.Empty : 's')} in ")
+            .AddUiForeground(549).AddUiGlow(550)
+            .Append($"{setName}")
+            .AddUiGlowOff().AddUiForegroundOff();
+        Svc.Toasts.ShowQuest(builder.BuiltString);
         await NextFrame(2);
     }
 

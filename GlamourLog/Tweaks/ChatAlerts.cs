@@ -49,8 +49,10 @@ internal class ChatAlerts : IDisposable {
             }
         }
 
-        if (catalog.FindCatalogSetForItem(row.RowId) is { } primarySet)
-            message.Message.Append(" Part of the set ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
+        if (catalog.FindCatalogSetForItem(row.RowId) is { } primarySet) {
+            var ownedCount = ownership.GetOwnedPieceCountForSet(primarySet, snap with { OwnedItems = ownedAfter });
+            message.Message.Append($" {ownedCount}/{primarySet.Items.Count} of the set ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
+        }
     }
 
     private static bool OwnsAllPieces(GlamourSet set, HashSet<uint> owned)
