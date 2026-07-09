@@ -23,7 +23,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private int _categoryItemCount;
     private uint _categoryIndex = uint.MaxValue;
     private int _pendingFullListCount;
-    private bool _needsCategorySnapshot;
     private int _snapshotCapturePasses;
 
     public unsafe CabinetListHandler() {
@@ -73,12 +72,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             return;
 
         EnsureCategoryTracked(addon);
-
-        // re-filter from the existing category snapshot when possible
-        if (HasValidCategorySnapshot(addon) && TryApplyFilterPipeline(addon, agent))
-            return;
-
-        _needsCategorySnapshot = true;
         addon->OnRefresh(0, null);
     }
 
@@ -87,7 +80,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             return;
 
         Svc.Framework.RunOnFrameworkThread(() => {
-            _needsCategorySnapshot = true;
             ClearFilterLogSignatures();
             if (Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName) is not null and var addon)
                 addon->OnRefresh(0, null);
@@ -99,7 +91,15 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             return;
 
         CabinetGearsetLookup.Invalidate();
+
+        var agent = AgentCabinet.Instance();
+        if (agent is null)
+            return;
+
         EnsureCategoryTracked(addon);
+
+        if (_categoryRows.Length > 0 && _categoryIndex == addon->CategoryIndex)
+            RestoreFullCategory(agent, addon);
     }
 
     private unsafe void OnPostRefresh(AddonCabinet* addon) {
@@ -130,24 +130,22 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private unsafe void ApplyFilterAfterNativeRefresh(AddonCabinet* addon, AgentCabinet* agent) {
         EnsureCategoryTracked(addon);
 
-        if (_needsCategorySnapshot || !HasValidCategorySnapshot(addon)) {
-            if (!TryCaptureCategorySnapshot(agent, addon)) {
-                LogSnapshotUnavailableOnce(addon, agent);
-                if (++_snapshotCapturePasses < 8)
-                    addon->OnRefresh(0, null);
-                return;
-            }
+        if (!TryCaptureCategorySnapshot(agent, addon)) {
+            LogSnapshotUnavailableOnce(addon, agent);
+            if (++_snapshotCapturePasses < 8)
+                addon->OnRefresh(0, null);
+            return;
         }
 
-        if (_categoryRows.Length == 0)
+        if (_categoryRows.Length == 0) {
+            ApplyEmptyCategory(agent, addon);
+            LogFilterOnState(nameof(OnPostRefresh), addon, agent);
             return;
+        }
 
         TryApplyFilterPipeline(addon, agent);
         LogFilterOnState(nameof(OnPostRefresh), addon, agent);
     }
-
-    private unsafe bool HasValidCategorySnapshot(AddonCabinet* addon)
-        => _categoryRows.Length > 0 && _categoryIndex == addon->CategoryIndex;
 
     private unsafe bool TryApplyFilterPipeline(AddonCabinet* addon, AgentCabinet* agent) {
         if (_categoryRows.Length == 0)
@@ -166,7 +164,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         _categoryIndex = addon->CategoryIndex;
         _categoryItemCount = 0;
-        _needsCategorySnapshot = true;
         _snapshotCapturePasses = 0;
         ReleaseCategorySnapshot();
         ClearFilterLogSignatures();
@@ -193,12 +190,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
         if (scanned > reported)
             return false;
 
-        if (_categoryRows.Length > 0) {
-            var minExpected = _categoryRows.Length - 1;
-            if (reported < minExpected && scanned < minExpected)
-                return false;
-        }
-
         CommitCapturedCategory(agent, addon, reported);
         return true;
     }
@@ -208,7 +199,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         _categoryItemCount = count;
         _categoryIndex = addon->CategoryIndex;
-        _needsCategorySnapshot = false;
         _snapshotCapturePasses = 0;
 
         if (count == 0) {
@@ -261,6 +251,23 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
         ClearCabinetRowRange(agent, addon, visibleCount, MaxCategoryItems);
     }
 
+    private unsafe void RestoreFullCategory(AgentCabinet* agent, AddonCabinet* addon) {
+        var count = _categoryRows.Length;
+        for (var i = 0; i < count; i++) {
+            _categoryRows[i].Slot.ApplyTo(ref addon->ItemSlots[i]);
+            _categoryRows[i].Cache.ApplyTo(ref agent->ItemCaches[i]);
+        }
+
+        ClearCabinetRowRange(agent, addon, count, MaxCategoryItems);
+        _displayToSource = [.. Enumerable.Range(0, count)];
+    }
+
+    private unsafe void ApplyEmptyCategory(AgentCabinet* agent, AddonCabinet* addon) {
+        ClearCabinetRowRange(agent, addon, 0, MaxCategoryItems);
+        _displayToSource = [];
+        ApplyFilteredListLayout(addon);
+    }
+
     private unsafe void ApplyFilteredListLayout(AddonCabinet* addon) {
         var list = addon->ItemList;
         if (list is null)
@@ -291,8 +298,8 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
     private unsafe struct ItemSlotProjection {
         internal uint IconId;
-        internal uint Unk6C;
-        internal uint Unk70;
+        internal uint InventorySlotIndex;
+        internal uint InventoryContainerType;
         internal uint ItemsArrayIndex;
         internal float ConditionNormalized;
         private Utf8String* _nameClone;
@@ -301,8 +308,8 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             fixed (Utf8String* name = &source.Name)
                 return new ItemSlotProjection {
                     IconId = source.Unk68,
-                    Unk6C = source.InventorySlotIndex,
-                    Unk70 = source.InventorySlotIndex,
+                    InventorySlotIndex = source.InventorySlotIndex,
+                    InventoryContainerType = source.InventoryContainerType,
                     ItemsArrayIndex = source.ItemsArrayIndex,
                     ConditionNormalized = source.ConditionNormalized,
                     _nameClone = Utf8String.FromUtf8String(name),
@@ -311,8 +318,8 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         internal readonly void ApplyTo(ref AddonCabinet.ItemSlot dest) {
             dest.Unk68 = IconId;
-            dest.InventorySlotIndex = Unk6C;
-            dest.InventorySlotIndex = Unk70;
+            dest.InventorySlotIndex = InventorySlotIndex;
+            dest.InventoryContainerType = InventoryContainerType;
             dest.ItemsArrayIndex = ItemsArrayIndex;
             dest.ConditionNormalized = ConditionNormalized;
 
@@ -467,6 +474,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             slot.Name.Clear();
             slot.Unk68 = 0;
             slot.InventorySlotIndex = 0;
+            slot.InventoryContainerType = 0;
             slot.ItemsArrayIndex = 0;
             slot.ConditionNormalized = 0;
         }
@@ -478,7 +486,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
         _categoryIndex = uint.MaxValue;
         _displayToSource = [];
         _pendingFullListCount = 0;
-        _needsCategorySnapshot = false;
         _snapshotCapturePasses = 0;
         ClearFilterLogSignatures();
     }

@@ -254,6 +254,13 @@ internal static unsafe class CrystallizeListAtk {
             strings[0] = default;
     }
 
+    internal static void HideTreeItem(AtkComponentTreeListItem* item) {
+        if (item is null)
+            return;
+        ClearTreeItemDisplay(item);
+        item->IsHidden = true;
+    }
+
     internal static void WriteSlotsToAtkBuffer(AtkValue[] source, AtkValue* destination, int destLength, CrystallizeAtkBufferLayout layout, int firstSlot, int lastSlot) {
         if (firstSlot >= lastSlot || destination is null)
             return;

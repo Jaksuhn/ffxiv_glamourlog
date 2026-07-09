@@ -99,9 +99,7 @@ internal sealed class Catalog {
         }
         if (ClassifyFromRules(ctx) is { } cat)
             return new ClassifyResult(cat, false);
-        if (UnobtainableMirageRowIds.Contains(mirageRow.RowId))
-            return new ClassifyResult(null, true);
-        return new ClassifyResult(null, false);
+        return new ClassifyResult(null, UnobtainableMirageRowIds.Contains(mirageRow.RowId));
     }
 
     public string BucketKey(ClassifyResult r)
@@ -113,9 +111,7 @@ internal sealed class Catalog {
         if (items.Any(id => !armoireItems.Contains(id)))
             return true;
         var chest = DungeonChest.Discriminator.PieceOrCostItemIds;
-        if (chest is null || chest.Count == 0)
-            return false;
-        return items.Any(id => costsLookup.GetItemCosts(id).Any(c => chest.Contains(c.ItemId)));
+        return chest is { Count: not 0 } && items.Any(id => costsLookup.GetItemCosts(id).Any(c => chest.Contains(c.ItemId)));
     }
 
     /// <summary> Placeholder until <see cref="Build"/> runs after login (Tradecraft needs <see cref="CurrencyManager"/>).</summary>
@@ -132,7 +128,6 @@ internal sealed class Catalog {
 
     // tradecraftCurrencyItemIds must be resolved via CurrencyManager after login. It's not populated before
     public static Catalog Build(ItemCostLookup costs, IReadOnlyList<uint> tradecraftCurrencyItemIds) {
-        _ = costs;
         var dungeonChestPieces = BuildDungeonChestPieceIdsFromSupplemental();
 
         static OutfitCategory Cat(string name, int uiP) => new(name, uiP);
