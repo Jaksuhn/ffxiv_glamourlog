@@ -63,27 +63,35 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     internal bool CanAffordAllMissingGearPieces(GlamourSet glamourSet, OwnershipSnapshot snap) {
-        (uint CostItemId, uint TotalAmount)? firstCost = null;
-        uint totalCostQuantity = 0;
+        var catalog = Svc.Get<CatalogService>();
+        var category = catalog.CategoryNameForPrimaryCostLookup(glamourSet);
+        var totals = new Dictionary<uint, uint>();
         foreach (var itemId in glamourSet.Items) {
             if (snap.OwnedItems.Contains(itemId))
                 continue;
-            var costs = Svc.Get<CatalogService>().CostsLookup.GetItemCosts(itemId);
+            var costs = catalog.GetPrimaryItemCosts(itemId, category);
             if (costs.Count == 0)
                 return false;
-            var cost = costs[0];
-            firstCost ??= (cost.ItemId, 0);
-            if (firstCost.Value.CostItemId != cost.ItemId)
-                return false;
-            totalCostQuantity += cost.Amount;
+            foreach (var (costItemId, amount) in costs) {
+                totals.TryGetValue(costItemId, out var total);
+                totals[costItemId] = total + amount;
+            }
         }
 
-        if (firstCost == null)
-            return false;
-        var ownedCount = CurrencyManager.Instance()->SpecialItemBucket.TryGetValue(firstCost.Value.CostItemId, out var value, true)
-            ? (int)value.Count
-            : InventoryManager.Instance()->GetInventoryItemCount(firstCost.Value.CostItemId);
-        return totalCostQuantity <= ownedCount;
+        if (totals.Count == 0)
+            return true;
+
+        foreach (var (costItemId, totalAmount) in totals) {
+            if (totalAmount > GetOwnedCurrencyCount(costItemId))
+                return false;
+        }
+        return true;
+    }
+
+    internal static int GetOwnedCurrencyCount(uint costItemId) {
+        if (costItemId is not 1 && Svc.Get<AllaganToolsIpc>().TryGetOwnedCount(costItemId, out var allaganCount)) // don't use AT for gil since it returns a uint and you can overflow that
+            return allaganCount;
+        return CurrencyManager.Instance()->SpecialItemBucket.TryGetValue(costItemId, out var value, true) ? (int)value.Count : InventoryManager.Instance()->GetInventoryItemCount(costItemId);
     }
 
     internal bool IsPartiallyCompleted(GlamourSet glamourSet, OwnershipSnapshot snap) {

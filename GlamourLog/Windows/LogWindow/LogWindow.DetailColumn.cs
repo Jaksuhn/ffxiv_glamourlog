@@ -80,7 +80,7 @@ internal unsafe partial class LogWindow {
             });
             var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
             foreach (var kv in ordered) {
-                var owned = GetOwnedCurrencyCount(kv.Key);
+                var owned = OwnershipService.GetOwnedCurrencyCount(kv.Key);
                 var (costNav, costTip, npcName, shopName) = SourcesPanelBuilder.GetShopVendorHintForCostCurrency(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, kv.Key);
                 var currencyName = Item.GetRow(kv.Key).Name.ToString().Trim();
                 _detailRowOptions.Add(new DetailListRowData {
@@ -163,14 +163,6 @@ internal unsafe partial class LogWindow {
             }
         }
         return totals.Count > 0;
-    }
-
-    private static int GetOwnedCurrencyCount(uint costItemId) {
-        if (costItemId is not 1 && Svc.Get<AllaganToolsIpc>().TryGetOwnedCount(costItemId, out var allaganCount)) // don't use AT for gil since it returns a uint and you can overflow that
-            return allaganCount;
-        return CurrencyManager.Instance()->SpecialItemBucket.TryGetValue(costItemId, out var value, true)
-            ? (int)value.Count
-            : InventoryManager.Instance()->GetInventoryItemCount(costItemId);
     }
 
     private static GlamourIconNode.IconPart? StorageIconPartFor(ItemStorageState storageState)

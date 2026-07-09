@@ -77,15 +77,8 @@ internal static class SetListFilterSort {
     internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipSnapshot snap)
         => Apply(searchTrimmed, categoryRows, snap).Contains(set);
 
-    private static bool PassesAffordableFilter(GlamourSet set, OwnershipSnapshot snap) {
-        if (set.NonSetCabinetPiece) {
-            var missing = set.Items.Where(id => !snap.OwnedItems.Contains(id)).ToList();
-            if (missing.Count == 0)
-                return true;
-            return missing.All(id => Svc.Get<CatalogService>().CostsLookup.GetItemCosts(id).Count == 0);
-        }
-        return Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(set, snap);
-    }
+    private static bool PassesAffordableFilter(GlamourSet set, OwnershipSnapshot snap)
+        => Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(set, snap);
 
     private static bool PassesTradeableFilter(GlamourSet set) {
         if (set.NonSetCabinetPiece && set.Items.Count == 1)
