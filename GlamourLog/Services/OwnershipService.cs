@@ -110,12 +110,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     private void AddArmoireServiceItems(HashSet<uint> owned) {
-        foreach (var rawId in Svc.Armoire.GetArmoireItems()) {
-            // some are item ids, some are cabinet row ids.
-            owned.Add(ItemUtil.GetBaseId(rawId).ItemId);
-            if (CabinetByRowLookup.Value.TryGetValue(rawId, out var itemId))
-                owned.Add(ItemUtil.GetBaseId(itemId).ItemId);
-        }
+        foreach (var itemId in Svc.Armoire.GetArmoireItems())
+            owned.Add(ItemUtil.GetBaseId(itemId).ItemId);
     }
 
     private static void AddBitsetOwnedArmoireItems(HashSet<uint> owned) {
@@ -203,16 +199,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
     internal bool IsItemInArmoire(uint itemId)
         => GetItemIdFromLookups(itemId) is var id and not 0 && (IsInArmoireService(id) || IsInCabinet(id));
 
-    private bool IsInArmoireService(uint itemId) {
-        foreach (var rawId in Svc.Armoire.GetArmoireItems()) {
-            if (ItemUtil.GetBaseId(rawId).ItemId == itemId)
-                return true;
-            if (CabinetByRowLookup.Value.TryGetValue(rawId, out var mappedId) && ItemUtil.GetBaseId(mappedId).ItemId == itemId)
-                return true;
-        }
-
-        return false;
-    }
+    private bool IsInArmoireService(uint itemId)
+        => Svc.Armoire.GetArmoireItems().Any(rawId => ItemUtil.GetBaseId(rawId).ItemId == itemId);
 
     private static bool IsInCabinet(uint itemId) {
         if (!CabinetLookup.Value.TryGetValue(itemId, out var cabinetRowId))
