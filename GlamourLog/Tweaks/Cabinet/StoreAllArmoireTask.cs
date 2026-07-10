@@ -113,7 +113,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
             if (candidateId == 0)
                 break;
 
-            if (CabinetSheet.TryGetRow(candidateId, out _) && !cabinet.IsItemInCabinet(candidateId)) {
+            if (CabinetSheet.TryGetRow(candidateId, out var row) && !cabinet.IsItemInCabinet(candidateId) && row.Item.Value.Handle is { InGearset: false, IsRepairable: false }) {
                 cabinetId = candidateId;
                 return true;
             }

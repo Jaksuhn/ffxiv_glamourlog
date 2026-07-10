@@ -175,15 +175,14 @@ internal sealed class StoreAllDresserTask : TaskBase {
     private static bool TryCreateStorableRow(uint itemId, SetScan scan, out PrismBoxCrystallizeItem row) {
         row = default;
         var baseId = ItemUtil.GetBaseId(itemId).ItemId;
-        if (baseId == 0
-            || Svc.Get<OwnershipService>().IsArmoireEligible(baseId)
-            || !HasSufficientCondition(itemId)
-            || scan.LooseDresser.Contains(baseId)
-            || !HasUnsetSlotForPiece(scan.Row, baseId, scan.Outfits))
+        if (baseId == 0 || Svc.Get<OwnershipService>().IsArmoireEligible(baseId) || scan.LooseDresser.Contains(baseId) || !HasUnsetSlotForPiece(scan.Row, baseId, scan.Outfits))
             return false;
 
         var handle = (ItemHandle)itemId;
         if (!handle.TrySetItemLocation())
+            return false;
+
+        if (handle.InGearset || handle.IsRepairable)
             return false;
 
         row = new PrismBoxCrystallizeItem {
@@ -192,19 +191,6 @@ internal sealed class StoreAllDresserTask : TaskBase {
             Slot = handle.ItemLocation.Slot,
         };
         return true;
-    }
-
-    private static unsafe bool HasSufficientCondition(uint itemId) {
-        var handle = (ItemHandle)itemId;
-        if (!handle.TrySetItemLocation())
-            return false;
-
-        var inventory = InventoryManager.Instance();
-        if (inventory is null)
-            return false;
-
-        var item = inventory->GetInventorySlot(handle.ItemLocation.Container, handle.ItemLocation.Slot);
-        return item is not null && item->ItemId != 0 && item->GetCondition() >= FullCondition;
     }
 
     private static bool IsDresserStoreComplete(PrismBoxCrystallizeItem row, uint itemId) {
