@@ -305,6 +305,24 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return count;
     }
 
+    /// <summary>
+    /// True when this piece already counts for the set via storage (loose dresser / armoire)
+    /// or this set's mirage outfit slot — not mere inventory.
+    /// </summary>
+    internal bool IsPieceStoredForSet(uint itemId, GlamourSet set, OwnershipSnapshot snap) {
+        itemId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (itemId == 0)
+            return false;
+
+        if (snap.StorageOwnedItems.Contains(itemId))
+            return true;
+
+        if (set.NonSetCabinetPiece)
+            return false;
+
+        return snap.DresserItemIds.Contains(set.ItemId) && IsPieceInMirageOutfitSlot(MirageStoreSetItem.GetRow(set.ItemId), itemId);
+    }
+
     internal bool IsItemInGlamourDresser(uint itemId) => ItemUtil.GetBaseId(itemId).ItemId is not 0 and var id && (IsLooseInDresser(id) || IsPieceInMirageOutfitSlot(id));
 
     internal bool IsPieceOwned(uint itemId, OwnershipSnapshot snap) {

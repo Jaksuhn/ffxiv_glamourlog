@@ -25,7 +25,7 @@ internal class ChatAlerts : IDisposable {
             return;
 
         var ownership = Svc.Get<OwnershipService>();
-        if (ownership.IsItemInArmoire(row.RowId) || ownership.IsItemInGlamourDresser(row.RowId))
+        if (ownership.IsItemInArmoire(row.RowId))
             return;
 
         var catalog = Svc.Get<CatalogService>();
@@ -33,28 +33,28 @@ internal class ChatAlerts : IDisposable {
             return;
 
         var snap = ownership.CaptureSnapshot();
+        var needingSets = sets.Where(s => !ownership.IsPieceStoredForSet(row.RowId, s, snap)).ToList();
+        if (needingSets.Count == 0)
+            return;
+
         var ownedBefore = new HashSet<uint>(snap.OwnedItems);
         ownedBefore.Remove(row.RowId);
-        var ownedAfter = new HashSet<uint>(ownedBefore) { row.RowId };
+        var snapBefore = snap with { OwnedItems = ownedBefore };
+        var snapAfter = snap with { OwnedItems = [with(ownedBefore), row.RowId] };
 
-        foreach (var set in sets) {
-            if (OwnsAllPieces(set, ownedAfter) && !OwnsAllPieces(set, ownedBefore)) {
-                if (set.NonSetCabinetPiece) {
-                    message.Message.Append(" This item can go in your armoire!");
-                }
-                else {
-                    message.Message.Append(" The final piece of ").Append(SeString.CreateItemLink(set.ItemId)).Append("!");
-                }
-                return;
-            }
+        var primarySet = catalog.FindCatalogSetForItem(row.RowId) is { } preferred && needingSets.Contains(preferred) ? preferred : needingSets.OrderBy(s => s.ItemId).First();
+        var ownedCountBefore = ownership.GetOwnedPieceCountForSet(primarySet, snapBefore);
+        var ownedCount = ownership.GetOwnedPieceCountForSet(primarySet, snapAfter);
+        var total = primarySet.Items.Count;
+
+        if (ownedCount == total && ownedCountBefore < total) {
+            if (primarySet.NonSetCabinetPiece)
+                message.Message.Append(" This item can go in your armoire!");
+            else
+                message.Message.Append(" The final piece of ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
+            return;
         }
 
-        if (catalog.FindCatalogSetForItem(row.RowId) is { } primarySet) {
-            var ownedCount = ownership.GetOwnedPieceCountForSet(primarySet, snap with { OwnedItems = ownedAfter });
-            message.Message.Append($" {ownedCount}/{primarySet.Items.Count} of the set ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
-        }
+        message.Message.Append($" {ownedCount}/{total} of the set ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
     }
-
-    private static bool OwnsAllPieces(GlamourSet set, HashSet<uint> owned)
-        => set.Items.Count > 0 && set.Items.All(owned.Contains);
 }
