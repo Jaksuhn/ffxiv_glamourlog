@@ -61,6 +61,9 @@ internal unsafe partial class LogWindow {
             _pendingClearSetSelection = false;
             SetList.ClearSelection();
         }
+        else {
+            SyncSetListSelectionHighlight(); // OptionsList replaces row refs, gotta rebind SelectedItems so the highlight matches _selectedSet
+        }
 
         if (_pendingResetSetScroll) {
             _pendingResetSetScroll = false;
@@ -71,6 +74,18 @@ internal unsafe partial class LogWindow {
             _pendingSelectSet = null;
             ScrollSetListToSet(pendingSet);
         }
+    }
+
+    private void SyncSetListSelectionHighlight() {
+        if (SetList is null)
+            return;
+
+        SetList.SelectedItems.Clear();
+        if (_selectedSet is not { } selected)
+            return;
+
+        if (SetList.OptionsList.Find(r => ReferenceEquals(r.Set, selected)) is not null and var row)
+            SetList.SelectedItems.Add(row);
     }
 
     private void ScrollSetListToSet(GlamourSet set) {
@@ -116,7 +131,6 @@ internal unsafe partial class LogWindow {
             Title = set.Name,
             Subtitle = subtitle,
             IsOwned = snap.OwnedSets.Contains(set),
-            IsSelected = ReferenceEquals(_selectedSet, set),
             ShowStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire,
             ShowArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, snap),
             StorageIconPart = setStorageState == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,

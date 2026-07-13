@@ -12,7 +12,6 @@ internal sealed class SetListRowData {
     public required bool IsOwned { get; init; }
     public required bool ShowStorage { get; init; }
     public bool ShowArmoireWarning { get; init; }
-    public bool IsSelected { get; init; }
     public GlamourIconNode.IconPart StorageIconPart { get; init; } = GlamourIconNode.IconPart.Dresser;
     public uint IconItemId { get; init; } // row icon uses this item id instead of set token when non-zero
 }
@@ -89,11 +88,5 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemWithFocusNav<SetLi
             Height,
             TextRightMargin,
             _storageBadge.IsVisible ? StorageTextReserve : 0f);
-    }
-
-    // ListNode.PopulateNodes clears highlight when row refs are rebuilt; re-apply from row data after populate.
-    public override void Update() {
-        if (ItemData is { IsSelected: true })
-            IsSelected = true;
     }
 }
