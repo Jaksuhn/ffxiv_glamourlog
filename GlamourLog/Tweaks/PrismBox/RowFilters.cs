@@ -16,7 +16,7 @@ internal sealed class HideDresserDepositedFilter : IPrismBoxRowFilter {
 internal sealed class HideArmoireEligibleFilter : IPrismBoxRowFilter {
     public bool IsEnabled => C.HideCrystallizeArmoireEligibleItems;
     public bool ShouldHide(uint itemId)
-        => itemId != 0 && Svc.Get<OwnershipService>().IsArmoireCabinetItem(itemId);
+        => itemId != 0 && Svc.Get<OwnershipService>().IsCabinetItem(itemId);
 }
 
 internal sealed class HideNonOutfitItemsFilter : IPrismBoxRowFilter {

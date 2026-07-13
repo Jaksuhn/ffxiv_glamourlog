@@ -175,7 +175,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
     private static bool TryCreateStorableRow(uint itemId, SetScan scan, out PrismBoxCrystallizeItem row) {
         row = default;
         var baseId = ItemUtil.GetBaseId(itemId).ItemId;
-        if (baseId == 0 || Svc.Get<OwnershipService>().IsArmoireEligible(baseId) || scan.LooseDresser.Contains(baseId) || !HasUnsetSlotForPiece(scan.Row, baseId, scan.Outfits))
+        if (baseId == 0 || Svc.Get<OwnershipService>().IsCabinetItem(baseId) || scan.LooseDresser.Contains(baseId) || !HasUnsetSlotForPiece(scan.Row, baseId, scan.Outfits))
             return false;
 
         var handle = (ItemHandle)itemId;
