@@ -21,7 +21,7 @@ internal sealed partial class CrystallizeListHandler {
     }
 
     private static void LogFilterDebug(string phase, string message)
-        => Svc.Log.Information($"[{nameof(CrystallizeListHandler)}.{phase}] {message}");
+        => Svc.Log.Debug($"[{nameof(CrystallizeListHandler)}.{phase}] {message}");
 
     private static void LogFilterWarning(string message)
         => Svc.Log.Warning($"[{nameof(CrystallizeListHandler)}] {message}");
