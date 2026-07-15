@@ -85,13 +85,13 @@ internal sealed class Catalog {
         return null;
     }
 
-    public ClassifyResult ClassifySet(MirageStoreSetItem mirageRow, ReadOnlyCollection<uint> itemIds, ItemCostLookup costsLookup, SpecialShop? specialShopRow, byte clientPvpSeries) {
-        var ctx = new ClassifyContext(mirageRow, itemIds, costsLookup, specialShopRow);
+    public ClassifyResult ClassifySet(MirageStoreSetItem mirageRow, ReadOnlyCollection<uint> itemIds, SpecialShop? specialShopRow, byte clientPvpSeries) {
+        var ctx = new ClassifyContext(mirageRow, itemIds, specialShopRow);
         foreach (var row in Svc.Data.GetSheet<PvPSeries>().Skip(1)) {
             if (!row.AttireItems.ContainsAll(itemIds)) continue;
             if (row.RowId == clientPvpSeries)
                 return new ClassifyResult(PvpSeriesAttire.Name, false);
-            var hasCosts = itemIds.Any(i => costsLookup.GetItemCosts(i).Count > 0);
+            var hasCosts = itemIds.Any(Svc.Items.HasAnyCosts);
             if (!hasCosts)
                 return new ClassifyResult(null, true);
             if (ClassifyFromRules(ctx) is { } fromPvp)
@@ -105,13 +105,13 @@ internal sealed class Catalog {
     public string BucketKey(ClassifyResult r)
         => r.IsUnobtainable ? UnobtainableBucket.Name : (r.CategoryName ?? UncategorizedBucket.Name);
 
-    public bool IncludeAfterArmoireFilter(IReadOnlyList<uint> items, ItemCostLookup costsLookup, HashSet<uint> armoireItems) {
+    public bool IncludeAfterArmoireFilter(IReadOnlyList<uint> items, HashSet<uint> armoireItems) {
         if (items.Count == 0)
             return false;
         if (items.Any(id => !armoireItems.Contains(id)))
             return true;
         var chest = DungeonChest.Discriminator.PieceOrCostItemIds;
-        return chest is { Count: not 0 } && items.Any(id => costsLookup.GetItemCosts(id).Any(c => chest.Contains(c.ItemId)));
+        return chest is { Count: not 0 } && items.Any(id => Svc.Items.GetItemCosts(id).Any(c => chest.Contains(c.ItemId)));
     }
 
     /// <summary> Placeholder until <see cref="Build"/> runs after login (Tradecraft needs <see cref="CurrencyManager"/>).</summary>
@@ -127,7 +127,7 @@ internal sealed class Catalog {
     }
 
     // tradecraftCurrencyItemIds must be resolved via CurrencyManager after login. It's not populated before
-    public static Catalog Build(ItemCostLookup costs, IReadOnlyList<uint> tradecraftCurrencyItemIds) {
+    public static Catalog Build(IReadOnlyList<uint> tradecraftCurrencyItemIds) {
         var dungeonChestPieces = BuildDungeonChestPieceIdsFromSupplemental();
 
         static OutfitCategory Cat(string name, int uiP) => new(name, uiP);
@@ -144,6 +144,10 @@ internal sealed class Catalog {
         tribes.Discriminator.LateCostCurrencyItemIds.AddRange(BeastTribe.Where(r => r.CurrencyItem.RowId != 0).Select(r => r.CurrencyItem.RowId));
         tribes.Rules.Add(new LateTabBundleRule(tribes));
 
+        var jobGear = Cat("Job Gear", 5);
+        jobGear.Discriminator.SpecialShopPredicate = shop => shop.UseCurrencyType == 8 && shop.Quest.RowId > 0;
+        jobGear.Rules.Add(new LateTabBundleRule(jobGear));
+
         var gil = Cat("Gil", 3);
         gil.Discriminator.LateCostCurrencyItemIds.Add(1);
         gil.Discriminator.CostAmount = amount => amount > 0;
@@ -152,10 +156,6 @@ internal sealed class Catalog {
         var tradecraft = Cat("Tradecraft", 4);
         tradecraft.Discriminator.LateCostCurrencyItemIds.AddRange(tradecraftCurrencyItemIds);
         tradecraft.Rules.Add(new LateTabBundleRule(tradecraft));
-
-        var jobGear = Cat("Job Gear", 5);
-        jobGear.Discriminator.SpecialShopPredicate = shop => shop.UseCurrencyType == 8 && shop.Quest.RowId > 0;
-        jobGear.Rules.Add(new LateTabBundleRule(jobGear));
 
         var eureka = Cat("Eureka", 6);
         eureka.Discriminator.LateCostCurrencyItemIds.AddRange([21801, 21803]);
@@ -231,7 +231,7 @@ internal sealed class Catalog {
         var unobtainableBucket = new OutfitCategory("Unobtainable", int.MaxValue) { IsSyntheticBucket = true };
 
         OutfitCategory[] classifiable = [
-            goldSaucer, pvp, tribes, gil, tradecraft, jobGear, eureka, occultCrescent,
+            goldSaucer, pvp, tribes, jobGear, gil, tradecraft, eureka, occultCrescent,
             dungeons, raids, trials, vcDungeons, deepDungeons, fates, island, eternalBonding, mogstation,
         ];
 

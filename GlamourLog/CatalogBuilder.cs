@@ -17,7 +17,7 @@ internal static unsafe class CatalogBuilder {
     internal static HashSet<uint> LoadArmoireItemIds()
         => [.. Cabinet.Where(x => x.RowId > 0 && x.Item.RowId > 0).Select(x => x.Item.RowId)];
 
-    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog, ItemCostLookup costsLookup) {
+    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog) {
         var pvpSeries = FFXIVClientStructs.FFXIV.Client.Game.UI.PvPProfile.Instance()->Series;
         var itemSheet = Svc.SheetManager.GetSheet<ItemSheet>();
         var specialShopByItemId = Catalog.BuildSpecialShopByReceiveItemId();
@@ -25,7 +25,7 @@ internal static unsafe class CatalogBuilder {
         return MirageStoreSetItem.Where(x => x.RowId > 0).Select(x => {
             var items = x.Items.Where(i => i.RowId > 0).Select(i => i.RowId).ToList().AsReadOnly();
             var specialShopRow = Enumerable.FirstOrDefault(Enumerable.Select<uint, SpecialShop?>(items, id => specialShopByItemId.TryGetValue(id, out var s) ? s : null), s => s is not null);
-            var r = catalog.ClassifySet(x, items, costsLookup, specialShopRow, pvpSeries);
+            var r = catalog.ClassifySet(x, items, specialShopRow, pvpSeries);
 
             var name = string.Empty;
             uint sortIl = 0;
@@ -94,10 +94,10 @@ internal static unsafe class CatalogBuilder {
         return entries;
     }
 
-    internal static CatalogBuildResult Run(ItemCostLookup costsLookup) {
-        var catalog = Catalog.Build(costsLookup, GetTradecraftDiscriminators());
+    internal static CatalogBuildResult Run() {
+        var catalog = Catalog.Build(GetTradecraftDiscriminators());
         var armoireItemIds = LoadArmoireItemIds();
-        var mirageSets = BuildClassifiedSets(catalog, costsLookup);
+        var mirageSets = BuildClassifiedSets(catalog);
         var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets);
         var allSets = ApplySharedModelMetadata([.. mirageSets, .. miscArmoireEntries]).AsReadOnly();
         return new CatalogBuildResult(catalog, allSets, armoireItemIds);

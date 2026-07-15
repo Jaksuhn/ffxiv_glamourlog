@@ -13,7 +13,7 @@ internal sealed class CategoryDiscriminator {
     public Func<SpecialShop, bool>? SpecialShopPredicate { get; set; }
 }
 
-internal readonly record struct ClassifyContext(MirageStoreSetItem MirageRow, ReadOnlyCollection<uint> ItemIds, ItemCostLookup CostsLookup, SpecialShop? SpecialShopRow);
+internal readonly record struct ClassifyContext(MirageStoreSetItem MirageRow, ReadOnlyCollection<uint> ItemIds, SpecialShop? SpecialShopRow);
 
 internal interface IGlamourCategoryRule {
     int Phase { get; }
@@ -42,7 +42,7 @@ internal sealed class CostCurrencyInTabItemSetRule(OutfitCategory owner) : IGlam
         var set = Owner.Discriminator.PieceOrCostItemIds;
         if (set is not { Count: > 0 }) return null;
         foreach (var itemId in ctx.ItemIds) {
-            foreach (var cost in ctx.CostsLookup.GetItemCosts(itemId)) {
+            foreach (var cost in Svc.Items.GetItemCosts(itemId)) {
                 if (set.Contains(cost.ItemId))
                     return Owner.Name;
             }
@@ -60,7 +60,7 @@ internal sealed class LateTabBundleRule(OutfitCategory owner) : IGlamourCategory
             return Owner.Name;
         foreach (var itemId in ctx.ItemIds) {
             if (d.LateCostCurrencyItemIds.Count > 0) {
-                foreach (var cost in ctx.CostsLookup.GetItemCosts(itemId)) {
+                foreach (var cost in Svc.Items.GetItemCosts(itemId)) {
                     if (d.LateCostCurrencyItemIds.Contains(cost.ItemId) && (d.CostAmount == null || d.CostAmount.Invoke(cost.Amount)))
                         return Owner.Name;
                 }

@@ -10,7 +10,6 @@ internal sealed class CatalogService : IDisposable {
 
     internal ReadOnlyCollection<GlamourSet> GlamourSets { get; private set; } = new ReadOnlyCollection<GlamourSet>([]);
     internal Dictionary<string, List<GlamourSet>> GlamourSetsByCategory { get; } = [];
-    internal ItemCostLookup CostsLookup { get; } = new();
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
     internal HashSet<uint> MirageOutfitPieceIds { get; private set; } = [];
     private HashSet<uint> _costCurrencyItemIds = [];
@@ -79,7 +78,7 @@ internal sealed class CatalogService : IDisposable {
         try {
             token.ThrowIfCancellationRequested();
             var pvpSeries = PvPProfile.Instance()->Series;
-            var built = CatalogBuilder.Run(CostsLookup);
+            var built = CatalogBuilder.Run();
             token.ThrowIfCancellationRequested();
 
             lock (_glamourDataLock) {
@@ -155,7 +154,7 @@ internal sealed class CatalogService : IDisposable {
     }
 
     internal List<(uint ItemId, uint Amount)> GetPrimaryItemCosts(uint itemId, string? categoryNameForDiscriminator) {
-        var costs = CostsLookup.GetItemCosts(itemId);
+        var costs = Svc.Items.GetItemCosts(itemId);
         if (costs.Count == 0)
             return [];
         if (!string.IsNullOrEmpty(categoryNameForDiscriminator)) {
