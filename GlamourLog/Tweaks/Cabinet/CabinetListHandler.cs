@@ -21,6 +21,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private uint[] _itemIds = [];
     private uint _categoryIndex = uint.MaxValue;
     private int _pendingFullListCount;
+    private int _lastProjectedCount = -1; // distinguishes filtered projection from a native category shrink
     private bool _applyWhenReady;
 
     public unsafe CabinetListHandler() {
@@ -67,14 +68,19 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     }
 
     private unsafe void OnArmoireOwnershipChanged() {
-        if (!IsFilteringActive)
+        if (!IsFilteringActive) {
+            LogFilterDebug(nameof(OnArmoireOwnershipChanged), "ignored (filters inactive)");
             return;
+        }
 
+        LogFilterDebug(nameof(OnArmoireOwnershipChanged), "ownership changed; scheduling list refresh");
         Svc.Framework.RunOnFrameworkThread(() => {
             ClearFilterLogSignatures();
             _applyWhenReady = true;
             if (Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName) is not null and var addon)
                 addon->OnRefresh(0, null);
+            else
+                LogFilterDebug(nameof(OnArmoireOwnershipChanged), "cabinet addon not open");
         });
     }
 
@@ -156,6 +162,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private void DropSnapshot(uint categoryIndex) {
         ReleaseRows();
         _categoryIndex = categoryIndex;
+        _lastProjectedCount = -1;
         ClearFilterLogSignatures();
     }
 
@@ -169,12 +176,16 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
                 return false;
         }
 
-        // projected list is shorter than the last full snapshot — wait for restore+native
-        if (_rows.Length > 0 && count < _rows.Length && _categoryIndex == addon->CategoryIndex)
-            return false;
+        // projected filter view is shorter than the snapshot — wait for PreRefresh restore.
+        // a settled native shrink (store) is also shorter, but count != last projected length.
+        if (_rows.Length > 0 && count < _rows.Length && _categoryIndex == addon->CategoryIndex) {
+            if (agent->PendingUpdate || (_lastProjectedCount >= 0 && count == _lastProjectedCount))
+                return false;
+        }
 
         ReleaseRows();
         _categoryIndex = addon->CategoryIndex;
+        _lastProjectedCount = -1;
 
         if (count == 0) {
             _rows = [];
@@ -213,6 +224,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         ClearRowRange(agent, addon, visible.Count, MaxCategoryItems);
         ApplyListCount(addon, visible.Count);
+        _lastProjectedCount = visible.Count;
         LogApplyPipelineResult(addon, visible.Count, _rows.Length);
         return visible.Count;
     }
@@ -232,6 +244,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             row.Dispose();
         _rows = [];
         _itemIds = [];
+        _lastProjectedCount = -1;
     }
 
     private static unsafe bool IsCategoryReady(AgentCabinet* agent, AddonCabinet* addon)
