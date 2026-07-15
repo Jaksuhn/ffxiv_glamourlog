@@ -7,7 +7,7 @@ using GlamourLog.Windows.LogWindow;
 namespace GlamourLog;
 
 internal unsafe partial class LogWindow {
-    private void RefreshRows(OwnershipSnapshot snap) {
+    private void RefreshRows(OwnershipQuery q) {
         if (SetList is null || _statsSetsLine is null || _statsSpaceLine is null)
             return;
 
@@ -18,15 +18,15 @@ internal unsafe partial class LogWindow {
             return;
         }
 
-        var mirageCatalogSets = Svc.Get<CatalogService>().GlamourSets.Where(s => !s.NonSetCabinetPiece);
-        var ownedMirageSets = snap.OwnedSets.Where(s => !s.NonSetCabinetPiece);
-        var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || snap.OwnedSets.Contains(x));
-        _statsSetsLine.String = $"{ownedMirageSets.Count()} / {totalObtainable}";
+        var mirageCatalogSets = Svc.Get<CatalogService>().GlamourSets.Where(s => !s.NonSetCabinetPiece).ToList();
+        var ownedMirageSets = mirageCatalogSets.Where(s => q.For(s).IsComplete).ToList();
+        var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || q.For(x).IsComplete);
+        _statsSetsLine.String = $"{ownedMirageSets.Count} / {totalObtainable}";
         _statsSpaceLine.String = $"{ownedMirageSets.Sum(x => x.Items.Count - 1)}";
 
-        _categoryColumn?.UpdateButtonStates(_selectedCategoryId, CategoryRows, snap);
+        _categoryColumn?.UpdateButtonStates(_selectedCategoryId, CategoryRows, q);
 
-        RepopulateSetListFromFilteredRows(snap);
+        RepopulateSetListFromFilteredRows(q);
     }
 
     private void RebuildSetListOrderOnly() {
@@ -35,21 +35,21 @@ internal unsafe partial class LogWindow {
         if (ItemFinderModule.Instance() is null)
             return;
 
-        RepopulateSetListFromFilteredRows(Svc.Get<OwnershipService>().CaptureSnapshot());
+        RepopulateSetListFromFilteredRows(Svc.Get<OwnershipService>().Query());
     }
 
-    private void RepopulateSetListFromFilteredRows(OwnershipSnapshot snap) {
+    private void RepopulateSetListFromFilteredRows(OwnershipQuery q) {
         if (SetList is null)
             return;
 
         var searchRaw = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
         var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
-        var rows = SetListFilterSort.Apply(searchTrimmed, CategoryRows(_selectedCategoryId), snap);
+        var rows = SetListFilterSort.Apply(searchTrimmed, CategoryRows(_selectedCategoryId), q);
 
         _setListOptions.Clear();
         foreach (var set in rows) {
             try {
-                _setListOptions.Add(BuildSetListRowData(set, snap));
+                _setListOptions.Add(BuildSetListRowData(set, q));
             }
             catch (Exception ex) {
                 Svc.Log.Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
@@ -116,13 +116,13 @@ internal unsafe partial class LogWindow {
         _categoryColumn.Search.Input.String = string.Empty;
     }
 
-    private SetListRowData BuildSetListRowData(GlamourSet set, OwnershipSnapshot snap, bool appendNotInListSuffix = false) {
-        var setStorageState = Svc.Get<OwnershipService>().GetSetStorageState(set, snap);
-        var subtitle = SetSublineText(set, snap);
+    private SetListRowData BuildSetListRowData(GlamourSet set, OwnershipQuery q, bool appendNotInListSuffix = false) {
+        var status = q.For(set);
+        var subtitle = SetSublineText(status);
         if (appendNotInListSuffix) {
             var searchRaw = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
             var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
-            if (C.HideSharedModels && !SetListFilterSort.IsVisibleInSetList(set, searchTrimmed, CategoryRows(_selectedCategoryId), snap))
+            if (C.HideSharedModels && !SetListFilterSort.IsVisibleInSetList(set, searchTrimmed, CategoryRows(_selectedCategoryId), q))
                 subtitle += " · Not in list";
         }
 
@@ -130,14 +130,14 @@ internal unsafe partial class LogWindow {
             Set = set,
             Title = set.Name,
             Subtitle = subtitle,
-            IsOwned = snap.OwnedSets.Contains(set),
-            ShowStorage = setStorageState is SetStorageState.Dresser or SetStorageState.Armoire,
-            ShowArmoireWarning = Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(set, snap),
-            StorageIconPart = setStorageState == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,
+            IsOwned = status.IsComplete,
+            ShowStorage = status.Storage is SetStorageState.Dresser or SetStorageState.Armoire,
+            ShowArmoireWarning = status.ArmoireMisplaced,
+            StorageIconPart = status.Storage == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,
         };
     }
 
-    private SetListRowData BuildSharedModelItemRowData(uint itemId, OwnershipSnapshot snap) {
+    private SetListRowData BuildSharedModelItemRowData(uint itemId, OwnershipQuery q) {
         var catalog = Svc.Get<CatalogService>();
         var set = catalog.FindCatalogSetForItem(itemId)
             ?? new GlamourSet {
@@ -155,17 +155,18 @@ internal unsafe partial class LogWindow {
                 HasPartialSharedModels = false,
             };
 
-        var ownedInStorage = snap.StorageOwnedItems.Contains(itemId);
-        var ownedAnywhere = snap.OwnedItems.Contains(itemId);
+        var piece = q.For(set).Piece(itemId);
+        var location = piece?.Location ?? q.Locate(itemId);
+        var ownedInStorage = location is PieceLocation.Armoire or PieceLocation.LooseDresser or PieceLocation.OutfitSlot;
+        var ownedAnywhere = location is not PieceLocation.None;
         var subtitle = ownedInStorage ? "Obt. 1/1" : ownedAnywhere ? "In inventory" : "Obt. 0/1";
 
-        ItemStorageState storageState = ItemStorageState.None;
-        if (set.NonSetCabinetPiece)
-            storageState = Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, set, SetStorageState.None, snap);
-        else if (ownedInStorage)
-            storageState = snap.ArmoireOwnedItemIds.Contains(itemId) ? ItemStorageState.Armoire
-                : snap.DresserItemIds.Contains(set.ItemId) ? ItemStorageState.DresserSet
-                : ItemStorageState.DresserLoose;
+        var storageState = piece?.DisplayStorage ?? location switch {
+            PieceLocation.Armoire => ItemStorageState.Armoire,
+            PieceLocation.LooseDresser => ItemStorageState.DresserLoose,
+            PieceLocation.OutfitSlot => ItemStorageState.DresserSet,
+            _ => ItemStorageState.None,
+        };
 
         var iconPart = storageState switch {
             ItemStorageState.Armoire => GlamourIconNode.IconPart.Armoire,
@@ -180,7 +181,7 @@ internal unsafe partial class LogWindow {
             Subtitle = subtitle,
             IsOwned = ownedInStorage,
             ShowStorage = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose or ItemStorageState.Armoire,
-            ShowArmoireWarning = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && snap.ArmoireCatalogItemIds.Contains(itemId),
+            ShowArmoireWarning = piece?.ShowArmoireWarning ?? false,
             StorageIconPart = iconPart,
             IconItemId = itemId,
         };
@@ -205,14 +206,15 @@ internal unsafe partial class LogWindow {
         _pendingRebuildSetListOrderOnly = true;
     }
 
-    private string SetSublineText(GlamourSet set, OwnershipSnapshot snap) {
+    private static string SetSublineText(SetStatus status) {
+        var set = status.Set;
         var n = set.Items.Count;
-        var c = Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap);
+        var c = status.OwnedCount;
         string core;
         if (set.NonSetCabinetPiece) {
-            core = snap.OwnedSets.Contains(set) ? "Obt. 1/1" : $"Obt. {c}/1";
+            core = status.IsComplete ? "Obt. 1/1" : $"Obt. {c}/1";
         }
-        else if (snap.OwnedSets.Contains(set))
+        else if (status.IsComplete)
             core = $"Obt. {n}/{n}";
         else if (n == 0)
             core = "Obt. 0/0";

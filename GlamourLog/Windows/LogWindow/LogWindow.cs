@@ -76,9 +76,9 @@ internal unsafe partial class LogWindow : NativeAddon {
     }
 
     private void PaintListsCore() {
-        var snap = Svc.Get<OwnershipService>().CaptureSnapshot();
-        RefreshRows(snap);
-        RefreshDetails(snap);
+        var q = Svc.Get<OwnershipService>().Query();
+        RefreshRows(q);
+        RefreshDetails(q);
     }
 
     protected override void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan) {

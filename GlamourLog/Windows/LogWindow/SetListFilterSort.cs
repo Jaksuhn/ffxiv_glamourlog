@@ -5,33 +5,34 @@ namespace GlamourLog.Windows.LogWindow;
 
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {
-    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, OwnershipSnapshot snap) {
+    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q) {
         var rows = categoryRows;
 
         if (C.HideCompleted)
-            rows = [.. rows.Where(r => !snap.OwnedSets.Contains(r))];
+            rows = [.. rows.Where(r => !q.For(r).IsComplete)];
 
         if (C.ShowOnlyCompleted)
-            rows = [.. rows.Where(snap.OwnedSets.Contains)];
+            rows = [.. rows.Where(r => q.For(r).IsComplete)];
 
         if (C.HideIncompatible)
             rows = [.. rows.Where(r => !r.IsIncompatible)];
 
         if (C.HideSharedModels)
-            rows = ApplySharedModelDedup(rows, snap);
+            rows = ApplySharedModelDedup(rows, q);
 
         var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
         if (hasPositiveFilters) {
-            rows = [.. rows.Where(r =>
-                (!C.HideNonPartials || PassesStartedFilter(r, snap)) &&
-                (!C.HideUnaffordable || PassesAffordableFilter(r, snap)) &&
-                (!C.HideUnready || Svc.Get<OwnershipService>().HasContributablePieceInInventory(r, snap)) &&
-                (!C.HideNoMarketboard || PassesTradeableFilter(r))
-            )];
+            rows = [.. rows.Where(r => {
+                var s = q.For(r);
+                return (!C.HideNonPartials || s.IsPartial)
+                    && (!C.HideUnaffordable || s.CanAffordMissing)
+                    && (!C.HideUnready || s.HasContributableInventoryPiece)
+                    && (!C.HideNoMarketboard || PassesTradeableFilter(r));
+            })];
         }
 
         if (C.ShowOnlyMisplaced)
-            rows = [.. rows.Where(r => Svc.Get<OwnershipService>().SetHasArmoireMisplacementWarning(r, snap))];
+            rows = [.. rows.Where(r => q.For(r).ArmoireMisplaced)];
 
         if (searchTrimmed.Length > 0)
             rows = [.. rows.Where(r => MatchesSearch(r, searchTrimmed))];
@@ -39,13 +40,7 @@ internal static class SetListFilterSort {
         return ApplySort(rows);
     }
 
-    private static bool PassesStartedFilter(GlamourSet set, OwnershipSnapshot snap) {
-        if (set.NonSetCabinetPiece)
-            return !snap.OwnedSets.Contains(set) && Svc.Get<OwnershipService>().GetOwnedPieceCountForSet(set, snap) > 0;
-        return Svc.Get<OwnershipService>().IsPartiallyCompleted(set, snap);
-    }
-
-    private static List<GlamourSet> ApplySharedModelDedup(List<GlamourSet> rows, OwnershipSnapshot snap) {
+    private static List<GlamourSet> ApplySharedModelDedup(List<GlamourSet> rows, OwnershipQuery q) {
         if (rows.Count == 0)
             return rows;
 
@@ -58,7 +53,10 @@ internal static class SetListFilterSort {
                 continue;
             }
 
-            var active = members.Where(s => snap.OwnedSets.Contains(s) || PassesStartedFilter(s, snap)).ToList();
+            var active = members.Where(s => {
+                var status = q.For(s);
+                return status.IsComplete || status.IsPartial;
+            }).ToList();
             if (active.Count > 0) {
                 foreach (var set in active)
                     keep.Add(set);
@@ -74,11 +72,8 @@ internal static class SetListFilterSort {
         return [.. rows.Where(keep.Contains)];
     }
 
-    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipSnapshot snap)
-        => Apply(searchTrimmed, categoryRows, snap).Contains(set);
-
-    private static bool PassesAffordableFilter(GlamourSet set, OwnershipSnapshot snap)
-        => Svc.Get<OwnershipService>().CanAffordAllMissingGearPieces(set, snap);
+    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q)
+        => Apply(searchTrimmed, categoryRows, q).Contains(set);
 
     private static bool PassesTradeableFilter(GlamourSet set) {
         if (set.NonSetCabinetPiece && set.Items.Count == 1)

@@ -107,7 +107,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
         ResetScrollToTop();
     }
 
-    public void UpdateButtonStates(string selectedCategoryId, Func<string, List<GlamourSet>> categoryRows, OwnershipSnapshot snap) {
+    public void UpdateButtonStates(string selectedCategoryId, Func<string, List<GlamourSet>> categoryRows, OwnershipQuery q) {
         foreach (var btn in buttons) {
             if (!buttonCategoryMap.TryGetValue(btn, out var categoryId))
                 continue;
@@ -116,7 +116,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
             btn.Selected = categoryId == selectedCategoryId;
             if (countByButton.TryGetValue(btn, out var countNode)) {
                 var cr = categoryRows(categoryId);
-                countNode.String = $"{cr.Count(snap.OwnedSets.Contains)}/{cr.Count}";
+                countNode.String = $"{q.CountCompleteIn(cr)}/{cr.Count}";
             }
         }
         SyncCountLayouts();

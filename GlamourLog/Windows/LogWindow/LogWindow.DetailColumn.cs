@@ -17,14 +17,14 @@ internal unsafe partial class LogWindow {
         if (!IsOpen || !CanPaintLists())
             return;
         try {
-            RefreshDetails(Svc.Get<OwnershipService>().CaptureSnapshot());
+            RefreshDetails(Svc.Get<OwnershipService>().Query());
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
         }
     }
 
-    private void RefreshDetails(OwnershipSnapshot snap) {
+    private void RefreshDetails(OwnershipQuery q) {
         if (DetailList is null)
             return;
 
@@ -32,7 +32,6 @@ internal unsafe partial class LogWindow {
             _sourceFilterPieceItemId = null;
 
         _detailRowOptions.Clear();
-        var inventoryItems = snap.InventoryItemIds;
 
         if (_selectedSet == null) {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Set Details", IsTopLevelSection = true });
@@ -54,24 +53,23 @@ internal unsafe partial class LogWindow {
         });
         _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = setJournalLine });
 
-        var items = _selectedSet.Items;
+        var status = q.For(_selectedSet);
         if (isCabinetOnly)
             _sourceFilterPieceItemId = null;
-        var selectedSetStorageState = Svc.Get<OwnershipService>().GetSetStorageState(_selectedSet, snap);
-        foreach (var itemId in items) {
-            var storageState = ResolvePieceStorageState(itemId, selectedSetStorageState, snap);
-            var iconPart = StorageIconPartFor(storageState);
+        foreach (var piece in status.Pieces) {
+            var iconPart = StorageIconPartFor(piece.DisplayStorage);
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.Piece,
-                ItemId = itemId,
-                PrimaryText = Item.GetRow(itemId).Name.ToString(),
-                IsSelected = _sourceFilterPieceItemId == itemId,
+                ItemId = piece.ItemId,
+                PrimaryText = Item.GetRow(piece.ItemId).Name.ToString(),
+                IsSelected = _sourceFilterPieceItemId == piece.ItemId,
                 StorageIconPart = iconPart,
-                ShowInventoryBadge = iconPart is null && inventoryItems.Contains(itemId),
-                ShowArmoireWarning = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && snap.ArmoireCatalogItemIds.Contains(itemId),
+                ShowInventoryBadge = iconPart is null && piece.Location is PieceLocation.Inventory,
+                ShowArmoireWarning = piece.ShowArmoireWarning,
             });
         }
 
+        var items = _selectedSet.Items;
         if (items.Count > 0 && TryGetCostTotals(_selectedSet, _sourceFilterPieceItemId, out var costTotals)) {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Costs", IsTopLevelSection = true });
             _detailRowOptions.Add(new DetailListRowData {
@@ -100,7 +98,7 @@ internal unsafe partial class LogWindow {
         if (_detailRowOptions.Count > sourcesStartIndex) {
             _detailRowOptions.Insert(sourcesStartIndex, new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources", IsTopLevelSection = true });
         }
-        AppendSharedModelsSection(snap);
+        AppendSharedModelsSection(q);
         ApplyCollapsedDetailSections(_detailRowOptions);
         DetailList.AssignOptionsList([.. _detailRowOptions]);
         DetailList.Update();
@@ -173,9 +171,6 @@ internal unsafe partial class LogWindow {
             _ => null,
         };
 
-    private ItemStorageState ResolvePieceStorageState(uint itemId, SetStorageState setStorageState, in OwnershipSnapshot snap)
-        => Svc.Get<OwnershipService>().GetPieceDisplayStorageState(itemId, _selectedSet!, setStorageState, snap);
-
     private static void OnCraftRecipeJournalLeftClick(uint recipeRowId) {
         if (recipeRowId == 0)
             return;
@@ -189,7 +184,7 @@ internal unsafe partial class LogWindow {
         _pendingPaintDetailsOnly = true;
     }
 
-    private void AppendSharedModelsSection(OwnershipSnapshot snap) {
+    private void AppendSharedModelsSection(OwnershipQuery q) {
         if (_selectedSet is null)
             return;
 
@@ -217,7 +212,7 @@ internal unsafe partial class LogWindow {
                 _detailRowOptions.Add(new DetailListRowData {
                     Kind = DetailRowKind.SharedModelSet,
                     SharedModelItemId = itemId,
-                    SharedModelRow = BuildSharedModelItemRowData(itemId, snap),
+                    SharedModelRow = BuildSharedModelItemRowData(itemId, q),
                 });
             }
             return;
@@ -242,7 +237,7 @@ internal unsafe partial class LogWindow {
         foreach (var sibling in siblings) {
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.SharedModelSet,
-                SharedModelRow = BuildSetListRowData(sibling, snap, appendNotInListSuffix: true),
+                SharedModelRow = BuildSetListRowData(sibling, q, appendNotInListSuffix: true),
             });
         }
     }
