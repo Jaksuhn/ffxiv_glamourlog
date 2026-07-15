@@ -113,7 +113,9 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         if (data is null)
             return;
 
-        EnsureCategoryTracked(data);
+        // if category already flipped before this refresh, wipe projected leftovers so native rebuilds fully
+        if (TryHandlePreRefreshCategoryChange(data))
+            return;
 
         if (!IsFilteringActive) {
             PrepareForNativeRefresh(data);
@@ -250,6 +252,13 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
     }
 
     private unsafe bool TryCaptureCategorySnapshot(MiragePrismPrismBoxData* data) {
+        if (data->CrystallizeCategory != _trackedCategory)
+            return false;
+
+        // avoid capturing the previous tab's projected rows while native is still rebuilding
+        if (data->IsPopulatingList || !data->IsPopulatingComplete)
+            return false;
+
         ClearStaleCrystallizeTail(data);
 
         var reported = (int)data->CrystallizeItemCount;
@@ -324,14 +333,35 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _populationWasIncomplete = false;
     }
 
+    // category already changed while agent still holds the previous tab's projected rows
+    private unsafe bool TryHandlePreRefreshCategoryChange(MiragePrismPrismBoxData* data) {
+        var category = data->CrystallizeCategory;
+        if (category == _trackedCategory)
+            return false;
+
+        EnsureCategoryTracked(data);
+        ClearAgentCategoryItems(data);
+        LogFilterDebug(nameof(TryHandlePreRefreshCategoryChange), $"cleared projected rows for category switch to {category}");
+        return true;
+    }
+
     private unsafe bool TryDetectCategoryDrift(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (data->CrystallizeCategory == _trackedCategory)
             return false;
 
         _nativeTree.InvalidateAll();
         EnsureCategoryTracked(data);
+        ClearAgentCategoryItems(data);
         RequestAddonRefresh(addon);
         return true;
+    }
+
+    private static unsafe void ClearAgentCategoryItems(MiragePrismPrismBoxData* data) {
+        data->CrystallizeItemCount = 0;
+        data->CrystallizeItemIndex = 0;
+        data->CrystallizeTreeRowCount = 0;
+        for (var i = 0; i < MaxCategoryItems; i++)
+            data->CrystallizeItems[i] = default;
     }
 
     private unsafe bool TryApplyFilterPipeline(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {

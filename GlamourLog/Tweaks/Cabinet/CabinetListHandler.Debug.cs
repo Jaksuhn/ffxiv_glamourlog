@@ -1,6 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using FFXIVClientStructs.FFXIV.Component.GUI;
 using System.Text;
 
 namespace GlamourLog.Features.Cabinet;
@@ -34,45 +33,32 @@ internal sealed partial class CabinetListHandler {
     private unsafe void LogSnapshotUnavailableOnce(AddonCabinet* addon, AgentCabinet* agent) {
         var list = addon->ItemList;
         var listCount = list is not null ? list->GetItemCount() : -1;
-        var contiguous = ScanContiguousPopulatedCategoryItemCount(agent);
-        var inferred = _categoryItemCount > 0 ? _categoryItemCount : InferCategoryItemCount(addon, agent);
+        var count = ReadCategoryItemCount(addon, agent);
         var signature =
-            $"cat={addon->CategoryIndex} inferred={inferred} list={listCount} contiguous={contiguous} " +
-            $"pendingUpdate={agent->PendingUpdate} pass={_snapshotCapturePasses}";
+            $"cat={addon->CategoryIndex} agentCat={agent->SelectedCategoryIndex} count={count} " +
+            $"list={listCount} pendingUpdate={agent->PendingUpdate} snapshot={_rows.Length}";
         if (signature == _lastSnapshotUnavailableSignature)
             return;
         _lastSnapshotUnavailableSignature = signature;
-        LogFilterDebug(nameof(OnPostRefresh), $"category snapshot unavailable after native refresh ({signature})");
+        LogFilterDebug(nameof(OnPostRefresh), $"waiting for native category data ({signature})");
     }
 
-    private unsafe void LogApplyPipelineResult(AddonCabinet* addon) {
+    private unsafe void LogApplyPipelineResult(AddonCabinet* addon, int visible, int snapshot) {
         var list = addon->ItemList;
-        var listLength = list is not null ? list->ListLength : -1;
-        var getItemCount = list is not null ? list->GetItemCount() : -1;
-        var applySummary =
-            $"visible={_displayToSource.Length} snapshot={_categoryRows.Length} category={_categoryIndex} " +
-            $"categoryItemCount={_categoryItemCount} listLength={listLength} getItemCount={getItemCount} " +
-            $"scrollRefreshPending={list is not null && list->IsScrollRefreshPending} updatePending={list is not null && list->IsUpdatePending}";
+        var listCount = list is not null ? list->GetItemCount() : -1;
+        var applySummary = $"visible={visible} snapshot={snapshot} category={addon->CategoryIndex} getItemCount={listCount}";
         if (applySummary == _lastApplyPipeline)
             return;
         _lastApplyPipeline = applySummary;
-        LogFilterDebug(nameof(TryApplyFilterPipeline), $"applied {applySummary}");
+        LogFilterDebug(nameof(Project), $"applied {applySummary}");
     }
 
-    private unsafe void LogFilterOnState(string phase, AddonCabinet* addon, AgentCabinet* agent) {
+    private unsafe void LogFilterOnState(string phase, AddonCabinet* addon, AgentCabinet* agent, int snapshot, int visible) {
         var list = addon->ItemList;
-        var nativeVisible = list is not null && ((AtkResNode*)list)->IsVisible();
-        var listLength = list is not null ? list->ListLength : -1;
-        var getItemCount = list is not null ? list->GetItemCount() : -1;
-        var numVisible = list is not null ? list->NumVisibleItems : (short)-1;
-        var itemHeight = list is not null ? list->ItemHeight : (short)-1;
-        var listHeight = list is not null ? list->ListHeight : (short)-1;
-        var hasRenderer = list is not null && list->FirstAtkComponentListItemRenderer is not null;
-        var hasScrollBar = list is not null && list->ScrollBarComponent is not null;
+        var listCount = list is not null ? list->GetItemCount() : -1;
         var summary =
-            $"visible={_displayToSource.Length} snapshot={_categoryRows.Length} category={_categoryIndex} agentItemCount={agent->ItemCount} " +
-            $"nativeVisible={nativeVisible} nativeListLength={listLength} nativeGetItemCount={getItemCount} nativeNumVisible={numVisible} " +
-            $"itemHeight={itemHeight} listHeight={listHeight} hasRenderer={hasRenderer} hasScrollBar={hasScrollBar}";
+            $"visible={visible} snapshot={snapshot} category={addon->CategoryIndex} agentItemCount={agent->ItemCount} " +
+            $"nativeGetItemCount={listCount}";
         if (summary == _lastFilterOnState)
             return;
         _lastFilterOnState = summary;
@@ -81,69 +67,52 @@ internal sealed partial class CabinetListHandler {
 
     private unsafe void LogFilterOffState(string phase, AddonCabinet* addon, AgentCabinet* agent) {
         var list = addon->ItemList;
-        var nativeVisible = list is not null && ((AtkResNode*)list)->IsVisible();
-        var nativeListLength = list is not null ? list->ListLength : -1;
-        var nativeGetItemCount = list is not null ? list->GetItemCount() : -1;
-        var inferred = InferCategoryItemCount(addon, agent);
+        var listCount = list is not null ? list->GetItemCount() : -1;
         var summary =
-            $"snapshot={_categoryRows.Length} category={addon->CategoryIndex} inferred={inferred} agentItemCount={agent->ItemCount} " +
-            $"nativeVisible={nativeVisible} nativeListLength={nativeListLength} nativeGetItemCount={nativeGetItemCount}";
+            $"category={addon->CategoryIndex} count={ReadCategoryItemCount(addon, agent)} agentItemCount={agent->ItemCount} " +
+            $"nativeGetItemCount={listCount}";
         if (summary == _lastFilterOffState)
             return;
         _lastFilterOffState = summary;
         LogFilterDebug(phase, summary);
     }
 
-    private void LogFilterRebuildSummary() {
-        var hiddenCount = _categoryItemCount - _displayToSource.Length;
-        var summary = new StringBuilder();
-        summary.Append($"category={_categoryIndex} snapshot={_categoryRows.Length} visible={_displayToSource.Length} hidden={hiddenCount}");
-        summary.Append($" filters=[{DescribeEnabledFilters()}]");
-        var signature = summary.ToString();
+    private void LogFilterRebuildSummary(uint category, int snapshot, int visible, uint[] itemIds, List<int> visibleIndices) {
+        var hiddenCount = snapshot - visible;
+        var signature = $"category={category} snapshot={snapshot} visible={visible} hidden={hiddenCount} filters=[{DescribeEnabledFilters()}]";
         if (signature != _lastFilterSummary) {
             _lastFilterSummary = signature;
-            LogFilterDebug(nameof(RebuildFilterMap), signature);
+            LogFilterDebug("RebuildFilterMap", signature);
             if (hiddenCount > 0)
-                LogHiddenItemDecisions();
+                LogHiddenItemDecisions(itemIds);
         }
-        LogPrePostFilterItemSets();
-    }
 
-    private void LogPrePostFilterItemSets() {
-        var pre = FormatIndexedItemSet(Enumerable.Range(0, _categoryItemCount));
+        var pre = FormatIndexedItemSet(Enumerable.Range(0, itemIds.Length), itemIds);
         if (pre != _lastPreFilter) {
             _lastPreFilter = pre;
             LogFilterDebug("pre-filter", pre);
         }
-        var post = FormatIndexedItemSet(_displayToSource);
+
+        var post = FormatIndexedItemSet(visibleIndices, itemIds);
         if (post != _lastPostFilter) {
             _lastPostFilter = post;
             LogFilterDebug("post-filter", post);
         }
     }
 
-    private string FormatIndexedItemSet(IEnumerable<int> sourceIndices) {
-        var parts = new List<string>();
-        foreach (var index in sourceIndices) {
-            if ((uint)index >= (uint)_categoryItemCount)
+    private void LogHiddenItemDecisions(uint[] itemIds) {
+        var lines = new List<string>(itemIds.Length);
+        for (var i = 0; i < itemIds.Length; i++) {
+            if (!ShouldExcludeItem(itemIds[i]))
                 continue;
-            parts.Add(FormatFilterRow(index, _categoryItemIds[index]));
+            lines.Add($"{FormatFilterRow(i, itemIds[i])} => {DescribeHideReasons(itemIds[i])}");
         }
-        return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
-    }
 
-    private void LogHiddenItemDecisions() {
-        var lines = new List<string>(_categoryItemCount);
-        for (var i = 0; i < _categoryItemCount; i++) {
-            var itemId = _categoryItemIds[i];
-            if (!ShouldExcludeItem(itemId))
-                continue;
-            lines.Add($"{FormatFilterRow(i, itemId)} => {DescribeHideReasons(itemId)}");
-        }
         var signature = string.Join('\n', lines);
         if (signature == _lastHiddenItems)
             return;
         _lastHiddenItems = signature;
+
         var logCount = Math.Min(lines.Count, MaxHiddenItemLogLines);
         for (var i = 0; i < logCount; i++)
             LogFilterDebug("hidden", lines[i]);
@@ -176,7 +145,15 @@ internal sealed partial class CabinetListHandler {
         return string.Join(", ", reasons);
     }
 
-    private static string FormatFilterRow(int index, uint itemId) {
-        return $"[{index}] {(ItemHandle)itemId}";
+    private static string FormatIndexedItemSet(IEnumerable<int> sourceIndices, uint[] itemIds) {
+        var parts = new List<string>();
+        foreach (var index in sourceIndices) {
+            if ((uint)index >= (uint)itemIds.Length)
+                continue;
+            parts.Add(FormatFilterRow(index, itemIds[index]));
+        }
+        return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
+
+    private static string FormatFilterRow(int index, uint itemId) => $"[{index}] {(ItemHandle)itemId}";
 }
