@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>15.42</Version>
+    <Version>15.43</Version>
     <LangVersion>preview</LangVersion>
     <Author>croizat</Author>
     <Name>Glamour Log</Name>
