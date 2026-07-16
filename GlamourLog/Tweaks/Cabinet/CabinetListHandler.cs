@@ -17,11 +17,10 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private readonly ICabinetRowFilter[] _filters;
     private readonly AddonController<AddonCabinet> _addonController;
 
+    // last full-category capture; kept after Project so filter-off can un-project
     private CategoryRowSnapshot[] _rows = [];
     private uint[] _itemIds = [];
     private uint _categoryIndex = uint.MaxValue;
-    private int _pendingFullListCount;
-    private int _lastProjectedCount = -1; // distinguishes filtered projection from a native category shrink
     private bool _applyWhenReady;
 
     public unsafe CabinetListHandler() {
@@ -43,12 +42,15 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
     private bool ShouldExcludeItem(uint itemId) => itemId == 0 || _filters.Any(f => f.IsEnabled && f.ShouldHide(itemId));
 
+    private bool HasCaptureFor(uint categoryIndex) => _rows.Length > 0 && _categoryIndex == categoryIndex;
+
     internal void OnConfigChanged() {
         Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
     }
 
     private unsafe void ApplyConfigChange() {
         CabinetGearsetLookup.Invalidate();
+        ClearFilterLogSignatures();
 
         var addon = Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName);
         if (addon is null) {
@@ -56,15 +58,35 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             return;
         }
 
+        var agent = AgentCabinet.Instance();
+        if (agent is null) {
+            ClearFilterState();
+            return;
+        }
+
         if (!IsFilteringActive) {
-            _pendingFullListCount = _rows.Length;
-            ClearFilterState(keepPendingFullList: true);
-            addon->OnRefresh(0, null);
+            // undo our projection from the kept capture — native rebuild does not restore ItemSlots
+            if (HasCaptureFor(addon->CategoryIndex)) {
+                Restore(agent, addon);
+                LogFilterDebug(nameof(ApplyConfigChange), $"restored {_rows.Length} rows after filter disable");
+                ReleaseRows();
+            }
+            else {
+                LogFilterDebug(nameof(ApplyConfigChange), "filters disabled; no capture to restore");
+            }
+
+            _applyWhenReady = false;
+            return;
+        }
+
+        if (HasCaptureFor(addon->CategoryIndex)) {
+            var visible = Project(agent, addon);
+            LogFilterOnState(nameof(ApplyConfigChange), addon, agent, _rows.Length, visible);
             return;
         }
 
         _applyWhenReady = true;
-        addon->OnRefresh(0, null);
+        TryApplyFilter(addon, fromRefresh: true);
     }
 
     private unsafe void OnArmoireOwnershipChanged() {
@@ -75,6 +97,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         LogFilterDebug(nameof(OnArmoireOwnershipChanged), "ownership changed; scheduling list refresh");
         Svc.Framework.RunOnFrameworkThread(() => {
+            ReleaseRows(); // deposited set changed — capture is stale
             ClearFilterLogSignatures();
             _applyWhenReady = true;
             if (Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName) is not null and var addon)
@@ -89,20 +112,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             return;
 
         CabinetGearsetLookup.Invalidate();
-
-        var agent = AgentCabinet.Instance();
-        if (agent is null)
-            return;
-
-        // never restore across a tab switch or while native is rebuilding
-        if (_categoryIndex != addon->CategoryIndex || agent->PendingUpdate || !IsCategoryReady(agent, addon)) {
-            if (_categoryIndex != addon->CategoryIndex)
-                DropSnapshot(addon->CategoryIndex);
-            return;
-        }
-
-        if (_rows.Length > 0)
-            Restore(agent, addon);
+        // no PreRefresh restore — native owns the list across its own refreshes
     }
 
     private unsafe void OnPostRefresh(AddonCabinet* addon) {
@@ -110,13 +120,8 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             return;
 
         if (!IsFilteringActive) {
-            if (_pendingFullListCount > 0) {
-                ApplyListCount(addon, _pendingFullListCount);
-                _pendingFullListCount = 0;
-            }
-
-            if (AgentCabinet.Instance() is not null and var filterOffAgent)
-                LogFilterOffState(nameof(OnPostRefresh), addon, filterOffAgent);
+            if (AgentCabinet.Instance() is not null and var agent)
+                LogFilterOffState(nameof(OnPostRefresh), addon, agent);
             return;
         }
 
@@ -137,14 +142,24 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
         if (agent is null)
             return;
 
-        if (_categoryIndex != addon->CategoryIndex)
-            DropSnapshot(addon->CategoryIndex);
+        if (_categoryIndex != addon->CategoryIndex) {
+            ReleaseRows();
+            _categoryIndex = addon->CategoryIndex;
+            ClearFilterLogSignatures();
+        }
 
         if (agent->PendingUpdate || !IsCategoryReady(agent, addon)) {
             _applyWhenReady = true;
             if (fromRefresh)
                 LogSnapshotUnavailableOnce(addon, agent);
             return; // wait — do not re-enter OnRefresh from here (stack overflow CTD)
+        }
+
+        if (HasCaptureFor(addon->CategoryIndex)) {
+            _applyWhenReady = false;
+            var visible = Project(agent, addon);
+            LogFilterOnState(nameof(OnPostRefresh), addon, agent, _rows.Length, visible);
+            return;
         }
 
         if (!TryCapture(agent, addon)) {
@@ -155,15 +170,10 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
         }
 
         _applyWhenReady = false;
-        var visible = Project(agent, addon);
-        LogFilterOnState(nameof(OnPostRefresh), addon, agent, _rows.Length, visible);
-    }
-
-    private void DropSnapshot(uint categoryIndex) {
-        ReleaseRows();
-        _categoryIndex = categoryIndex;
-        _lastProjectedCount = -1;
-        ClearFilterLogSignatures();
+        var sourceCount = _rows.Length;
+        var projected = Project(agent, addon);
+        LogFilterOnState(nameof(OnPostRefresh), addon, agent, sourceCount, projected);
+        // keep _rows so filter-off can Restore
     }
 
     private unsafe bool TryCapture(AgentCabinet* agent, AddonCabinet* addon) {
@@ -176,35 +186,23 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
                 return false;
         }
 
-        // projected filter view is shorter than the snapshot — wait for PreRefresh restore.
-        // a settled native shrink (store) is also shorter, but count != last projected length.
-        if (_rows.Length > 0 && count < _rows.Length && _categoryIndex == addon->CategoryIndex) {
-            if (agent->PendingUpdate || (_lastProjectedCount >= 0 && count == _lastProjectedCount))
-                return false;
+        var ownership = Svc.Get<OwnershipService>();
+        var rows = count == 0 ? [] : new CategoryRowSnapshot[count];
+        var itemIds = count == 0 ? [] : new uint[count];
+        for (var i = 0; i < count; i++) {
+            rows[i] = new CategoryRowSnapshot {
+                Slot = ItemSlotProjection.Capture(ref addon->ItemSlots[i], ref agent->ItemCaches[i]),
+                Cache = ItemCacheProjection.Capture(ref agent->ItemCaches[i]),
+            };
+            itemIds[i] = rows[i].Cache.Id != 0
+                ? ownership.GetItemIdFromLookups(rows[i].Cache.Id)
+                : ResolveRowItemId(agent, addon, i);
         }
 
         ReleaseRows();
         _categoryIndex = addon->CategoryIndex;
-        _lastProjectedCount = -1;
-
-        if (count == 0) {
-            _rows = [];
-            _itemIds = [];
-            return true;
-        }
-
-        _rows = new CategoryRowSnapshot[count];
-        _itemIds = new uint[count];
-        for (var i = 0; i < count; i++) {
-            _rows[i] = new CategoryRowSnapshot {
-                Slot = ItemSlotProjection.Capture(ref addon->ItemSlots[i], ref agent->ItemCaches[i]),
-                Cache = ItemCacheProjection.Capture(ref agent->ItemCaches[i]),
-            };
-            _itemIds[i] = _rows[i].Cache.Id != 0
-                ? Svc.Get<OwnershipService>().GetItemIdFromLookups(_rows[i].Cache.Id)
-                : ResolveRowItemId(agent, addon, i);
-        }
-
+        _rows = rows;
+        _itemIds = itemIds;
         return true;
     }
 
@@ -224,7 +222,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         ClearRowRange(agent, addon, visible.Count, MaxCategoryItems);
         ApplyListCount(addon, visible.Count);
-        _lastProjectedCount = visible.Count;
         LogApplyPipelineResult(addon, visible.Count, _rows.Length);
         return visible.Count;
     }
@@ -237,6 +234,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         ClearRowRange(agent, addon, _rows.Length, MaxCategoryItems);
         ApplyListCount(addon, _rows.Length);
+        LogFilterDebug(nameof(Restore), $"wrote {_rows.Length} rows back to agent");
     }
 
     private void ReleaseRows() {
@@ -244,7 +242,6 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             row.Dispose();
         _rows = [];
         _itemIds = [];
-        _lastProjectedCount = -1;
     }
 
     private static unsafe bool IsCategoryReady(AgentCabinet* agent, AddonCabinet* addon)
@@ -315,11 +312,9 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
         }
     }
 
-    private void ClearFilterState(bool keepPendingFullList = false) {
+    private void ClearFilterState() {
         ReleaseRows();
         _categoryIndex = uint.MaxValue;
-        if (!keepPendingFullList)
-            _pendingFullListCount = 0;
         _applyWhenReady = false;
         ClearFilterLogSignatures();
     }

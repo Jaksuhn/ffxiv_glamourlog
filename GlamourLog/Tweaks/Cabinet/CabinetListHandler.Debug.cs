@@ -28,7 +28,7 @@ internal sealed partial class CabinetListHandler {
     }
 
     private static void LogFilterDebug(string phase, string message)
-        => Svc.Log.Information($"[{nameof(CabinetListHandler)}.{phase}] {message}");
+        => Svc.Log.Debug($"[{nameof(CabinetListHandler)}.{phase}] {message}");
 
     private unsafe void LogSnapshotUnavailableOnce(AddonCabinet* addon, AgentCabinet* agent) {
         var list = addon->ItemList;
@@ -36,28 +36,28 @@ internal sealed partial class CabinetListHandler {
         var count = ReadCategoryItemCount(addon, agent);
         var signature =
             $"cat={addon->CategoryIndex} agentCat={agent->SelectedCategoryIndex} count={count} " +
-            $"list={listCount} pendingUpdate={agent->PendingUpdate} snapshot={_rows.Length}";
+            $"list={listCount} pendingUpdate={agent->PendingUpdate} captured={_rows.Length}";
         if (signature == _lastSnapshotUnavailableSignature)
             return;
         _lastSnapshotUnavailableSignature = signature;
         LogFilterDebug(nameof(OnPostRefresh), $"waiting for native category data ({signature})");
     }
 
-    private unsafe void LogApplyPipelineResult(AddonCabinet* addon, int visible, int snapshot) {
+    private unsafe void LogApplyPipelineResult(AddonCabinet* addon, int visible, int source) {
         var list = addon->ItemList;
         var listCount = list is not null ? list->GetItemCount() : -1;
-        var applySummary = $"visible={visible} snapshot={snapshot} category={addon->CategoryIndex} getItemCount={listCount}";
+        var applySummary = $"visible={visible} source={source} category={addon->CategoryIndex} getItemCount={listCount}";
         if (applySummary == _lastApplyPipeline)
             return;
         _lastApplyPipeline = applySummary;
         LogFilterDebug(nameof(Project), $"applied {applySummary}");
     }
 
-    private unsafe void LogFilterOnState(string phase, AddonCabinet* addon, AgentCabinet* agent, int snapshot, int visible) {
+    private unsafe void LogFilterOnState(string phase, AddonCabinet* addon, AgentCabinet* agent, int source, int visible) {
         var list = addon->ItemList;
         var listCount = list is not null ? list->GetItemCount() : -1;
         var summary =
-            $"visible={visible} snapshot={snapshot} category={addon->CategoryIndex} agentItemCount={agent->ItemCount} " +
+            $"visible={visible} source={source} category={addon->CategoryIndex} agentItemCount={agent->ItemCount} " +
             $"nativeGetItemCount={listCount}";
         if (summary == _lastFilterOnState)
             return;
@@ -77,9 +77,9 @@ internal sealed partial class CabinetListHandler {
         LogFilterDebug(phase, summary);
     }
 
-    private void LogFilterRebuildSummary(uint category, int snapshot, int visible, uint[] itemIds, List<int> visibleIndices) {
-        var hiddenCount = snapshot - visible;
-        var signature = $"category={category} snapshot={snapshot} visible={visible} hidden={hiddenCount} filters=[{DescribeEnabledFilters()}]";
+    private void LogFilterRebuildSummary(uint category, int source, int visible, uint[] itemIds, List<int> visibleIndices) {
+        var hiddenCount = source - visible;
+        var signature = $"category={category} source={source} visible={visible} hidden={hiddenCount} filters=[{DescribeEnabledFilters()}]";
         if (signature != _lastFilterSummary) {
             _lastFilterSummary = signature;
             LogFilterDebug("RebuildFilterMap", signature);
