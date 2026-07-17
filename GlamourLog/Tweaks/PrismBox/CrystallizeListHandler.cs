@@ -9,6 +9,7 @@ namespace GlamourLog.Features.PrismBox;
 
 internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
     private const int MaxCategoryItems = 140;
+    private const uint EmptyListMessageNodeId = 12; // "no glamour ready items available"
 
     private readonly IPrismBoxRowFilter[] _filters;
     private readonly CrystallizeNativeTree _nativeTree;
@@ -255,8 +256,10 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
     private unsafe void ApplyFilteredDisplay(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (!TryCaptureCategorySnapshot(data)) {
             // already accepted empty — stay idle (empty cats often never get a buffer layout)
-            if (IsIdleEmptyCategory(data))
+            if (IsIdleEmptyCategory(data)) {
+                SetEmptyListMessageVisible(addon, true);
                 return;
+            }
 
             LogSnapshotUnavailableOnce(data);
 
@@ -272,9 +275,12 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
                 ApplyEmptyCategory(data);
                 LogFilterApplySummary(data, 0, 0);
                 _emptyAppliedCategory = data->CrystallizeCategory;
-                // skip tree rewrite when layout never arrives for empty categories
+                // empty cats often never get a fresh LoadAtkValues — clear stale prior-tab buffer instead
                 if (_nativeTree.HasBufferLayout && _nativeTree.HasBaseline)
                     _ = TryRepopulateTree(addon, data, isFilteringActive: true);
+                else
+                    _nativeTree.ClearToEmpty(addon);
+                SetEmptyListMessageVisible(addon, true);
                 return;
             }
 
@@ -301,6 +307,9 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             RequestAddonRefresh();
             return;
         }
+
+        // native hides this when the agent has rows; re-show after we filter them all out
+        SetEmptyListMessageVisible(addon, _displayToSource.Length is 0);
 
         LogFilterOnState(nameof(OnPostRefresh), addon, data);
     }
@@ -385,6 +394,14 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             ClearTransientState();
             _applyWhenReady = true;
             RequestAddonRefresh();
+            return;
+        }
+
+        // PostRefresh/PostRequestedUpdate can leave this cleared after a restore→native cycle; re-assert while idle-empty
+        if (IsFilteringActive && ShouldShowEmptyListMessage(data)) {
+            var emptyNode = addon->GetTextNodeById(EmptyListMessageNodeId);
+            if (emptyNode is not null && !emptyNode->IsVisible())
+                SetEmptyListMessageVisible(addon, true);
         }
     }
 
@@ -439,7 +456,8 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         return true;
     }
 
-    // zero-filter path: commit empty snapshot once native agent and atk tree both agree category is empty
+    // zero-filter path: commit once the agent is empty. stale ATK slots from a prior tab are cleared by ClearToEmpty —
+    // native empty categories do not rewrite LoadAtkValues, so waiting for NativeSlotCount==0 never settles on revisit.
     private unsafe bool TryCommitEmptyCategoryIfNativeSettled(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         if (data->CrystallizeCategory != _trackedCategory)
             return false;
@@ -451,15 +469,13 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             return false;
         }
 
+        if (!data->IsPopulatingComplete)
+            return false;
+
         _nativeTree.Resolve(addon);
         _nativeTree.CaptureAtkSnapshot(addon);
         if (addon->AtkValuesCount > 0)
             _nativeTree.ParseLayout(0, force: true);
-
-        if (_nativeTree.NativeSlotCount > 0) {
-            _emptyCategoryRefreshPasses = 0;
-            return false;
-        }
 
         _emptyCategoryRefreshPasses++;
         if (_emptyCategoryRefreshPasses < 2)
@@ -470,6 +486,16 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _trackedCategory = data->CrystallizeCategory;
         _emptyCategoryRefreshPasses = 0;
         return true;
+    }
+
+    private unsafe bool ShouldShowEmptyListMessage(MiragePrismPrismBoxData* data) {
+        if (data->CrystallizeCategory != _trackedCategory || !data->IsPopulatingComplete)
+            return false;
+        if (_displayToSource.Length > 0)
+            return false;
+
+        // filtered-all-hidden still has a snapshot; native-empty uses the idle marker
+        return _categoryRows.Length > 0 || IsIdleEmptyCategory(data);
     }
 
     private unsafe void EnsureCategoryTracked(MiragePrismPrismBoxData* data) {
@@ -644,6 +670,24 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         for (var i = 0; i < MaxCategoryItems; i++)
             data->CrystallizeItems[i] = default;
         _displayToSource = [];
+    }
+
+    // native refresh with agent/ATK rows clears this; we re-show after filtering to zero (and on PostUpdate while idle-empty)
+    private static unsafe void SetEmptyListMessageVisible(AtkUnitBase* addon, bool visible) {
+        if (addon is null)
+            return;
+
+        var node = (AtkResNode*)addon->GetTextNodeById(EmptyListMessageNodeId);
+        if (node is null)
+            return;
+
+        node->ToggleVisibility(visible);
+        if (visible)
+            node->NodeFlags |= NodeFlags.Visible;
+        else
+            node->NodeFlags &= ~NodeFlags.Visible;
+
+        addon->UldManager.UpdateDrawNodeList();
     }
 
     private void ClearTransientState() {

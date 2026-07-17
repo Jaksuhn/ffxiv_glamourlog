@@ -92,6 +92,48 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
     internal void EnsureVisible(AtkUnitBase* addon, bool hideOtherTreeLists = false)
         => SetTreeListVisible(addon, true, hideOtherTreeLists);
 
+    // agent-empty category revisit: prior tab's LoadAtkValues buffer is still present — wipe it without a baseline
+    internal void ClearToEmpty(AtkUnitBase* addon) {
+        Resolve(addon);
+        if (TreeList is null)
+            return;
+
+        if (HasBufferLayout && addon is not null) {
+            CaptureAtkSnapshot(addon);
+            if (Snapshot.Length > 0) {
+                var inferred = CrystallizeListAtk.InferItemCount(Snapshot, _bufferLayout);
+                var clearThrough = Math.Max(inferred, NativeSlotCount);
+                if (clearThrough <= 0)
+                    clearThrough = 1;
+
+                var clearedAtk = CrystallizeListAtk.Clone(Snapshot);
+                CrystallizeListAtk.ClearSlots(clearedAtk, 0, clearThrough, _bufferLayout);
+                if (addon->AtkValues is not null)
+                    CrystallizeListAtk.WriteSlotsToAtkBuffer(clearedAtk, addon->AtkValues, addon->AtkValuesCount, _bufferLayout, 0, clearThrough);
+                Snapshot = clearedAtk;
+            }
+
+            NativeSlotCount = 0;
+            FilteredSlotCount = 0;
+            Layout = [];
+        }
+
+        var list = (AtkComponentList*)TreeList;
+        list->SetItemCount(0);
+        for (var slot = 0; slot < TreeList->Items.Count; slot++) {
+            var item = TreeList->GetItem(slot);
+            if (item is null)
+                continue;
+            item->IsHidden = true;
+            CrystallizeListAtk.ClearTreeItemDisplay(item);
+        }
+
+        HideAllItemRenderers(TreeList);
+        ClearTreeDisplay(TreeList);
+        if (addon is not null)
+            SetTreeListVisible(addon, false, hideOtherTreeLists: true);
+    }
+
     internal void EnsureAllTreeListsVisible(AtkUnitBase* addon) {
         if (addon is null)
             return;

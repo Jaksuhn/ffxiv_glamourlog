@@ -13,6 +13,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private bool _disposed;
     private const string AddonName = "Cabinet";
     private const int MaxCategoryItems = 140;
+    private const uint EmptyListMessageNodeId = 13; // "no items available"-style empty list text
 
     private readonly ICabinetRowFilter[] _filters;
     private readonly AddonController<AddonCabinet> _addonController;
@@ -21,6 +22,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private CategoryRowSnapshot[] _rows = [];
     private uint[] _itemIds = [];
     private uint _categoryIndex = uint.MaxValue;
+    private int _projectedVisible = -1;
     private bool _applyWhenReady;
 
     public unsafe CabinetListHandler() {
@@ -129,10 +131,18 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     }
 
     private unsafe void OnAddonUpdate(AddonCabinet* addon) {
-        if (addon is null || !IsFilteringActive || !_applyWhenReady)
+        if (addon is null || !IsFilteringActive)
             return;
 
-        TryApplyFilter(addon, fromRefresh: false);
+        if (_applyWhenReady)
+            TryApplyFilter(addon, fromRefresh: false);
+
+        // native refresh with rows clears this; re-assert while filter leaves the list empty
+        if (ShouldShowEmptyListMessage(addon)) {
+            var emptyNode = addon->GetTextNodeById(EmptyListMessageNodeId);
+            if (emptyNode is not null && !emptyNode->IsVisible())
+                SetEmptyListMessageVisible(addon, true);
+        }
     }
 
     private unsafe void OnFinalize(AddonCabinet* addon) => ClearFilterState();
@@ -222,6 +232,9 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         ClearRowRange(agent, addon, visible.Count, MaxCategoryItems);
         ApplyListCount(addon, visible.Count);
+        _projectedVisible = visible.Count;
+        // native hides this when the list has rows; re-show after we filter them all out
+        SetEmptyListMessageVisible(addon, visible.Count is 0);
         LogApplyPipelineResult(addon, visible.Count, _rows.Length);
         return visible.Count;
     }
@@ -234,6 +247,8 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
 
         ClearRowRange(agent, addon, _rows.Length, MaxCategoryItems);
         ApplyListCount(addon, _rows.Length);
+        _projectedVisible = _rows.Length;
+        SetEmptyListMessageVisible(addon, _rows.Length is 0);
         LogFilterDebug(nameof(Restore), $"wrote {_rows.Length} rows back to agent");
     }
 
@@ -242,6 +257,28 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
             row.Dispose();
         _rows = [];
         _itemIds = [];
+        _projectedVisible = -1;
+    }
+
+    private unsafe bool ShouldShowEmptyListMessage(AddonCabinet* addon)
+        => HasCaptureFor(addon->CategoryIndex) && _projectedVisible == 0;
+
+    // native refresh with rows clears this; we re-show after filtering to zero (and on PostUpdate while idle-empty)
+    private static unsafe void SetEmptyListMessageVisible(AddonCabinet* addon, bool visible) {
+        if (addon is null)
+            return;
+
+        var node = (AtkResNode*)addon->GetTextNodeById(EmptyListMessageNodeId);
+        if (node is null)
+            return;
+
+        node->ToggleVisibility(visible);
+        if (visible)
+            node->NodeFlags |= NodeFlags.Visible;
+        else
+            node->NodeFlags &= ~NodeFlags.Visible;
+
+        addon->UldManager.UpdateDrawNodeList();
     }
 
     private static unsafe bool IsCategoryReady(AgentCabinet* agent, AddonCabinet* addon)
@@ -315,6 +352,7 @@ internal sealed partial class CabinetListHandler : IAsyncDisposable {
     private void ClearFilterState() {
         ReleaseRows();
         _categoryIndex = uint.MaxValue;
+        _projectedVisible = -1;
         _applyWhenReady = false;
         ClearFilterLogSignatures();
     }
