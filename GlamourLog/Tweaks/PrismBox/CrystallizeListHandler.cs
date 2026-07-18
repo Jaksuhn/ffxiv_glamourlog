@@ -7,11 +7,7 @@ using System.Threading.Tasks;
 
 namespace GlamourLog.Features.PrismBox;
 
-internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
-    private const int MaxCategoryItems = 140;
-    private const uint EmptyListMessageNodeId = 12; // "no glamour ready items available"
-
-    private readonly IPrismBoxRowFilter[] _filters;
+internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDisposable {
     private readonly CrystallizeNativeTree _nativeTree;
     private readonly AddonController<AtkUnitBase> _addonController;
 
@@ -31,9 +27,9 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
     private bool _applyWhenReady; // wait for native populate instead of hammering OnRefresh
     private bool _populationWasIncomplete; // re-refresh when native finishes loading mid-filter
     private int _emptyAppliedCategory = int.MinValue; // idle once empty category is accepted
+    private bool _logNextApply; // emit apply debug once after a discrete transition
 
-    public unsafe CrystallizeListHandler() {
-        _filters = PrismBoxFilters.Create();
+    public unsafe CrystallizeListHandler() : base(12, PrismBoxFilters.Create()) {
         _nativeTree = new CrystallizeNativeTree();
         _addonController = new AddonController<AtkUnitBase> {
             AddonName = CrystallizeNativeTree.AddonName,
@@ -45,8 +41,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _addonController.Enable();
         Svc.GameInventory.InventoryChanged += OnInventoryChanged;
     }
-
-    private bool IsFilteringActive => _filters.Any(f => f.IsEnabled);
 
     internal void OnConfigChanged() => Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
 
@@ -80,9 +74,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             if (eventData is InventoryItemRemovedArgs && TryFastPruneStoredItem(baseId))
                 return;
 
-            QueueListResync(eventData is InventoryItemRemovedArgs
-                ? "inventory item removed"
-                : "inventory item added");
+            QueueListResync(eventData is InventoryItemRemovedArgs ? "inventory item removed" : "inventory item added");
             return;
         }
     }
@@ -111,7 +103,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _displayToSource = [];
         _deferCategoryRestore = false;
         _nativeTree.InvalidateBaseline();
-        ClearFilterLogSignatures();
+        _logNextApply = true;
         LogFilterDebug(nameof(TryFastPruneStoredItem), $"pruned item {itemId}; snapshot={kept}");
 
         // restore pruned list and refresh once so baseline is re-captured — avoid full Populate
@@ -140,7 +132,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             _applyWhenReady = true;
             _snapshotCapturePasses = 0;
             _nativeTree.InvalidateAll();
-            ClearFilterLogSignatures();
+            _logNextApply = true;
             LogFilterDebug(nameof(QueueListResync), reason);
 
             // rebuild crystallize candidates from inventory; OnRefresh alone keeps our projected rows
@@ -189,6 +181,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             _nativeTree.InvalidateAtkCache();
         }
 
+        _logNextApply = true;
         LogFilterDebug(nameof(ApplyConfigChange), IsFilteringActive
             ? $"filters enabled for category {data->CrystallizeCategory}"
             : $"filters disabled for category {data->CrystallizeCategory}");
@@ -261,8 +254,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
                 return;
             }
 
-            LogSnapshotUnavailableOnce(data);
-
             // do not re-enter OnRefresh while native is still populating — that is the open lag
             if (!data->IsPopulatingComplete) {
                 _applyWhenReady = true;
@@ -273,7 +264,8 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
                 _applyWhenReady = false;
                 _snapshotCapturePasses = 0;
                 ApplyEmptyCategory(data);
-                LogFilterApplySummary(data, 0, 0);
+                if (ConsumeLogNextApply())
+                    LogFilterApplied(data, addon, 0, 0);
                 _emptyAppliedCategory = data->CrystallizeCategory;
                 // empty cats often never get a fresh LoadAtkValues — clear stale prior-tab buffer instead
                 if (_nativeTree.HasBufferLayout && _nativeTree.HasBaseline)
@@ -295,14 +287,12 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _emptyAppliedCategory = int.MinValue;
 
         if (!TryEnsureBaselineFromNative(addon, data)) {
-            LogFilterWarning($"baseline capture stalled for category {data->CrystallizeCategory}");
             _applyWhenReady = true;
             RequestAddonRefresh();
             return;
         }
 
         if (!TryApplyFilterPipeline(addon, data)) {
-            LogFilterWarning($"filter pipeline stalled for category {data->CrystallizeCategory}");
             _applyWhenReady = true;
             RequestAddonRefresh();
             return;
@@ -310,8 +300,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
         // native hides this when the agent has rows; re-show after we filter them all out
         SetEmptyListMessageVisible(addon, _displayToSource.Length is 0);
-
-        LogFilterOnState(nameof(OnPostRefresh), addon, data);
     }
 
     private unsafe bool IsIdleEmptyCategory(MiragePrismPrismBoxData* data)
@@ -324,7 +312,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _displayToSource = [];
 
         if (!TryCaptureCategorySnapshot(data)) {
-            LogSnapshotUnavailableOnce(data);
             if (!data->IsPopulatingComplete) {
                 _applyWhenReady = true;
                 return;
@@ -341,7 +328,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         RestoreFullCategory(data);
 
         if (!TryEnsureBaselineFromNative(addon, data) && !_nativeTree.HasBaseline) {
-            LogFilterWarning($"baseline capture stalled for category {data->CrystallizeCategory}");
             _applyWhenReady = true;
             RequestAddonRefresh();
             return;
@@ -350,16 +336,15 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         // only repopulate atk tree when recovering from filter-off; passive capture preserves native headers
         if (_needsUnfilteredRepopulate) {
             if (!TryRepopulateTree(addon, data, isFilteringActive: false)) {
-                LogFilterWarning($"unfiltered display stalled for category {data->CrystallizeCategory}");
                 _applyWhenReady = true;
                 RequestAddonRefresh();
                 return;
             }
 
             _needsUnfilteredRepopulate = false;
+            if (ConsumeLogNextApply())
+                LogFilterDebug(nameof(ApplyUnfilteredDisplay), $"restored unfiltered category {data->CrystallizeCategory} ({_categoryRows.Length} rows)");
         }
-
-        LogFilterOffState(nameof(OnPostRefresh), addon, data);
     }
 
     private unsafe void OnAddonUpdate(AtkUnitBase* addon) {
@@ -399,9 +384,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
         // PostRefresh/PostRequestedUpdate can leave this cleared after a restore→native cycle; re-assert while idle-empty
         if (IsFilteringActive && ShouldShowEmptyListMessage(data)) {
-            var emptyNode = addon->GetTextNodeById(EmptyListMessageNodeId);
-            if (emptyNode is not null && !emptyNode->IsVisible())
-                SetEmptyListMessageVisible(addon, true);
+            SetEmptyListMessageVisible(addon, true);
         }
     }
 
@@ -447,12 +430,14 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         for (var i = 0; i < reported; i++)
             rows[i] = data->CrystallizeItems[i];
 
+        var wasEmpty = _categoryRows.Length == 0;
         _categoryRows = rows;
         _displayToSource = [];
         _trackedCategory = data->CrystallizeCategory;
         _emptyCategoryRefreshPasses = 0;
         _deferCategoryRestore = false;
-        LogCategoryCaptureOnce(data, rows.Length);
+        if (wasEmpty)
+            LogFilterDebug(nameof(TryCaptureCategorySnapshot), $"captured {rows.Length} rows for category {data->CrystallizeCategory} (flags=0x{data->CrystallizeFilterFlags:X2})");
         return true;
     }
 
@@ -508,10 +493,11 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _snapshotCapturePasses = 0;
         _applyWhenReady = true;
         _emptyAppliedCategory = int.MinValue;
-        ClearFilterLogSignatures();
+        _logNextApply = true;
         _nativeTree.InvalidateAll();
         _needsUnfilteredRepopulate = false;
         _populationWasIncomplete = false;
+        LogFilterDebug(nameof(EnsureCategoryTracked), $"tracking category {category}");
     }
 
     // category already changed — clear our snapshot and skip restore so native can replace the agent rows
@@ -521,7 +507,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             return false;
 
         EnsureCategoryTracked(data);
-        LogFilterDebug(nameof(TryHandlePreRefreshCategoryChange), $"dropped snapshot for category switch to {category}");
         return true;
     }
 
@@ -540,17 +525,23 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
         if (_displayToSource.Length > 0) {
             ProjectVisibleRows(data);
-            LogFilterApplySummary(data, _categoryRows.Length, _displayToSource.Length);
         }
         else {
             ApplyEmptyCategory(data);
-            LogFilterApplySummary(data, _categoryRows.Length, 0);
             // empty native category: no LoadAtkValues buffer — agent clear is enough
-            if (_categoryRows.Length == 0 && !_nativeTree.HasBufferLayout)
+            if (_categoryRows.Length == 0 && !_nativeTree.HasBufferLayout) {
+                if (ConsumeLogNextApply())
+                    LogFilterApplied(data, addon, _categoryRows.Length, 0);
                 return true;
+            }
         }
 
-        return TryRepopulateTree(addon, data, isFilteringActive: true);
+        if (!TryRepopulateTree(addon, data, isFilteringActive: true))
+            return false;
+
+        if (ConsumeLogNextApply())
+            LogFilterApplied(data, addon, _categoryRows.Length, _displayToSource.Length);
+        return true;
     }
 
     private unsafe bool TryEnsureBaselineFromNative(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
@@ -578,21 +569,15 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
     private unsafe bool TryRepopulateTree(AtkUnitBase* addon, MiragePrismPrismBoxData* data, bool isFilteringActive) {
         _nativeTree.Resolve(addon);
-        if (_nativeTree.TreeList is null) {
-            LogFilterWarning($"tree repopulate aborted: unresolved tree for category {data->CrystallizeCategory}");
+        if (_nativeTree.TreeList is null)
             return false;
-        }
 
         _nativeTree.CaptureAtkSnapshot(addon);
-        if (!_nativeTree.HasBufferLayout) {
-            LogFilterWarning($"tree repopulate aborted: missing buffer layout for category {data->CrystallizeCategory}");
+        if (!_nativeTree.HasBufferLayout)
             return false;
-        }
 
-        if (!_nativeTree.HasBaseline) {
-            LogFilterWarning($"tree repopulate aborted: missing baseline for category {data->CrystallizeCategory} (rows={_categoryRows.Length})");
+        if (!_nativeTree.HasBaseline)
             return false;
-        }
 
         if (isFilteringActive) {
             var visibleSources = new HashSet<int>(_displayToSource);
@@ -628,7 +613,6 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         }
 
         _displayToSource = [.. visible];
-        LogFilterRebuildSummary();
     }
 
     private unsafe void ProjectVisibleRows(MiragePrismPrismBoxData* data) {
@@ -641,7 +625,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         }
 
         data->CrystallizeItemCount = (ushort)visible;
-        for (var i = visible; i < MaxCategoryItems; i++)
+        for (var i = visible; i < data->CrystallizeItems.Length; i++)
             data->CrystallizeItems[i] = default;
 
         ClampCrystallizeSelection(data, selectedItemId);
@@ -652,7 +636,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         for (var i = 0; i < count; i++)
             data->CrystallizeItems[i] = _categoryRows[i];
         data->CrystallizeItemCount = (ushort)count;
-        for (var i = count; i < MaxCategoryItems; i++)
+        for (var i = count; i < data->CrystallizeItems.Length; i++)
             data->CrystallizeItems[i] = default;
     }
 
@@ -667,27 +651,9 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
     private unsafe void ApplyEmptyCategory(MiragePrismPrismBoxData* data) {
         data->CrystallizeItemCount = 0;
         data->CrystallizeItemIndex = 0;
-        for (var i = 0; i < MaxCategoryItems; i++)
+        for (var i = 0; i < data->CrystallizeItems.Length; i++)
             data->CrystallizeItems[i] = default;
         _displayToSource = [];
-    }
-
-    // native refresh with agent/ATK rows clears this; we re-show after filtering to zero (and on PostUpdate while idle-empty)
-    private static unsafe void SetEmptyListMessageVisible(AtkUnitBase* addon, bool visible) {
-        if (addon is null)
-            return;
-
-        var node = (AtkResNode*)addon->GetTextNodeById(EmptyListMessageNodeId);
-        if (node is null)
-            return;
-
-        node->ToggleVisibility(visible);
-        if (visible)
-            node->NodeFlags |= NodeFlags.Visible;
-        else
-            node->NodeFlags &= ~NodeFlags.Visible;
-
-        addon->UldManager.UpdateDrawNodeList();
     }
 
     private void ClearTransientState() {
@@ -698,7 +664,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
     private bool ShouldExcludeLeaf(uint itemId) {
         var baseId = ItemUtil.GetBaseId(itemId).ItemId;
-        return _filters.Any(f => f.IsEnabled && f.ShouldHide(baseId));
+        return Filters.Any(f => f.IsEnabled && f.ShouldHide(baseId));
     }
 
     private Func<int, bool> BuildShouldHideLeafPredicate(HashSet<int> visibleSources) {
@@ -716,6 +682,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
             return false;
 
         _filterFlagsSnapshot = data->CrystallizeFilterFlags;
+        _logNextApply = true;
         LogFilterDebug(nameof(TryDetectFilterFlagsChange), $"filter flags changed to 0x{data->CrystallizeFilterFlags:X2}");
         return true;
     }
@@ -739,7 +706,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
     private static unsafe void ClearStaleCrystallizeTail(MiragePrismPrismBoxData* data) {
         var reported = data->CrystallizeItemCount;
-        for (var i = reported; i < MaxCategoryItems; i++)
+        for (var i = reported; i < data->CrystallizeItems.Length; i++)
             data->CrystallizeItems[i] = default;
     }
 
@@ -781,9 +748,16 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
         _applyWhenReady = false;
         _emptyAppliedCategory = int.MinValue;
         _resyncScheduled = false;
+        _logNextApply = false;
         _filterFlagsSnapshot = byte.MaxValue;
-        ClearFilterLogSignatures();
         _nativeTree.InvalidateAll();
+    }
+
+    private bool ConsumeLogNextApply() {
+        if (!_logNextApply)
+            return false;
+        _logNextApply = false;
+        return true;
     }
 
     private static unsafe AtkUnitBase* GetAddon()
@@ -796,7 +770,7 @@ internal sealed partial class CrystallizeListHandler : IAsyncDisposable {
 
     private static unsafe int ScanPopulatedCategoryItemCount(MiragePrismPrismBoxData* data) {
         var lastIndex = -1;
-        for (var i = 0; i < MaxCategoryItems; i++) {
+        for (var i = 0; i < data->CrystallizeItems.Length; i++) {
             if (data->CrystallizeItems[i].ItemId != 0)
                 lastIndex = i;
         }
