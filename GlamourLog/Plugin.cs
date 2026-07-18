@@ -25,7 +25,9 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 
     public async Task LoadAsync(CancellationToken cancellationToken) {
         dalamud.Create<Svc>();
+#if LOCAL_CS
         dalamud.InitCustomClientStructs();
+#endif
         CLibMain.Init(dalamud, this, CLibModule.All);
         await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(dalamud));
 
