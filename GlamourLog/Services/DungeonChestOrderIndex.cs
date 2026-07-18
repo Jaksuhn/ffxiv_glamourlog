@@ -7,30 +7,26 @@ using LuminaSupplemental.Excel.Services;
 namespace GlamourLog.Services;
 
 /// <summary>
-/// Maps dungeon chest rows to boss fight order by matching loot tables between
-/// <see cref="DungeonChestItem"/> and <see cref="DungeonBossChest"/> within a duty.
-/// World position will replace <see cref="GetPositionSortKey"/> once supplemental data includes it.
+/// Maps dungeon chest rows to boss fight order via <see cref="DungeonChest.DungeonBossId"/>,
+/// gated by treasure SGB model frequency so normal chests that share a boss loot table are excluded.
 /// </summary>
 internal sealed class DungeonChestOrderIndex {
     private const uint TreasureSgbRegularChest = 1596;
     private const uint TreasureSgbBossChest = 1597;
     private const uint TreasureSgbFinalBossChest = 1598;
+
     private readonly Dictionary<uint, uint> _fightNoByChestRowId = [];
     private readonly Dictionary<uint, uint> _maxFightNoByCfcId = [];
-    private readonly Dictionary<uint, DungeonChest> _chestByRowId = [];
     private readonly Dictionary<uint, string> _unmatchedSecondaryLabelByChestRowId = [];
 
     internal static DungeonChestOrderIndex Instance => field ??= Build();
-
-    internal uint GetMaxFightNo(uint cfcId)
-        => _maxFightNoByCfcId.GetValueOrDefault(cfcId);
 
     internal List<uint> OrderChestRowIds(uint cfcId, IEnumerable<uint> chestRowIds)
         => [.. chestRowIds
             .Where(id => id != 0)
             .Distinct()
-            .OrderBy(id => GetSortFightNo(cfcId, id))
-            .ThenBy(GetPositionSortKey)];
+            .OrderBy(id => _fightNoByChestRowId.GetValueOrDefault(id, _maxFightNoByCfcId.GetValueOrDefault(cfcId) + 1))
+            .ThenBy(id => id)];
 
     /// <summary> Union of dungeon chest row ids per CFC across the whole set (no piece filter), ordered by boss fight then row id. Chest labels use 1-based index in this list so filtering by one piece does not renumber chests. </summary>
     internal Dictionary<uint, List<uint>> BuildDutyChestRowIdsOrderedByCfc(CatalogService catalog, GlamourSet set) {
@@ -53,13 +49,10 @@ internal sealed class DungeonChestOrderIndex {
             }
         }
 
-        var result = new Dictionary<uint, List<uint>>();
-        foreach (var (cfc, keys) in byCfc)
-            result[cfc] = OrderChestRowIds(cfc, keys);
-        return result;
+        return byCfc.ToDictionary(kvp => kvp.Key, kvp => OrderChestRowIds(kvp.Key, kvp.Value));
     }
 
-    internal float ComputeMaxLabelColumnWidth(TextNode measure, uint cfcId, IReadOnlyList<uint> chestOrder, string? extraPrimaryLabel = null) {
+    internal float ComputeMaxLabelColumnWidth(TextNode measure, IReadOnlyList<uint> chestOrder, string? extraPrimaryLabel = null) {
         var max = 0f;
         if (extraPrimaryLabel is { Length: > 0 })
             max = DetailListItemNode.MeasureDutyChestLabelColumnWidth(measure, extraPrimaryLabel, string.Empty);
@@ -79,112 +72,83 @@ internal sealed class DungeonChestOrderIndex {
         if (_fightNoByChestRowId.TryGetValue(chestRowId, out var fightNo))
             return $"Boss #{fightNo + 1}";
 
-        return _unmatchedSecondaryLabelByChestRowId.GetValueOrDefault(chestRowId) ?? string.Empty;
-    }
-
-    private void AssignUnmatchedSecondaryLabels() {
-        var unmatchedByCfcAndSgb = new Dictionary<(uint CfcId, uint SgbRowId), List<uint>>();
-
-        foreach (var (chestRowId, chest) in _chestByRowId) {
-            if (_fightNoByChestRowId.ContainsKey(chestRowId))
-                continue;
-            if (TryGetChestSgbRowId(chestRowId) is not { } sgbRowId)
-                continue;
-
-            var key = (chest.ContentFinderConditionId, sgbRowId);
-            if (!unmatchedByCfcAndSgb.TryGetValue(key, out var chests))
-                unmatchedByCfcAndSgb[key] = chests = [];
-            chests.Add(chestRowId);
-        }
-
-        foreach (var ((_, sgbRowId), chests) in unmatchedByCfcAndSgb) {
-            var label = TryGetKnownUnmatchedLabel(sgbRowId) ?? InferUnmatchedLabelFromModelCount(chests.Count);
-            foreach (var chestRowId in chests)
-                _unmatchedSecondaryLabelByChestRowId[chestRowId] = label;
-        }
-    }
-
-    private uint GetSortFightNo(uint cfcId, uint chestRowId) {
-        if (_fightNoByChestRowId.TryGetValue(chestRowId, out var fightNo))
-            return fightNo;
-
-        // Unmatched chests sort after boss-linked pools until world position can slot them.
-        return GetMaxFightNo(cfcId) + 1;
-    }
-
-    private static uint GetPositionSortKey(uint chestRowId) => chestRowId;
-
-    private static string? TryGetKnownUnmatchedLabel(uint sgbRowId)
-        => sgbRowId switch {
-            TreasureSgbRegularChest => "Regular",
-            TreasureSgbBossChest => "Boss",
-            TreasureSgbFinalBossChest => "Final Boss",
-            _ => null,
-        };
-
-    private static string InferUnmatchedLabelFromModelCount(int count)
-        => count switch {
-            1 => "Final Boss",
-            2 => "Boss",
-            _ => "Regular",
-        };
-
-    private uint? TryGetChestSgbRowId(uint dungeonChestRowId) {
-        if (!_chestByRowId.TryGetValue(dungeonChestRowId, out var chest) || chest.ChestId == 0)
-            return null;
-        if (!Treasure.TryGetRow(chest.ChestId, out var treasure))
-            return null;
-        return treasure.SGB.RowId;
+        return _unmatchedSecondaryLabelByChestRowId.GetValueOrDefault(chestRowId, string.Empty);
     }
 
     private static DungeonChestOrderIndex Build() {
         var index = new DungeonChestOrderIndex();
 
-        foreach (var chest in Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName)) {
-            if (chest.RowId == 0)
+        var chests = Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName)
+            .Where(c => c.RowId != 0)
+            .ToDictionary(c => c.RowId);
+
+        var fightNoByBossRowId = new Dictionary<uint, uint>();
+        foreach (var boss in Svc.Data.GetSupplemental<DungeonBoss>(CsvLoader.DungeonBossResourceName)) {
+            if (boss.RowId == 0)
                 continue;
-            index._chestByRowId[chest.RowId] = chest;
-        }
-
-        foreach (var boss in Svc.Data.GetSupplemental<DungeonBoss>(CsvLoader.DungeonBossResourceName))
-            index.TrackMaxFightNo(boss.ContentFinderConditionId, boss.FightNo);
-
-        var itemsByChestRowId = Svc.Data.GetSupplemental<DungeonChestItem>(CsvLoader.DungeonChestItemResourceName)
-            .Where(i => i.ChestId != 0 && i.ItemId != 0)
-            .GroupBy(i => i.ChestId)
-            .ToDictionary(g => g.Key, g => g.Select(i => i.ItemId).ToHashSet());
-
-        var bossLootByCfcAndFight = Svc.Data.GetSupplemental<DungeonBossChest>(CsvLoader.DungeonBossChestResourceName)
-            .Where(b => b.ContentFinderConditionId != 0)
-            .GroupBy(b => (b.ContentFinderConditionId, b.FightNo))
-            .ToDictionary(g => g.Key, g => g.Select(b => b.ItemId).ToHashSet());
-
-        foreach (var ((cfcId, fightNo), _) in bossLootByCfcAndFight)
-            index.TrackMaxFightNo(cfcId, fightNo);
-
-        foreach (var (chestRowId, chest) in index._chestByRowId) {
-            if (!itemsByChestRowId.TryGetValue(chestRowId, out var itemIds))
-                continue;
-
-            foreach (var ((cfcId, fightNo), bossItems) in bossLootByCfcAndFight) {
-                if (cfcId != chest.ContentFinderConditionId)
-                    continue;
-                if (!bossItems.SetEquals(itemIds))
-                    continue;
-                index._fightNoByChestRowId[chestRowId] = fightNo;
-                break;
+            fightNoByBossRowId[boss.RowId] = boss.FightNo;
+            if (boss.ContentFinderConditionId != 0) {
+                var cfc = boss.ContentFinderConditionId;
+                if (!index._maxFightNoByCfcId.TryGetValue(cfc, out var current) || boss.FightNo > current)
+                    index._maxFightNoByCfcId[cfc] = boss.FightNo;
             }
         }
 
-        index.AssignUnmatchedSecondaryLabels();
+        // cfc -> sgb -> chests sharing that model
+        var byCfcAndSgb = new Dictionary<(uint CfcId, uint SgbRowId), List<DungeonChest>>();
+        foreach (var chest in chests.Values) {
+            if (chest.ContentFinderConditionId == 0 || TryGetSgbRowId(chest.TreasureId) is not { } sgbRowId)
+                continue;
+            var key = (chest.ContentFinderConditionId, sgbRowId);
+            if (!byCfcAndSgb.TryGetValue(key, out var list))
+                byCfcAndSgb[key] = list = [];
+            list.Add(chest);
+        }
+
+        var maxCountByCfc = byCfcAndSgb
+            .GroupBy(kvp => kvp.Key.CfcId)
+            .ToDictionary(g => g.Key, g => g.Max(kvp => kvp.Value.Count));
+
+        foreach (var ((cfcId, sgbRowId), group) in byCfcAndSgb) {
+            var maxCount = maxCountByCfc[cfcId];
+            var label = LabelForSgb(sgbRowId, group.Count, maxCount);
+            var isBossModel = label is not "Regular";
+
+            foreach (var chest in group) {
+                if (isBossModel
+                    && chest.DungeonBossId != 0
+                    && fightNoByBossRowId.TryGetValue(chest.DungeonBossId, out var fightNo)) {
+                    index._fightNoByChestRowId[chest.RowId] = fightNo;
+                }
+                else {
+                    index._unmatchedSecondaryLabelByChestRowId[chest.RowId] = label;
+                }
+            }
+        }
 
         return index;
     }
 
-    private void TrackMaxFightNo(uint cfcId, uint fightNo) {
-        if (cfcId == 0)
-            return;
-        if (!_maxFightNoByCfcId.TryGetValue(cfcId, out var current) || fightNo > current)
-            _maxFightNoByCfcId[cfcId] = fightNo;
+    private static uint? TryGetSgbRowId(uint treasureId) {
+        if (treasureId == 0 || !Treasure.TryGetRow(treasureId, out var treasure))
+            return null;
+        return treasure.SGB.RowId;
     }
+
+    /// <summary>
+    /// Within a duty: count 1 = final boss, count 2 = mid-bosses, highest count (&gt;2) = regular.
+    /// Known SGB ids (1596–1598) override the frequency heuristic.
+    /// </summary>
+    private static string LabelForSgb(uint sgbRowId, int countInDuty, int maxCountInDuty)
+        => sgbRowId switch {
+            TreasureSgbRegularChest => "Regular",
+            TreasureSgbBossChest => "Boss",
+            TreasureSgbFinalBossChest => "Final Boss",
+            _ when countInDuty == maxCountInDuty && countInDuty > 2 => "Regular",
+            _ => countInDuty switch {
+                1 => "Final Boss",
+                2 => "Boss",
+                _ => "Regular",
+            },
+        };
 }

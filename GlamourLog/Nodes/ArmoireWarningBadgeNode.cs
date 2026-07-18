@@ -2,7 +2,7 @@ using KamiToolKit.Nodes.Simplified;
 
 namespace GlamourLog.Nodes;
 
-/// <summary>Warning marker for dresser items that can go in the armoire</summary>
+// for items in dresser that can go in armoire
 public sealed class ArmoireWarningBadgeNode : SimpleImageNode {
     public ArmoireWarningBadgeNode() {
         TexturePath = "ui/uld/IconA_Frame.tex";

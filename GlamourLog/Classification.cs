@@ -1,6 +1,5 @@
 namespace GlamourLog;
 
-/// <summary> All per-tab matching inputs in one place.</summary>
 internal sealed class CategoryDiscriminator {
     /// <summary> Supplemental chest / currency ids: phases 0–1 (piece in set, cost currency in set) and armoire filter.</summary>
     public HashSet<uint>? PieceOrCostItemIds { get; set; }

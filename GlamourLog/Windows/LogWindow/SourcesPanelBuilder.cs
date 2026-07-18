@@ -123,7 +123,7 @@ internal static class SourcesPanelBuilder {
             var hasChests = chestKeysThisDuty.Count > 0;
 
             var chestOrderForLabelWidth = fullChestOrder is { Count: > 0 } ? fullChestOrder : chestKeysThisDuty;
-            var maxDutyChestLabelWidth = chestIndex.ComputeMaxLabelColumnWidth(dutyChestMeasure, cfcId, chestOrderForLabelWidth, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
+            var maxDutyChestLabelWidth = chestIndex.ComputeMaxLabelColumnWidth(dutyChestMeasure, chestOrderForLabelWidth, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
 
             if (hasGeneral) {
                 if (hasChests)

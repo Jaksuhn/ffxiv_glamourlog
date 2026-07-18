@@ -42,7 +42,7 @@ internal sealed class Catalog {
             && cfcIdSelector(r) is not 0 and var cfcId && ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true } cfc
             && allowedContentTypes.Contains(cfc.Value.ContentType.RowId)).Select(r => itemIdSelector(r))];
 
-    /// <summary> Supplemental chest loot: <see cref="DungeonChestItem.ChestId"/> is the FK to <see cref="DungeonChest.RowId"/> (same value; do not match on <see cref="DungeonChest.ChestId"/>). Classifies under Dungeons; Raids uses <see cref="DungeonBossDrop"/> currencies only.</summary>
+    /// <summary> Supplemental chest loot: <see cref="DungeonChestItem.ChestId"/> is the FK to <see cref="DungeonChest.RowId"/> (same value; do not match on <see cref="DungeonChest.TreasureId"/>). Classifies under Dungeons; Raids uses <see cref="DungeonBossDrop"/> currencies only.</summary>
     internal static HashSet<uint> BuildDungeonChestPieceIdsFromSupplemental() {
         var chestByRowId = new Dictionary<uint, DungeonChest>();
         foreach (var chest in Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName))
