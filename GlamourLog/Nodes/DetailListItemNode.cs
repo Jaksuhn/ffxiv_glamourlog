@@ -80,7 +80,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private readonly TextNode _primary;
     private readonly TextNode _secondary;
     private readonly TreeComboSectionNode _sectionChrome;
-    private readonly TreeListHeaderNode _journalChrome;
+    private readonly TreeListSectionHeader _journalChrome;
     private readonly GlamourIconNode _storageBadge;
     private readonly InventoryBadgeNode _inventoryBadge;
     private readonly ArmoireWarningBadgeNode _armoireWarningBadge;
@@ -106,7 +106,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _sectionChrome.CollisionNode.NodeFlags = 0;
         _sectionChrome.AttachNode(this);
 
-        _journalChrome = new TreeListHeaderNode {
+        _journalChrome = new TreeListSectionHeader {
             Width = 200f,
             Height = 24f,
             IsVisible = false,
@@ -200,8 +200,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _sectionChrome.Width = Width;
         _sectionChrome.Size = new Vector2(Width, _sectionChrome.Height);
         _sectionChrome.Position = new Vector2(0f, 3f);
-        foreach (var header in _sectionChrome.HeaderNodes)
-            header.Width = Width;
         _journalChrome.Width = Width;
         _journalChrome.Position = new Vector2(0f, 3f);
         var badgeY = ItemData?.Kind == DetailRowKind.Piece ? (ItemHeight - _storageBadge.Size.Y) * 0.5f : 3f;
