@@ -58,22 +58,17 @@ internal static class SourcesPanelBuilder {
                 sourcesByPiece[itemId] = [.. list];
         }
 
-        var dutyChestRowIdsOrderedByCfc = DungeonChestOrderIndex.Instance.BuildDutyChestRowIdsOrderedByCfc(catalog, set);
+        var dutyChestRowIdsOrderedByCfc = DungeonChestLayout.Instance.BuildDutyChests(catalog, set);
 
         AppendDuties(rows, sourcesByPiece, scope, dutyChestRowIdsOrderedByCfc, dutyChestMeasure);
         AppendFates(rows, sourcesByPiece, scope);
-        AppendSupplemental(rows, sourcesByPiece, scope);
+        AppendLootboxSources(rows, sourcesByPiece, scope);
         AppendCraft(rows, sourcesByPiece, scope);
         AppendDesynthesis(rows, sourcesByPiece, scope);
         AppendQuests(rows, sourcesByPiece, scope);
     }
 
-    private static bool AppendDuties(
-        List<DetailListRowData> rows,
-        Dictionary<uint, List<ItemSource>> sourcesByPiece,
-        HashSet<uint> scope,
-        Dictionary<uint, List<uint>> dutyChestRowIdsOrderedByCfc,
-        TextNode dutyChestMeasure) {
+    private static bool AppendDuties(List<DetailListRowData> rows, Dictionary<uint, List<ItemSource>> sourcesByPiece, HashSet<uint> scope, Dictionary<uint, List<uint>> dutyChestRowIdsOrderedByCfc, TextNode dutyChestMeasure) {
         var duties = new Dictionary<uint, DutyBuckets>();
         foreach (var (pieceId, list) in sourcesByPiece) {
             foreach (var src in list) {
@@ -114,7 +109,7 @@ internal static class SourcesPanelBuilder {
                 ContentFinderConditionId = cfcId,
             });
 
-            var chestIndex = DungeonChestOrderIndex.Instance;
+            var chestIndex = DungeonChestLayout.Instance;
             dutyChestRowIdsOrderedByCfc.TryGetValue(cfcId, out var fullChestOrder);
             var chestKeysThisDuty = fullChestOrder is { Count: > 0 }
                 ? [.. fullChestOrder.Where(b.Chests.ContainsKey)]
@@ -133,15 +128,7 @@ internal static class SourcesPanelBuilder {
             }
 
             foreach (var ck in chestKeysThisDuty) {
-                var chestNum = 0;
-                if (fullChestOrder is { Count: > 0 }) {
-                    var bi = fullChestOrder.BinarySearch(ck);
-                    if (bi >= 0)
-                        chestNum = bi + 1;
-                }
-
-                if (chestNum == 0)
-                    chestNum = chestKeysThisDuty.IndexOf(ck) + 1;
+                var chestNum = fullChestOrder is { Count: > 0 } ? fullChestOrder.IndexOf(ck) + 1 : chestKeysThisDuty.IndexOf(ck) + 1;
                 AppendIconStripRow(rows, $"Chest {chestNum}", chestIndex.FormatSecondaryLabel(ck), b.Chests[ck], scope, iconOnly: false, sourceChestLabelColumnWidth: maxDutyChestLabelWidth);
             }
         }
@@ -205,13 +192,13 @@ internal static class SourcesPanelBuilder {
         return null;
     }
 
-    /// <summary> First NPC shop that sells a set piece using <paramref name="currencyItemId"/> as a listed cost (in-world map target). Falls back to Mog Station text when only cash shop applies. </summary>
-    internal static (SourceNavigateTarget? NavigateTarget, string VendorTooltip, string NpcName, string ShopName) GetShopVendorHintForCostCurrency(
+    // first in-world npc shop that sells a set piece for this currency (map pin). mog station text if it's cash-shop only
+    internal static (SourceNavigateTarget? NavigateTarget, string VendorTooltip, string NpcName, string ShopName) FindVendorForCurrency(
         CatalogService catalog,
         GlamourSet set,
         uint? costScopePieceItemId,
         uint currencyItemId) {
-        var cat = catalog.CategoryNameForPrimaryCostLookup(set);
+        var cat = catalog.GetCategoryForPreferredCost(set);
         var cache = Svc.SheetManager.ItemInfoCache;
         IEnumerable<uint> pieceIds = costScopePieceItemId is { } only ? [only] : set.Items;
 
@@ -252,13 +239,8 @@ internal static class SourcesPanelBuilder {
         return (null, string.Empty, string.Empty, string.Empty);
     }
 
-    private static bool IsCraftingCrystal(uint itemId) {
-        if (Item.GetRowRef(itemId) is not { IsValid: true, Value.ItemUICategory.IsValid: true, Value.ItemUICategory.Value.Name: var catName })
-            return false;
-        return catName.ToString().Contains("Crystal", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool AppendSupplemental(List<DetailListRowData> rows, Dictionary<uint, List<ItemSource>> sourcesByPiece, HashSet<uint> scope) {
+    // lootboxes / field-op coffers that aren't normal duty chest drops
+    private static bool AppendLootboxSources(List<DetailListRowData> rows, Dictionary<uint, List<ItemSource>> sourcesByPiece, HashSet<uint> scope) {
         var supplement = new Dictionary<ItemInfoType, Dictionary<uint, HashSet<uint>>>();
         var fieldOps = new Dictionary<(ItemInfoType Type, uint CofferKind), HashSet<uint>>();
         foreach (var (pieceId, list) in sourcesByPiece) {
@@ -345,7 +327,7 @@ internal static class SourcesPanelBuilder {
             });
             var ingIds = new List<uint>();
             foreach (var (ingId, _) in agg.Recipe.IngredientCounts) {
-                if (ingId == 0 || IsCraftingCrystal(ingId))
+                if (ingId == 0 || Item.GetRow(ingId) is { ItemUICategory.RowId: 59 }) // ignore crystals
                     continue;
                 ingIds.Add(ingId);
             }
@@ -474,7 +456,7 @@ internal static class SourcesPanelBuilder {
     private static void AppendIconStripRow(List<DetailListRowData> rows, string label, HashSet<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal)
         => AppendIconStripRow(rows, label, string.Empty, itemIds, scope, iconOnly, presentation);
 
-    /// <summary> One-line "left → arrow → right" row for catalyst-style sources (desynth / lootbox key + contents). </summary>
+    // one-line "left -> right" icon row (desynth / lootbox key -> what you get)
     private static void AppendArrowFlowRow(List<DetailListRowData> rows, IReadOnlyList<uint> leftIds, IEnumerable<uint> rightIds) {
         var leftOrdered = leftIds.Where(id => id != 0).Distinct().OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
         var rightOrdered = rightIds.Where(id => id != 0).Distinct().OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();

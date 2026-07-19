@@ -9,7 +9,7 @@ namespace GlamourLog.Features.Cabinet;
 
 internal sealed class StoreAllArmoireTask : AutoTask {
     private const string AddonName = "Cabinet";
-    private const int CategoryCount = 6;
+    private const int CategoryCount = 6; // TODO: don't hard code this
     private const uint UninitializedCategoryIndex = uint.MaxValue; // value before first render
 
     protected override async Task Execute() {
@@ -78,6 +78,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
             && addon->CategoryIndex == (uint)categoryIndex;
     }
 
+    // agent category ids start at 1; addon dropdown is 0-based
     private static byte ToAgentCategoryIndex(int categoryIndex) => (byte)(categoryIndex + 1);
 
     private static unsafe bool StoreCabinetItem(uint cabinetId)

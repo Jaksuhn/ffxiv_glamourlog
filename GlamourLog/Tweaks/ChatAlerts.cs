@@ -19,7 +19,7 @@ internal class ChatAlerts : IDisposable {
             return;
 
         if (message.Message.Payloads.FirstOrDefault(p => p is PlayerPayload) is PlayerPayload { PlayerName: var n } && n != Svc.PlayerState.CharacterName)
-            return;
+            return; // ignore other players
 
         if (message.Message.Payloads.FirstOrDefault(p => p is ItemPayload) is not ItemPayload { Item: var row })
             return;
@@ -39,6 +39,7 @@ internal class ChatAlerts : IDisposable {
 
         var primarySet = catalog.FindCatalogSetForItem(row.RowId) is { } preferred && needingSets.Contains(preferred) ? preferred : needingSets.OrderBy(s => s.ItemId).First();
         var total = primarySet.Items.Count;
+        // inventory events lag behind chat, so simulate before/after owning this piece
         var ownedCountBefore = q.WithOwnedItemOverride(row.RowId, owned: false).For(primarySet).OwnedCount;
         var ownedCount = q.WithOwnedItemOverride(row.RowId, owned: true).For(primarySet).OwnedCount;
 

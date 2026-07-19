@@ -42,13 +42,13 @@ internal sealed class IpcProvider : IDisposable {
         => Svc.Get<OwnershipService>().Query().Locate(itemId) is PieceLocation.Armoire;
 
     private static List<uint> GetArmoireItemIds() {
-        Svc.Get<OwnershipService>().GetLalaAchievementsExportBuckets(out _, out var armoires);
+        Svc.Get<OwnershipService>().BuildLalaExport(out _, out var armoires);
         return [.. armoires];
     }
 
     private static List<uint> GetDresserItemIds() {
         var ownership = Svc.Get<OwnershipService>();
-        ownership.GetLalaAchievementsExportBuckets(out var outfitsBySetId, out _);
+        ownership.BuildLalaExport(out var outfitsBySetId, out _);
         var dresserIds = ownership.GetDresserItemIds();
         var setTokens = Svc.Get<CatalogService>().GlamourSets.Select(s => s.ItemId).ToHashSet();
         var result = new HashSet<uint>(dresserIds.Where(id => !setTokens.Contains(id)));
@@ -65,7 +65,7 @@ internal sealed class IpcProvider : IDisposable {
     private static bool IsSetComplete(uint setItemId)
         => Svc.Get<OwnershipService>().IsSetComplete(setItemId);
 
-    private static bool SourcesFromContent(uint cfcId, ItemSource src)
+    private static bool IsSourceFromDuty(uint cfcId, ItemSource src)
         => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId
             || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId;
 
@@ -86,7 +86,7 @@ internal sealed class IpcProvider : IDisposable {
                     continue;
                 if (cache.GetItemSources(pieceId) is not { Count: > 0 } list)
                     continue;
-                if (!list.Any(src => SourcesFromContent(cfcId, src)))
+                if (!list.Any(src => IsSourceFromDuty(cfcId, src)))
                     continue;
                 any = true;
                 if (status.Piece(pieceId) is not { IsOwned: true })
@@ -104,7 +104,7 @@ internal sealed class IpcProvider : IDisposable {
         foreach (var row in Item.Where(i => i.RowId > 0)) {
             if (cache.GetItemSources(row.RowId) is not { Count: > 0 } list)
                 continue;
-            if (list.Any(src => SourcesFromContent(cfcId, src)))
+            if (list.Any(src => IsSourceFromDuty(cfcId, src)))
                 result.Add(row.RowId);
         }
         return [.. result.OrderBy(x => x)];

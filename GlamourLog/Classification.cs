@@ -1,15 +1,15 @@
 namespace GlamourLog;
 
+// various predicates for defining sets within a category
 internal sealed class CategoryDiscriminator {
-    /// <summary> Supplemental chest / currency ids: phases 0–1 (piece in set, cost currency in set) and armoire filter.</summary>
+    // pass 0 is PieceInTabItemSetRule -> match if any piece in the set’s item list is in this set
+    // pass 1 is CostCurrencyInTabItemSetRule -> match if any piece’s shop/exchange cost item id is in this set
+    // only used by dungeons so far
     public HashSet<uint>? PieceOrCostItemIds { get; set; }
-
-    /// <summary> Late-phase (phase 2): cost rows whose <c>ItemId</c> is in this list; optional <see cref="CostAmount"/> filters <c>Amount</c>.</summary>
-    public List<uint> LateCostCurrencyItemIds { get; } = [];
-
-    public Func<uint, bool>? CostAmount { get; set; }
-    public Func<Item, bool>? ItemPredicate { get; set; }
-    public Func<SpecialShop, bool>? SpecialShopPredicate { get; set; }
+    public List<uint> LateCostCurrencyItemIds { get; } = []; // match if any set piece has a cost whose item id is in this list (and, if set, CostAmount passes).
+    public Func<uint, bool>? CostAmount { get; set; } // extra filter for LateCostCurrencyItemIds to exclude free gil items
+    public Func<Item, bool>? ItemPredicate { get; set; } // extra filter for misc matching, e.g. eternal bonding and mogstation
+    public Func<SpecialShop, bool>? SpecialShopPredicate { get; set; } // like item predicate but for special shop
 }
 
 internal readonly record struct ClassifyContext(MirageStoreSetItem MirageRow, ReadOnlyCollection<uint> ItemIds, SpecialShop? SpecialShopRow);
@@ -71,14 +71,15 @@ internal sealed class LateTabBundleRule(OutfitCategory owner) : IGlamourCategory
     }
 }
 
-/// <summary> One classifiable bucket or synthetic UI bucket. <see cref="Name"/> is both identity and label.</summary>
+// A glamour-log tab: either a real category matched by Rules, or a synthetic fallback tab (see IsSyntheticBucket).
+// left panel categories
 internal sealed class OutfitCategory(string name, int uiPriority) {
-    public string Name { get; } = name;
-    public int UiPriority { get; } = uiPriority;
-    public bool IsSyntheticBucket { get; init; }
-    public List<IGlamourCategoryRule> Rules { get; } = [];
+    public string Name { get; } = name; // ui label
+    public int UiPriority { get; } = uiPriority; // sort order ascending
+    public bool IsSyntheticBucket { get; init; } // this is for non-rule matched buckets like unsorted, misc armoire and unobtainable
+    public List<IGlamourCategoryRule> Rules { get; } = []; // defines which sets land here
     public CategoryDiscriminator Discriminator { get; } = new();
 }
 
-/// <summary> Mirrors <see cref="GlamourSet.CategoryName"/> + <see cref="GlamourSet.IsUnobtainable"/>.</summary>
+// null name = didn't match a rule therefore it's either unsorted or unobtainable
 internal readonly record struct ClassifyResult(string? CategoryName, bool IsUnobtainable);

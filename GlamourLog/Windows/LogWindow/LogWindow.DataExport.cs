@@ -9,7 +9,7 @@ internal partial class LogWindow {
         if (format is not GlamourDataExportFormat.LalaAchievements)
             return;
 
-        Svc.Get<OwnershipService>().GetLalaAchievementsExportBuckets(out var outfitsBySetId, out var armoireIds);
+        Svc.Get<OwnershipService>().BuildLalaExport(out var outfitsBySetId, out var armoireIds);
         var json = JsonSerializer.Serialize(new { outfits = outfitsBySetId, armoires = armoireIds });
         ImGui.SetClipboardText(json);
     }

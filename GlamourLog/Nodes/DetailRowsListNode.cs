@@ -8,7 +8,7 @@ internal sealed unsafe class DetailRowsListNode : ListNode<DetailListRowData, De
 
     internal TextNode DutyChestMeasureNode { get; }
 
-    private bool needsPostNativeRebind;
+    private bool needsPostNativeRebind; // native list recycling can wipe callbacks after OptionsList changes
 
     public Action<uint>? OnPieceLeftClick { get; set; }
     public Action<uint>? OnItemRightClick { get; set; }

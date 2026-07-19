@@ -5,7 +5,7 @@ namespace GlamourLog.Nodes;
 public sealed class GatheringNoteItemNode : ListButtonNode {
     private const float TextRightMargin = 6f;
 
-    private readonly GlamourIconTitleRowChrome _chrome;
+    private readonly IconAndStackedTitlesNode _chrome;
 
     public FramedItemIconNode IconNode => _chrome.Icon;
     public CheckMarkBadgeNode CheckBadge => _chrome.CheckBadge;
@@ -17,7 +17,7 @@ public sealed class GatheringNoteItemNode : ListButtonNode {
         // ListButtonNode label unused — custom icon + title/subtitle instead
         LabelNode.IsVisible = false;
 
-        _chrome = new GlamourIconTitleRowChrome(iconSize, iconLeftMargin: 0f, titleColor ?? ColourPalette.TitleWhite);
+        _chrome = new IconAndStackedTitlesNode(iconSize, iconLeftMargin: 0f, titleColor ?? ColourPalette.TitleWhite);
         _chrome.AttachNode(this);
 
         Height = rowHeight;

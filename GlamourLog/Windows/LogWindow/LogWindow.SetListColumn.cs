@@ -137,17 +137,18 @@ internal unsafe partial class LogWindow {
         };
     }
 
-    private SetListRowData BuildSharedModelItemRowData(uint itemId, OwnershipQuery q) {
+    // build a row for a lookalike item that may not have its own set
+    private SetListRowData BuildSharedModelItemRow(uint itemId, OwnershipQuery q) {
         var catalog = Svc.Get<CatalogService>();
         var set = catalog.FindCatalogSetForItem(itemId)
-            ?? new GlamourSet {
+            ?? new GlamourSet { // fake a one-piece set so the normal row renderer gets reused
                 ItemId = itemId,
                 Name = Item.GetRow(itemId).Name.ToString(),
                 CategoryName = null,
                 IsUnobtainable = false,
                 Items = [itemId],
-                SortItemLevel = Item.GetRow(itemId).LevelItem.RowId,
-                SortPatchNo = 0m,
+                ItemLevel = Item.GetRow(itemId).LevelItem.RowId,
+                PatchNo = 0m,
                 NonSetCabinetPiece = true,
                 IsIncompatible = false,
                 ModelSignature = SetModelSignature.ForMiscSingle(itemId),
@@ -161,7 +162,7 @@ internal unsafe partial class LogWindow {
         var ownedAnywhere = location is not PieceLocation.None;
         var subtitle = ownedInStorage ? "Obt. 1/1" : ownedAnywhere ? "In inventory" : "Obt. 0/1";
 
-        var storageState = piece?.DisplayStorage ?? location switch {
+        var storageState = piece?.BadgeLocation ?? location switch {
             PieceLocation.Armoire => ItemStorageState.Armoire,
             PieceLocation.LooseDresser => ItemStorageState.DresserLoose,
             PieceLocation.OutfitSlot => ItemStorageState.DresserSet,
@@ -219,13 +220,13 @@ internal unsafe partial class LogWindow {
         else if (n == 0)
             core = "Obt. 0/0";
         else if (c == n)
-            core = "Completable";
+            core = "Completable"; // every piece owned, but at least one still needs storing
         else
             core = $"Obt. {c}/{n}";
 
         var sortHint = C.SetListSortMode switch {
-            GlamourSetSortMode.Patch => set.SortPatchNo == 0m ? "Patch —" : $"Patch {set.SortPatchNo}",
-            GlamourSetSortMode.ItemLevel => set.SortItemLevel == 0 ? "iLvl —" : $"iLvl {set.SortItemLevel}",
+            GlamourSetSortMode.Patch => set.PatchNo == 0m ? "Patch —" : $"Patch {set.PatchNo}",
+            GlamourSetSortMode.ItemLevel => set.ItemLevel == 0 ? "iLvl —" : $"iLvl {set.ItemLevel}",
             _ => null,
         };
         return sortHint is null ? core : $"{core} · {sortHint}";

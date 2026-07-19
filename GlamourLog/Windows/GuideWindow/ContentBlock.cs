@@ -2,6 +2,7 @@ using Lumina.Text.ReadOnly;
 
 namespace GlamourLog.Windows.GuideWindow;
 
+// building blocks for a guide page's right pane
 internal abstract record ContentBlock;
 internal sealed record GuideTextBlock(ReadOnlySeString Text, float TextLeftInset = 0f, float? TextBoxHeight = null) : ContentBlock;
 internal sealed record GuideHeadingBlock(string Title) : ContentBlock;

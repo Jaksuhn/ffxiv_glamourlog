@@ -29,8 +29,8 @@ internal unsafe partial class LogWindow : NativeAddon {
 
     private string _selectedCategoryId = "";
     private GlamourSet? _selectedSet;
-    private uint? _sourceFilterPieceItemId;
-    private bool _pendingRefreshListsAndDetails;
+    private uint? _selectedSourcePieceItemId; // when set, costs/sources/lookalikes are narrowed to this piece
+    private bool _pendingRefreshListsAndDetails; // queue ui work for the next safe update instead of mutating lists mid-click
     private bool _pendingRebuildSetListOrderOnly;
     private bool _pendingPaintDetailsOnly;
     private bool _pendingResetSetScroll;
@@ -40,7 +40,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private bool _pendingCategoryPaneRebuild;
     private int _lastDataVersion = -1;
     private readonly List<DetailListRowData> _detailRowOptions = [];
-    private readonly HashSet<string> _collapsedDetailSections = [];
+    private readonly HashSet<string> _collapsedDetailSections = []; // remembered by title for this window only
     private readonly ContextMenu _contextMenu = new();
 
     private GlamourSetListNode? SetList => _setListColumn?.List;
@@ -99,7 +99,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         var setListHeight = listBottom - setListTop;
         var setListRowHeight = GlamourSetListItemNode.ItemHeight;
         var setListVisibleRows = Math.Max(1, (int)(setListHeight / setListRowHeight));
-        var setListItemSpacing = Math.Max(0f, setListHeight / setListVisibleRows - setListRowHeight);
+        var setListItemSpacing = Math.Max(0f, setListHeight / setListVisibleRows - setListRowHeight); // spread rows to fill the middle column without changing their fixed height
         var detailX = contentStart.X + leftWidth + middleWidth + columnGap * 2;
         var detailW = contentSize.X - (leftWidth + middleWidth + columnGap * 2);
 
@@ -135,7 +135,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             if (ReferenceEquals(_selectedSet, item.Set))
                 return;
             _selectedSet = item.Set;
-            _sourceFilterPieceItemId = null;
+            _selectedSourcePieceItemId = null;
             _pendingPaintDetailsOnly = true;
             _pendingResetDetailScroll = true;
         };
@@ -219,7 +219,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             return;
         _selectedCategoryId = categoryId;
         _selectedSet = null;
-        _sourceFilterPieceItemId = null;
+        _selectedSourcePieceItemId = null;
         _pendingClearSetSelection = true;
         _pendingRefreshListsAndDetails = true;
         _pendingResetSetScroll = true;
@@ -315,6 +315,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         }
     }
 
+    // native nodes aren't ready until setup has built all three columns
     private bool CanPaintLists()
         => SetList is not null && _statsSetsLine is not null && _statsSpaceLine is not null && _categoryColumn is not null && DetailList is not null;
 

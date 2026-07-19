@@ -2,6 +2,8 @@ using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 
 namespace GlamourLog.Features.Cabinet;
 
+// items currently equipped on any gearset (so cabinet filters can hide them)
+// TODO: move to base class
 internal static unsafe class CabinetGearsetLookup {
     private static readonly HashSet<uint> _itemIds = [];
     private static bool _isDirty = true;

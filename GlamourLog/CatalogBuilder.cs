@@ -34,7 +34,7 @@ internal static unsafe class CatalogBuilder {
                 sortIl = itemRow.LevelItem.RowId;
             }
 
-            // Mirage token row is not in ItemPatch ranges; max patch across gear pieces matches PatchDescending.
+            // mirage token row isn't in ItemPatch ranges; max patch across gear pieces matches patch sort
             var sortPatch = items.Count == 0 ? 0m : items.Max(id => itemSheet.GetItemPatch(id));
             var modelSignature = SetModelSignature.ForMirageSet(items);
             return new GlamourSet {
@@ -43,8 +43,8 @@ internal static unsafe class CatalogBuilder {
                 Items = items,
                 CategoryName = r.CategoryName,
                 IsUnobtainable = r.IsUnobtainable,
-                SortItemLevel = sortIl,
-                SortPatchNo = sortPatch,
+                ItemLevel = sortIl,
+                PatchNo = sortPatch,
                 NonSetCabinetPiece = false,
                 IsIncompatible = x.Items.None(i => i.Value.EquipRestriction.Value.CanEquip),
                 ModelSignature = modelSignature,
@@ -81,8 +81,8 @@ internal static unsafe class CatalogBuilder {
                 Items = items,
                 CategoryName = bucketName,
                 IsUnobtainable = false,
-                SortItemLevel = row.LevelItem.RowId,
-                SortPatchNo = itemSheet.GetItemPatch(itemId),
+                ItemLevel = row.LevelItem.RowId,
+                PatchNo = itemSheet.GetItemPatch(itemId),
                 NonSetCabinetPiece = true,
                 IsIncompatible = !row.EquipRestriction.Value.CanEquip,
                 ModelSignature = SetModelSignature.ForMiscSingle(itemId),
@@ -106,6 +106,7 @@ internal static unsafe class CatalogBuilder {
     internal static Dictionary<ItemModelInfo, List<uint>> BuildSharedModelItemGroups(IEnumerable<uint> itemIds)
         => itemIds.Distinct().GroupBy(static itemId => (ItemModelInfo)itemId).ToDictionary(g => g.Key, g => g.OrderBy(id => id).ToList());
 
+    // only count lookalikes that share the same equip slot
     internal static bool PieceHasSharedModelSiblings(uint itemId, Dictionary<ItemModelInfo, List<uint>> itemGroups) {
         ItemModelInfo model = itemId;
         if (!itemGroups.TryGetValue(model, out var group) || group.Count <= 1)
@@ -120,17 +121,15 @@ internal static unsafe class CatalogBuilder {
         return [.. sets.Select(s => {
             var sharedModelGroupSize = groupSizes[s.ModelSignature];
             var piecesWithSiblings = s.Items.Count(id => PieceHasSharedModelSiblings(id, itemGroups));
-            var hasPartialSharedModels = sharedModelGroupSize <= 1
-                && piecesWithSiblings > 0
-                && piecesWithSiblings < s.Items.Count;
+            var hasPartialSharedModels = sharedModelGroupSize <= 1 && piecesWithSiblings > 0 && piecesWithSiblings < s.Items.Count;
             return new GlamourSet {
                 ItemId = s.ItemId,
                 Name = s.Name,
                 Items = s.Items,
                 CategoryName = s.CategoryName,
                 IsUnobtainable = s.IsUnobtainable,
-                SortItemLevel = s.SortItemLevel,
-                SortPatchNo = s.SortPatchNo,
+                ItemLevel = s.ItemLevel,
+                PatchNo = s.PatchNo,
                 NonSetCabinetPiece = s.NonSetCabinetPiece,
                 IsIncompatible = s.IsIncompatible,
                 ModelSignature = s.ModelSignature,

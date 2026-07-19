@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 namespace GlamourLog;
 
 internal sealed class Catalog {
-    public static readonly ImmutableHashSet<uint> UnobtainableMirageRowIds = new HashSet<uint> { 45320, 45248, 45247, 45306, 45340, 45289, 45339, 45222, 45330, 45223, 45424, 45423 }.ToImmutableHashSet();
+    private static readonly ImmutableHashSet<uint> UnobtainableMirageRowIds = new HashSet<uint> { 45320, 45248, 45247, 45306, 45340, 45289, 45339, 45222, 45330, 45223, 45424, 45423 }.ToImmutableHashSet();
 
     public IReadOnlyList<OutfitCategory> UITabsInOrder { get; }
     public IReadOnlyList<OutfitCategory> ClassifiableCategories { get; }
@@ -33,16 +33,14 @@ internal sealed class Catalog {
         UnobtainableBucket = unobtainableBucket;
     }
 
-    internal static bool IsContentFinderType(ContentFinderCondition row, params uint[] contentTypeRowIds)
-        => contentTypeRowIds.Contains(row.ContentType.RowId);
-
     internal static HashSet<uint> BuildCurrencyIdsFromCfcSupplemental<T>(string resourceName, Func<T, uint> itemIdSelector, Func<T, uint> cfcIdSelector, Func<T, bool>? rowFilter, params uint[] allowedContentTypes) where T : ICsv, new()
         => [.. Svc.Data.GetSupplemental<T>(resourceName)
             .Where(r => (rowFilter?.Invoke(r) ?? true) && itemIdSelector(r) != 0
             && cfcIdSelector(r) is not 0 and var cfcId && ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true } cfc
             && allowedContentTypes.Contains(cfc.Value.ContentType.RowId)).Select(r => itemIdSelector(r))];
 
-    /// <summary> Supplemental chest loot: <see cref="DungeonChestItem.ChestId"/> is the FK to <see cref="DungeonChest.RowId"/> (same value; do not match on <see cref="DungeonChest.TreasureId"/>). Classifies under Dungeons; Raids uses <see cref="DungeonBossDrop"/> currencies only.</summary>
+    // DungeonChestItem.ChestId is the key for DungeonChest.RowId for dungeons
+    // raids use DungeonBossDrop for currencies
     internal static HashSet<uint> BuildDungeonChestPieceIdsFromSupplemental() {
         var chestByRowId = new Dictionary<uint, DungeonChest>();
         foreach (var chest in Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName))
@@ -93,7 +91,7 @@ internal sealed class Catalog {
                 return new ClassifyResult(PvpSeriesAttire.Name, false);
             var hasCosts = itemIds.Any(Svc.Items.HasAnyCosts);
             if (!hasCosts)
-                return new ClassifyResult(null, true);
+                return new ClassifyResult(null, true); // old series gear with no listed cost = unobtainable
             if (ClassifyFromRules(ctx) is { } fromPvp)
                 return new ClassifyResult(fromPvp, false);
         }
@@ -102,9 +100,10 @@ internal sealed class Catalog {
         return new ClassifyResult(null, UnobtainableMirageRowIds.Contains(mirageRow.RowId));
     }
 
-    public string BucketKey(ClassifyResult r)
+    public string GetDisplayCategoryName(ClassifyResult r)
         => r.IsUnobtainable ? UnobtainableBucket.Name : (r.CategoryName ?? UncategorizedBucket.Name);
 
+    // keep all-armoire sets if they still cost a dungeon chest piece (otherwise they'd vanish from the log)
     public bool IncludeAfterArmoireFilter(IReadOnlyList<uint> items, HashSet<uint> armoireItems) {
         if (items.Count == 0)
             return false;
@@ -114,7 +113,7 @@ internal sealed class Catalog {
         return chest is { Count: not 0 } && items.Any(id => Svc.Items.GetItemCosts(id).Any(c => chest.Contains(c.ItemId)));
     }
 
-    /// <summary> Placeholder until <see cref="Build"/> runs after login (Tradecraft needs <see cref="CurrencyManager"/>).</summary>
+    // placeholder until Build runs after login since Tradecraft needs CurrencyManager
     internal static Catalog CreateEmptyStub() {
         var uncategorized = new OutfitCategory("Unsorted", int.MinValue) { IsSyntheticBucket = true };
         var miscArmoire = new OutfitCategory("Misc Armoire", 17) { IsSyntheticBucket = true };
@@ -133,11 +132,11 @@ internal sealed class Catalog {
         static OutfitCategory Cat(string name, int uiP) => new(name, uiP);
 
         var goldSaucer = Cat("Gold Saucer", 0);
-        goldSaucer.Discriminator.LateCostCurrencyItemIds.AddRange([29, 41629]);
+        goldSaucer.Discriminator.LateCostCurrencyItemIds.AddRange([29, 41629]); // mgp, mgf
         goldSaucer.Rules.Add(new LateTabBundleRule(goldSaucer));
 
         var pvp = Cat("PvP", 1);
-        pvp.Discriminator.LateCostCurrencyItemIds.AddRange([25, 36656, 40479]);
+        pvp.Discriminator.LateCostCurrencyItemIds.AddRange([25, 36656, 40479]); // wolf marks, trophy crystals, commendation crystals
         pvp.Rules.Add(new LateTabBundleRule(pvp));
 
         var tribes = Cat("Tribes", 2);
@@ -158,11 +157,11 @@ internal sealed class Catalog {
         tradecraft.Rules.Add(new LateTabBundleRule(tradecraft));
 
         var eureka = Cat("Eureka", 6);
-        eureka.Discriminator.LateCostCurrencyItemIds.AddRange([21801, 21803]);
+        eureka.Discriminator.LateCostCurrencyItemIds.AddRange([21801, 21803]); // protean crystals, anemos crystals
         eureka.Rules.Add(new LateTabBundleRule(eureka));
 
         var occultCrescent = Cat("Occult Crescent", 7);
-        occultCrescent.Discriminator.LateCostCurrencyItemIds.AddRange([45043, 45044]);
+        occultCrescent.Discriminator.LateCostCurrencyItemIds.AddRange([45043, 45044]); // enlightenment silver/gold pieces
         occultCrescent.Rules.Add(new LateTabBundleRule(occultCrescent));
 
         var dungeons = Cat("Dungeons", 8);
@@ -184,7 +183,7 @@ internal sealed class Catalog {
             r => r.ContentFinderConditionId,
             rowFilter: null,
             5, 28));
-        raids.Discriminator.LateCostCurrencyItemIds.AddRange([22599, 23383, 47100]);
+        raids.Discriminator.LateCostCurrencyItemIds.AddRange([22599, 23383, 47100]); // rathalos scale, rathalos+ scale, guardian scale
         raids.Rules.Add(new LateTabBundleRule(raids));
 
         var trials = Cat("Trials", 10);
@@ -203,19 +202,19 @@ internal sealed class Catalog {
         trials.Rules.Add(new LateTabBundleRule(trials));
 
         var vcDungeons = Cat("V&C Dungeons", 11);
-        vcDungeons.Discriminator.LateCostCurrencyItemIds.AddRange([38533, 39884, 41078, 50434]);
+        vcDungeons.Discriminator.LateCostCurrencyItemIds.AddRange([38533, 39884, 41078, 50434]); // potsherds
         vcDungeons.Rules.Add(new LateTabBundleRule(vcDungeons));
 
         var deepDungeons = Cat("Deep Dungeons", 12);
-        deepDungeons.Discriminator.LateCostCurrencyItemIds.AddRange([15422, 23164, 46186]);
+        deepDungeons.Discriminator.LateCostCurrencyItemIds.AddRange([15422, 23164, 46186]); // the other potsherds, illumed glass
         deepDungeons.Rules.Add(new LateTabBundleRule(deepDungeons));
 
         var fates = Cat("Fates", 13);
-        fates.Discriminator.LateCostCurrencyItemIds.AddRange([12252, 27972, 36634, 41804]);
+        fates.Discriminator.LateCostCurrencyItemIds.AddRange([12252, 27972, 36634, 41804]); // TODO: probably something in allaganlib for drops from fate
         fates.Rules.Add(new LateTabBundleRule(fates));
 
         var island = Cat("Island Sanctuary", 14);
-        island.Discriminator.LateCostCurrencyItemIds.AddRange([37549, 37550]);
+        island.Discriminator.LateCostCurrencyItemIds.AddRange([37549, 37550]); // cowries
         island.Rules.Add(new LateTabBundleRule(island));
 
         var eternalBonding = Cat("Eternal Bonding", 15);

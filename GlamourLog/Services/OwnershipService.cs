@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace GlamourLog.Services;
 
-/// <summary>Consistent ownership view for one capture. Prefer over repeated one-shot service calls when painting UI.</summary>
+// frozen ownership snapshot for one ui paint - this gets reused instead of calling services repeatedly mid-frame
 internal sealed class OwnershipQuery {
     private readonly Snapshot _snap;
     private readonly Dictionary<GlamourSet, SetStatus> _cache = [];
@@ -16,13 +16,13 @@ internal sealed class OwnershipQuery {
         var dresser = ownership.GetDresserItemIds();
         var armoire = ownership.GetArmoireItemIds();
         var setTokens = catalog.GlamourSets.Where(s => !s.NonSetCabinetPiece).Select(s => s.ItemId).ToHashSet();
-        HashSet<uint> storage = [.. dresser.Where(id => !setTokens.Contains(id))];
+        HashSet<uint> storage = [.. dresser.Where(id => !setTokens.Contains(id))]; // set tokens aren't "owned pieces" — only loose dresser + armoire items belong here
         storage.UnionWith(armoire);
         var inventory = Svc.Items.GetInventoryItemIds();
         return new OwnershipQuery(new Snapshot {
             DresserItemIds = dresser,
             ArmoireOwnedItemIds = armoire,
-            StorageOwnedItems = storage,
+            StoredItemIds = storage,
             InventoryItemIds = inventory,
             ArmoireCatalogItemIds = catalog.ArmoireItemIds,
         });
@@ -39,18 +39,18 @@ internal sealed class OwnershipQuery {
     internal int CountCompleteIn(IEnumerable<GlamourSet> sets)
         => sets.Count(s => For(s).IsComplete);
 
-    /// <summary>Set-scoped when <paramref name="set"/> is provided; otherwise any outfit counts as OutfitSlot.</summary>
+    // with a set: only counts as outfit-slot if it's in that set's outfit. without: any mirage outfit counts
     internal PieceLocation Locate(uint itemId, GlamourSet? set = null) {
         itemId = ItemUtil.GetBaseId(itemId).ItemId;
         if (itemId == 0)
             return PieceLocation.None;
-        if (_snap.ArmoireOwnedItemIds.Contains(itemId) || Svc.Items.IsInCabinet(itemId))
+        if (_snap.ArmoireOwnedItemIds.Contains(itemId) || Svc.Items.IsInCabinet(itemId)) // cache can lag so immediate check here
             return PieceLocation.Armoire;
         if (set is { NonSetCabinetPiece: false, ItemId: not 0 } && _snap.DresserItemIds.Contains(set.ItemId) && Svc.Items.IsPieceInMirageOutfitSlot(MirageStoreSetItem.GetRow(set.ItemId), itemId))
             return PieceLocation.OutfitSlot;
         if (set is null && Svc.Items.IsPieceInAnyMirageOutfitSlot(itemId))
             return PieceLocation.OutfitSlot;
-        if (_snap.StorageOwnedItems.Contains(itemId) && !_snap.ArmoireOwnedItemIds.Contains(itemId))
+        if (_snap.StoredItemIds.Contains(itemId) && !_snap.ArmoireOwnedItemIds.Contains(itemId))
             return PieceLocation.LooseDresser;
         if (_snap.InventoryItemIds.Contains(itemId))
             return PieceLocation.Inventory;
@@ -80,7 +80,7 @@ internal sealed class OwnershipQuery {
             pieces.Add(new PieceStatus {
                 ItemId = itemId,
                 Location = location,
-                DisplayStorage = display,
+                BadgeLocation = display,
                 ShowArmoireWarning = display is ItemStorageState.DresserSet or ItemStorageState.DresserLoose && _snap.ArmoireCatalogItemIds.Contains(itemId),
             });
         }
@@ -103,6 +103,7 @@ internal sealed class OwnershipQuery {
     private bool ComputeIsComplete(GlamourSet set, List<PieceStatus> pieces) {
         if (set.NonSetCabinetPiece)
             return pieces.Count > 0 && pieces.All(p => p.IsStored);
+        // completed saved outfit counts no matter what
         if (_snap.DresserItemIds.Contains(set.ItemId) && IsFullMirageOutfit(set))
             return true;
         return pieces.Count == set.Items.Count && pieces.All(p => p.IsStored);
@@ -111,7 +112,7 @@ internal sealed class OwnershipQuery {
     private static SetStorageState ComputeSetStorage(bool isComplete, List<PieceStatus> pieces) {
         if (!isComplete)
             return SetStorageState.None;
-        var states = pieces.Select(p => p.DisplayStorage).ToHashSet();
+        var states = pieces.Select(p => p.BadgeLocation).ToHashSet();
         if (states.Contains(ItemStorageState.DresserLoose))
             return SetStorageState.None;
         if (states.Contains(ItemStorageState.Armoire) && states.Contains(ItemStorageState.DresserSet))
@@ -125,16 +126,16 @@ internal sealed class OwnershipQuery {
 
     private bool ComputeCanAffordMissing(GlamourSet set) {
         var catalog = Svc.Get<CatalogService>();
-        var category = catalog.CategoryNameForPrimaryCostLookup(set);
+        var category = catalog.GetCategoryForPreferredCost(set);
         var totals = new Dictionary<uint, uint>();
         foreach (var itemId in set.Items) {
-            if (_snap.StorageOwnedItems.Contains(itemId) || _snap.InventoryItemIds.Contains(itemId))
+            if (_snap.StoredItemIds.Contains(itemId) || _snap.InventoryItemIds.Contains(itemId))
                 continue;
             if (Locate(itemId, set) is not PieceLocation.None)
                 continue;
             var costs = catalog.GetPrimaryItemCosts(itemId, category);
             if (costs.Count == 0)
-                return false;
+                return false; // exclude things with no costs from being affordable
             foreach (var (costItemId, amount) in costs) {
                 totals.TryGetValue(costItemId, out var total);
                 totals[costItemId] = total + amount;
@@ -164,11 +165,11 @@ internal sealed class OwnershipQuery {
     }
 
     private readonly struct Snapshot {
-        internal HashSet<uint> DresserItemIds { get; init; }
+        internal HashSet<uint> DresserItemIds { get; init; } // includes mirage set tokens + loose plates
         internal HashSet<uint> ArmoireOwnedItemIds { get; init; }
-        internal HashSet<uint> StorageOwnedItems { get; init; }
+        internal HashSet<uint> StoredItemIds { get; init; } // loose dresser + armoire (no set tokens)
         internal HashSet<uint> InventoryItemIds { get; init; }
-        internal HashSet<uint> ArmoireCatalogItemIds { get; init; }
+        internal HashSet<uint> ArmoireCatalogItemIds { get; init; } // items that *can* go in the armoire
     }
 }
 
@@ -245,7 +246,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     internal HashSet<uint> GetArmoireItemIds() => Svc.Items.GetArmoireItemIds();
 
-    internal void GetLalaAchievementsExportBuckets(out Dictionary<string, uint[]> outfitsBySetId, out uint[] armoires) {
+    // for lala achievements export: outfit pieces keyed by set id, plus deposited armoire items
+    internal void BuildLalaExport(out Dictionary<string, uint[]> outfitsBySetId, out uint[] armoires) {
         var dresserIds = GetDresserItemIds();
         var outfitsBuilder = new Dictionary<string, HashSet<uint>>();
         foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
@@ -273,6 +275,8 @@ internal sealed unsafe class OwnershipService : IDisposable {
         return Svc.Items.IsFullyDepositedInDresser(itemId, setTokens);
     }
 
+    // prefers Allagan Tools for non-gil currencies when available
+    // doesn't work for gil because AT stores it as a uint and that can overflow
     internal static int GetOwnedCurrencyCount(uint costItemId) {
         if (costItemId is not 1 && Svc.Get<AllaganToolsIpc>().TryGetOwnedCount(costItemId, out var allaganCount))
             return allaganCount;

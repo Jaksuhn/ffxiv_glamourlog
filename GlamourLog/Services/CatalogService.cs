@@ -20,7 +20,7 @@ internal sealed class CatalogService : IDisposable {
     private readonly Lock _catalogRequestLock = new();
     private Catalog _catalog = Catalog.CreateEmptyStub();
     private volatile bool _catalogBuilt;
-    private int _pendingListRefresh;
+    private int _pendingListRefresh; // ui picks this up next frame after a background rebuild
     private CancellationTokenSource? _catalogCts;
 
     internal int DataVersion { get; private set; }
@@ -67,6 +67,7 @@ internal sealed class CatalogService : IDisposable {
             var token = _catalogCts.Token;
             _ = Task.Run(async () => {
                 static unsafe bool CurrencyManagerReady() => CurrencyManager.Instance() != null; // unnecessary unsafe modifier my fucking ass, microslop
+                // crafting currency ids aren't available until this shows up after login
                 while (!CurrencyManagerReady())
                     await Task.Delay(1000, token);
                 RunCatalogBuild(token);
@@ -88,7 +89,7 @@ internal sealed class CatalogService : IDisposable {
                 GlamourSets = built.Sets;
                 MirageOutfitPieceIds = [.. GlamourSets.Where(s => !s.NonSetCabinetPiece).SelectMany(s => s.Items)];
                 GlamourSetsByCategory.Clear();
-                foreach (var group in GlamourSets.GroupBy(s => _catalog.BucketKey(new ClassifyResult(s.CategoryName, s.IsUnobtainable))))
+                foreach (var group in GlamourSets.GroupBy(s => _catalog.GetDisplayCategoryName(new ClassifyResult(s.CategoryName, s.IsUnobtainable))))
                     GlamourSetsByCategory[group.Key] = [.. group];
                 _sharedModelGroups = GlamourSets.GroupBy(s => s.ModelSignature).ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
                 _sharedModelItemGroups = CatalogBuilder.BuildSharedModelItemGroups(GlamourSets.SelectMany(s => s.Items));
@@ -115,13 +116,13 @@ internal sealed class CatalogService : IDisposable {
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
     internal void NotifyOwnershipChanged() => Svc.Get<WindowsService>().RefreshLogWindow();
 
-    /// <summary> Real outfit tabs (excludes synthetic uncategorized / unobtainable rows).</summary>
-    internal IReadOnlyList<OutfitCategory> OutfitCategories => _catalog.ClassifiableCategories;
+    internal IReadOnlyList<OutfitCategory> OutfitCategories => _catalog.ClassifiableCategories; // excludes synthetic (non rule-matched) categories
     internal OutfitCategory UncategorizedTab => _catalog.UncategorizedBucket;
     internal OutfitCategory MiscArmoireTab => _catalog.MiscArmoireBucket;
     internal OutfitCategory UnobtainableTab => _catalog.UnobtainableBucket;
 
-    internal string? CategoryNameForPrimaryCostLookup(GlamourSet set) {
+    // synthetic tabs don't have a preferred currency to pin costs to
+    internal string? GetCategoryForPreferredCost(GlamourSet set) {
         if (set.IsUnobtainable || set.CategoryName is null)
             return null;
         lock (_glamourDataLock) {
@@ -134,16 +135,16 @@ internal sealed class CatalogService : IDisposable {
         }
     }
 
-    /// <summary> Item ids whose sources/costs should be shown for the Sources panel (set pieces + primary currencies for the current scope).</summary>
-    internal IReadOnlyCollection<uint> GetSourceScopeItemIds(GlamourSet set, uint? costScopePieceItemId) {
+    // item ids the sources panel should look up (set pieces + their main cost currencies for the current filter)
+    internal IReadOnlyCollection<uint> GetSourceScopeItemIds(GlamourSet set, uint? filterPieceId) {
         lock (_glamourDataLock)
-            return [.. BuildSourceScopeItemIds(set, costScopePieceItemId)];
+            return [.. BuildSourceScopeItemIds(set, filterPieceId)];
     }
 
-    private HashSet<uint> BuildSourceScopeItemIds(GlamourSet set, uint? costScopePieceItemId) {
-        var cat = CategoryNameForPrimaryCostLookup(set);
+    private HashSet<uint> BuildSourceScopeItemIds(GlamourSet set, uint? filterPieceId) {
+        var cat = GetCategoryForPreferredCost(set);
         var itemIds = new HashSet<uint>();
-        var pieces = costScopePieceItemId is { } only ? (IEnumerable<uint>)[only] : set.Items;
+        var pieces = filterPieceId is { } only ? (IEnumerable<uint>)[only] : set.Items;
         foreach (var pieceId in pieces) {
             itemIds.Add(pieceId);
             foreach (var c in GetPrimaryItemCosts(pieceId, cat))
@@ -153,6 +154,7 @@ internal sealed class CatalogService : IDisposable {
         return itemIds;
     }
 
+    // prefer the currency that put this set in its current tab (falls back to all listed costs)
     internal List<(uint ItemId, uint Amount)> GetPrimaryItemCosts(uint itemId, string? categoryNameForDiscriminator) {
         var costs = Svc.Items.GetItemCosts(itemId);
         if (costs.Count == 0)
@@ -221,6 +223,7 @@ internal sealed class CatalogService : IDisposable {
             return FindCatalogSetForItemUnlocked(itemId);
     }
 
+    // prefer a standalone armoire entry over the first matching outfit that contains the piece
     private GlamourSet? FindCatalogSetForItemUnlocked(uint itemId) {
         foreach (var set in GlamourSets) {
             if (set.NonSetCabinetPiece && set.ItemId == itemId)
@@ -234,13 +237,13 @@ internal sealed class CatalogService : IDisposable {
 
     internal string GetCategoryBucketKey(GlamourSet set) {
         lock (_glamourDataLock)
-            return _catalog.BucketKey(new ClassifyResult(set.CategoryName, set.IsUnobtainable));
+            return _catalog.GetDisplayCategoryName(new ClassifyResult(set.CategoryName, set.IsUnobtainable));
     }
 
     private HashSet<uint> BuildAllPrimaryCostCurrencyIds() {
         var ids = new HashSet<uint>();
         foreach (var set in GlamourSets) {
-            var cat = CategoryNameForPrimaryCostLookup(set);
+            var cat = GetCategoryForPreferredCost(set);
             foreach (var pieceId in set.Items) {
                 foreach (var c in GetPrimaryItemCosts(pieceId, cat)) {
                     if (c.ItemId != 0)
@@ -251,6 +254,7 @@ internal sealed class CatalogService : IDisposable {
         return ids;
     }
 
+    // in case I somehow miss a set
     private void LogMissingMirageSets() {
         try {
             var sourceRowIds = MirageStoreSetItem.Where(r => r.RowId > 0 && r.Items.Any(i => i.RowId > 0)).Select(r => r.RowId).ToHashSet();

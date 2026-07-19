@@ -7,7 +7,7 @@ using KamiToolKit.Nodes.Simplified;
 namespace GlamourLog.Nodes;
 
 public sealed class FramedItemIconNode : SimpleComponentNode {
-    private const float FrameOutset = 8f;
+    private const float FrameOutset = 8f; // frame hangs outside the item image by this much
 
     public readonly IconImageNode IconNode;
     public readonly ImageNode FrameNode;

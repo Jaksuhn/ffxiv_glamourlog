@@ -25,13 +25,13 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemWithFocusNav<SetLi
     public static float ItemHeight => 38f;
     public Action<GlamourSet>? OnRowRightClick { get; set; }
 
-    private readonly GlamourIconTitleRowChrome _chrome;
+    private readonly IconAndStackedTitlesNode _chrome;
     private readonly GlamourIconNode _storageBadge;
     private readonly ArmoireWarningBadgeNode _armoireWarningBadge;
     private GlamourIconNode.IconPart _lastStorageIconPart = GlamourIconNode.IconPart.Dresser;
 
     public GlamourSetListItemNode() {
-        _chrome = new GlamourIconTitleRowChrome(IconSize, IconLeftMargin, ColourPalette.TitleWhite);
+        _chrome = new IconAndStackedTitlesNode(IconSize, IconLeftMargin, ColourPalette.TitleWhite);
         _chrome.AttachNode(this);
 
         _storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);

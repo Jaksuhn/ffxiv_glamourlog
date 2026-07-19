@@ -10,7 +10,7 @@ namespace GlamourLog.Nodes;
 
 internal enum SourceIconPresentation {
     Normal,
-    Large,
+    Large, // recipe ingredients need a bigger icon
 }
 
 internal enum DetailRowKind {
@@ -19,7 +19,7 @@ internal enum DetailRowKind {
     EmptyHint,
     Piece,
     Cost,
-    SourceDuty,
+    SourceDuty, // journal-style heading for a duty/fate source
     SourceChest,
     SourceArrowFlow,
     SharedModelSet,
@@ -44,7 +44,7 @@ internal sealed class DetailListRowData {
     public bool SourceIconsOnly { get; init; }
     public int SourceIconOverflow { get; init; } // # icons not shown when SourceItemIds exceeds space
     public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; } // left strip ids for SourceArrowFlow, right is SourceItemIds
-    public bool IsTopLevelSection { get; init; }
+    public bool IsTopLevelSection { get; init; } // collapsed sections only hide nested content under these
     public SetListRowData? SharedModelRow { get; init; }
     public uint SharedModelItemId { get; init; } // shared model row represents this id for piece filter scope
     public float SourceChestLabelColumnWidth { get; init; } // duty-wide label column for aligned icon strips; 0 = per-row

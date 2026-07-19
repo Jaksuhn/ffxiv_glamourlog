@@ -29,7 +29,7 @@ internal unsafe partial class LogWindow {
             return;
 
         if (_selectedSet == null)
-            _sourceFilterPieceItemId = null;
+            _selectedSourcePieceItemId = null;
 
         _detailRowOptions.Clear();
 
@@ -55,14 +55,14 @@ internal unsafe partial class LogWindow {
 
         var status = q.For(_selectedSet);
         if (isCabinetOnly)
-            _sourceFilterPieceItemId = null;
+            _selectedSourcePieceItemId = null;
         foreach (var piece in status.Pieces) {
-            var iconPart = StorageIconPartFor(piece.DisplayStorage);
+            var iconPart = StorageIconPartFor(piece.BadgeLocation);
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.Piece,
                 ItemId = piece.ItemId,
                 PrimaryText = Item.GetRow(piece.ItemId).Name.ToString(),
-                IsSelected = _sourceFilterPieceItemId == piece.ItemId,
+                IsSelected = _selectedSourcePieceItemId == piece.ItemId,
                 StorageIconPart = iconPart,
                 ShowInventoryBadge = iconPart is null && piece.Location is PieceLocation.Inventory,
                 ShowArmoireWarning = piece.ShowArmoireWarning,
@@ -70,16 +70,16 @@ internal unsafe partial class LogWindow {
         }
 
         var items = _selectedSet.Items;
-        if (items.Count > 0 && TryGetCostTotals(_selectedSet, _sourceFilterPieceItemId, out var costTotals)) {
+        if (items.Count > 0 && TryGetCostTotals(_selectedSet, _selectedSourcePieceItemId, out var costTotals)) {
             _detailRowOptions.Add(new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Costs", IsTopLevelSection = true });
             _detailRowOptions.Add(new DetailListRowData {
                 Kind = DetailRowKind.JournalHeader,
-                PrimaryText = _sourceFilterPieceItemId is not null ? "Currencies Required (Single Item)" : "Currencies Required (Full Set)"
+                PrimaryText = _selectedSourcePieceItemId is not null ? "Currencies Required (Single Item)" : "Currencies Required (Full Set)"
             });
             var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
             foreach (var kv in ordered) {
                 var owned = OwnershipService.GetOwnedCurrencyCount(kv.Key);
-                var (costNav, costTip, npcName, shopName) = SourcesPanelBuilder.GetShopVendorHintForCostCurrency(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, kv.Key);
+                var (costNav, costTip, npcName, shopName) = SourcesPanelBuilder.FindVendorForCurrency(Svc.Get<CatalogService>(), _selectedSet, _selectedSourcePieceItemId, kv.Key);
                 var currencyName = Item.GetRow(kv.Key).Name.ToString().Trim();
                 _detailRowOptions.Add(new DetailListRowData {
                     Kind = DetailRowKind.Cost,
@@ -94,8 +94,8 @@ internal unsafe partial class LogWindow {
         }
 
         var sourcesStartIndex = _detailRowOptions.Count;
-        SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _sourceFilterPieceItemId, _detailRowOptions, DetailList.DutyChestMeasureNode);
-        if (_detailRowOptions.Count > sourcesStartIndex) {
+        SourcesPanelBuilder.AppendSourceRows(Svc.Get<CatalogService>(), _selectedSet, _selectedSourcePieceItemId, _detailRowOptions, DetailList.DutyChestMeasureNode);
+        if (_detailRowOptions.Count > sourcesStartIndex) { // only add header when something was appended
             _detailRowOptions.Insert(sourcesStartIndex, new DetailListRowData { Kind = DetailRowKind.SectionHeader, PrimaryText = "Sources", IsTopLevelSection = true });
         }
         AppendSharedModelsSection(q);
@@ -115,7 +115,7 @@ internal unsafe partial class LogWindow {
         PaintDetailsOnly();
     }
 
-    /// <summary> Keeps section header rows; drops content under collapsed sections. Nesting follows <see cref="DetailListRowData.IsTopLevelSection"/>. </summary>
+    // strip rows that sit under a collapsed section header (keeps the headers themselves)
     private void ApplyCollapsedDetailSections(List<DetailListRowData> rows) {
         if (_collapsedDetailSections.Count == 0)
             return;
@@ -155,7 +155,7 @@ internal unsafe partial class LogWindow {
         totals = [];
         IEnumerable<uint> pieceIds = pieceFilterPieceItemId is { } only ? [only] : set.Items;
         foreach (var itemId in pieceIds) {
-            foreach (var (cid, amt) in Svc.Get<CatalogService>().GetPrimaryItemCosts(itemId, Svc.Get<CatalogService>().CategoryNameForPrimaryCostLookup(set))) {
+            foreach (var (cid, amt) in Svc.Get<CatalogService>().GetPrimaryItemCosts(itemId, Svc.Get<CatalogService>().GetCategoryForPreferredCost(set))) {
                 totals.TryGetValue(cid, out var t);
                 totals[cid] = t + amt;
             }
@@ -180,7 +180,7 @@ internal unsafe partial class LogWindow {
     private void OnDetailPieceItemLeftClick(uint itemId) {
         if (_selectedSet?.NonSetCabinetPiece == true)
             return;
-        _sourceFilterPieceItemId = _sourceFilterPieceItemId == itemId ? null : itemId;
+        _selectedSourcePieceItemId = _selectedSourcePieceItemId == itemId ? null : itemId;
         _pendingPaintDetailsOnly = true;
     }
 
@@ -190,7 +190,7 @@ internal unsafe partial class LogWindow {
 
         var catalog = Svc.Get<CatalogService>();
 
-        if (_sourceFilterPieceItemId is { } pieceId) {
+        if (_selectedSourcePieceItemId is { } pieceId) {
             var itemSiblings = catalog.GetSharedModelItemSiblings(pieceId);
             if (itemSiblings.Count == 0)
                 return;
@@ -212,7 +212,7 @@ internal unsafe partial class LogWindow {
                 _detailRowOptions.Add(new DetailListRowData {
                     Kind = DetailRowKind.SharedModelSet,
                     SharedModelItemId = itemId,
-                    SharedModelRow = BuildSharedModelItemRowData(itemId, q),
+                    SharedModelRow = BuildSharedModelItemRow(itemId, q),
                 });
             }
             return;
@@ -220,7 +220,7 @@ internal unsafe partial class LogWindow {
 
         var siblings = catalog.GetSharedModelSiblings(_selectedSet);
         if (siblings.Count == 0)
-            siblings = catalog.GetPartialSharedModelSetSiblings(_selectedSet);
+            siblings = catalog.GetPartialSharedModelSetSiblings(_selectedSet); // exact outfit twins first, then piece-level lookalikes
         if (siblings.Count == 0)
             return;
 
@@ -246,10 +246,10 @@ internal unsafe partial class LogWindow {
         if (!IsOpen)
             return;
 
-        if (_sourceFilterPieceItemId is not null && _selectedSet?.Items.Contains(itemId) == true) {
-            if (_sourceFilterPieceItemId == itemId)
+        if (_selectedSourcePieceItemId is not null && _selectedSet?.Items.Contains(itemId) == true) {
+            if (_selectedSourcePieceItemId == itemId)
                 return;
-            _sourceFilterPieceItemId = itemId;
+            _selectedSourcePieceItemId = itemId;
             _pendingPaintDetailsOnly = true;
             return;
         }
@@ -271,7 +271,7 @@ internal unsafe partial class LogWindow {
         }
 
         _selectedSet = set;
-        _sourceFilterPieceItemId = null;
+        _selectedSourcePieceItemId = null;
         _pendingSelectSet = set;
         _pendingResetDetailScroll = true;
         _pendingRefreshListsAndDetails = true;

@@ -4,8 +4,8 @@ using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes;
 
-/// <summary>Shared framed-icon + title/subtitle row chrome for set-list and gathering-note rows.</summary>
-internal sealed class GlamourIconTitleRowChrome : ResNode {
+// framed icon + title/subtitle layout shared by set-list and gathering-note rows
+internal sealed class IconAndStackedTitlesNode : ResNode {
     public const uint TitleFontSize = 14;
     public const uint SubtitleFontSize = 12;
     private const float TitleY = 2f;
@@ -22,7 +22,7 @@ internal sealed class GlamourIconTitleRowChrome : ResNode {
 
     public float TextX => _iconLeftMargin + IconColumnWidth;
 
-    public GlamourIconTitleRowChrome(float iconSize, float iconLeftMargin, Vector4 titleColor) {
+    public IconAndStackedTitlesNode(float iconSize, float iconLeftMargin, Vector4 titleColor) {
         _iconSize = iconSize;
         _iconLeftMargin = iconLeftMargin;
 

@@ -18,8 +18,9 @@ internal static class SetListFilterSort {
             rows = [.. rows.Where(r => !r.IsIncompatible)];
 
         if (C.HideSharedModels)
-            rows = ApplySharedModelDedup(rows, q);
+            rows = HideSharedModelSets(rows, q);
 
+        // Hide* are really"show only"
         var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
         if (hasPositiveFilters) {
             rows = [.. rows.Where(r => {
@@ -40,7 +41,7 @@ internal static class SetListFilterSort {
         return ApplySort(rows);
     }
 
-    private static List<GlamourSet> ApplySharedModelDedup(List<GlamourSet> rows, OwnershipQuery q) {
+    private static List<GlamourSet> HideSharedModelSets(List<GlamourSet> rows, OwnershipQuery q) {
         if (rows.Count == 0)
             return rows;
 
@@ -62,10 +63,8 @@ internal static class SetListFilterSort {
                     keep.Add(set);
             }
             else {
-                keep.Add(members
-                    .OrderByDescending(s => s.Items.Max(id => Item.GetRow(id).DyeCount))
-                    .ThenBy(s => s.ItemId)
-                    .First());
+                // none started -> keep the most dyeable version
+                keep.Add(members.OrderByDescending(s => s.Items.Max(id => Item.GetRow(id).DyeCount)).ThenBy(s => s.ItemId).First());
             }
         }
 
@@ -92,11 +91,11 @@ internal static class SetListFilterSort {
                 ? [.. rows.OrderBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
                 : [.. rows.OrderByDescending(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
             GlamourSetSortMode.ItemLevel => asc
-                ? [.. rows.OrderBy(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
-                : [.. rows.OrderByDescending(s => s.SortItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+                ? [.. rows.OrderBy(s => s.ItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
+                : [.. rows.OrderByDescending(s => s.ItemLevel).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
             GlamourSetSortMode.Patch => asc
-                ? [.. rows.OrderBy(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
-                : [.. rows.OrderByDescending(s => s.SortPatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
+                ? [.. rows.OrderBy(s => s.PatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
+                : [.. rows.OrderByDescending(s => s.PatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
             _ => rows,
         };
     }

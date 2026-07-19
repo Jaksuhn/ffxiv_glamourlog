@@ -13,12 +13,13 @@ internal sealed class StoreAllDresserTask : TaskBase {
     private const string Crystallize = "MiragePrismPrismBoxCrystallize";
     private const string PrismBox = "MiragePrismPrismBox";
     private const ushort FullCondition = 30000;
-    private const int MaxStoreSlots = 9;
+    private const int MaxStoreSlots = 9; // TODO: don't hard code this
 
-    private readonly HashSet<uint> _pendingStoredBaseIds = [];
+    private readonly HashSet<uint> _pendingStoredBaseIds = []; // don't re-select while the game is still moving it
     private readonly HashSet<uint> _visitedInventoryBaseIds = [];
 
-    private readonly struct SetScan(MirageStoreSetItem row, IReadOnlyList<uint> outfits, HashSet<uint> looseDresser) {
+    // outfit slots + loose dresser ids for one candidate set
+    private readonly struct OutfitStorageCtx(MirageStoreSetItem row, IReadOnlyList<uint> outfits, HashSet<uint> looseDresser) {
         internal MirageStoreSetItem Row => row;
         internal IReadOnlyList<uint> Outfits => outfits;
         internal HashSet<uint> LooseDresser => looseDresser;
@@ -64,7 +65,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         }
     }
 
-    private async Task StorePieces(List<PrismBoxCrystallizeItem> rows, SetScan scan, string setName) {
+    private async Task StorePieces(List<PrismBoxCrystallizeItem> rows, OutfitStorageCtx scan, string setName) {
         using var scope = BeginScope(nameof(StorePieces));
 
         if (rows.All(IsSentSlotConsumed))
@@ -116,7 +117,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         PrunePendingStored();
     }
 
-    private unsafe bool TryGetNextTarget(out GlamourSet catalogSet, out PrismBoxCrystallizeItem item, out SetScan scan) {
+    private unsafe bool TryGetNextTarget(out GlamourSet catalogSet, out PrismBoxCrystallizeItem item, out OutfitStorageCtx scan) {
         catalogSet = null!;
         item = default;
         scan = default;
@@ -129,7 +130,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
                 continue;
 
             looseDresser ??= BuildLooseDresserIdSet();
-            var setScan = new SetScan(setRow, CollectOutfitIndices(setRow.RowId), looseDresser);
+            var setScan = new OutfitStorageCtx(setRow, CollectOutfitIndices(setRow.RowId), looseDresser);
             foreach (var pieceId in set.Items) {
                 if (pieceId == 0)
                     continue;
@@ -153,7 +154,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         return false;
     }
 
-    private static List<PrismBoxCrystallizeItem> CollectStorablePiecesInSet(SetScan scan)
+    private static List<PrismBoxCrystallizeItem> CollectStorablePiecesInSet(OutfitStorageCtx scan)
         => [.. scan.Row.Items.Where(p => p.RowId != 0)
             .Select(p => {
                 if (!TryCreateStorableRow(p.RowId, scan, out var row))
@@ -172,7 +173,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         });
     }
 
-    private static bool TryCreateStorableRow(uint itemId, SetScan scan, out PrismBoxCrystallizeItem row) {
+    private static bool TryCreateStorableRow(uint itemId, OutfitStorageCtx scan, out PrismBoxCrystallizeItem row) {
         row = default;
         var baseId = ItemUtil.GetBaseId(itemId).ItemId;
         if (baseId == 0 || Svc.Get<OwnershipService>().IsCabinetItem(baseId) || scan.LooseDresser.Contains(baseId) || !HasUnsetSlotForPiece(scan.Row, baseId, scan.Outfits))
@@ -238,6 +239,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         return result;
     }
 
+    // only store a piece when at least one matching outfit slot still needs it
     private static unsafe bool HasUnsetSlotForPiece(MirageStoreSetItem setRow, uint pieceBaseId, IReadOnlyList<uint> outfitIndices) {
         var mirage = MirageManager.Instance();
         if (mirage is null)
@@ -306,7 +308,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         internal IReadOnlyList<PrismBoxCrystallizeItem> SentPieces { get; init; }
     }
 
-    private static unsafe StoreResult TrySendDirect(SetScan scan, IReadOnlyList<PrismBoxCrystallizeItem> pieces) {
+    private static unsafe StoreResult TrySendDirect(OutfitStorageCtx scan, IReadOnlyList<PrismBoxCrystallizeItem> pieces) {
         var mirage = MirageManager.Instance();
         if (mirage is null)
             return default;
@@ -372,6 +374,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         return pieceByBaseId;
     }
 
+    // add into an existing outfit when one already has a missing selected piece
     private static unsafe bool TryFindPrismBoxIndexForStore(MirageManager* mirage, MirageStoreSetItem setRow, Dictionary<uint, PrismBoxCrystallizeItem> pieceByBaseId, IReadOnlyList<uint> outfitIndices, out uint index) {
         index = 0;
         var sheetSlotLimit = Math.Min(setRow.Items.Count, Svc.Data.GetSheet<MirageStoreSetItem>().Columns.Count);
