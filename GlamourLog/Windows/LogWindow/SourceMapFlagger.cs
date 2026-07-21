@@ -1,4 +1,5 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using GlamourLog.Services;
 using MapType = FFXIVClientStructs.FFXIV.Client.UI.Agent.MapType;
 
 namespace GlamourLog.Windows.LogWindow;
@@ -16,5 +17,10 @@ internal static unsafe class SourceMapFlagger {
         agent->SetFlagMapMarker(territoryTypeId, mapId, worldPosition);
         agent->OpenMap(mapId, territoryTypeId, name, MapType.QuestLog);
         agent->OpenMap(mapId, territoryTypeId, name);
+    }
+
+    internal static void OpenChestMap(uint chestRowId, string label) {
+        if (DungeonChestLayout.Instance.TryGet(chestRowId, out var chest))
+            chest.OpenMap(label);
     }
 }
