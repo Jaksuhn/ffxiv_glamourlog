@@ -154,7 +154,7 @@ internal sealed class DungeonChestLayout {
         var chests = Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName).Where(c => c.RowId != 0).ToDictionary(c => c.RowId);
 
         foreach (var chest in chests.Values)
-            index._positionByChestRowId[chest.RowId] = Vector3.Zero; // TODO: replace with chest.Position
+            index._positionByChestRowId[chest.RowId] = chest.Position;
 
         var fightNoByBossRowId = new Dictionary<uint, uint>();
         foreach (var boss in Svc.Data.GetSupplemental<DungeonBoss>(CsvLoader.DungeonBossResourceName)) {

@@ -4,12 +4,12 @@
     "net10.0-windows7.0": {
       "croizat.clib": {
         "type": "Direct",
-        "requested": "[1.0.65, )",
-        "resolved": "1.0.65",
-        "contentHash": "tpE3mbARTiy1x9Y3GXnhKMlW8Yxay8Lx4BoMmAwHQ3FOjgmeFW/iMqr4qiVAjU/YXrVN4QE6gLMGZngv3UgbwQ==",
+        "requested": "[1.0.68, )",
+        "resolved": "1.0.68",
+        "contentHash": "yt5MHpQwfynLt64D92TmPHjXjNH5KV8l9Hpx+ROPeVrnPe+svWcJSdfwfhbPgxrqoaWhq2WRjxtYLPMLUL4Btw==",
         "dependencies": {
           "AllaganLib.GameSheets": "2.2.6",
-          "LuminaSupplemental.Excel": "5.0.1"
+          "LuminaSupplemental.Excel": "5.1.0"
         }
       },
       "DalamudPackager": {
@@ -23,12 +23,6 @@
         "requested": "[1.2.39, )",
         "resolved": "1.2.39",
         "contentHash": "fcFN01tDTIQqDuTwr1jUQK/geofiwjG5DycJQOnC72i1SsLAk1ELe+apBOuZ11UMQG8YKFZG1FgvjZPbqHyatg=="
-      },
-      "KamiToolKit": {
-        "type": "Direct",
-        "requested": "[2.1.9, )",
-        "resolved": "2.1.9",
-        "contentHash": "Kikeo7G7awFSKxKPSSGieDp5lSItRaDwkVICQrYxHOt04TIWYaF1tf5hGjArs8x8HHfAh5wWKRUVaDj5su6QrA=="
       },
       "AllaganLib.GameSheets": {
         "type": "Transitive",
@@ -79,8 +73,8 @@
       },
       "LuminaSupplemental.Excel": {
         "type": "Transitive",
-        "resolved": "5.0.1",
-        "contentHash": "Qnirl8t1QEBq1aOiPwin7AM9NC+lXS1ZtDjlctzPXC/VIDHfm5Zl9qqxK+/A5Bo0OOE+Ai4IOM7k+ZwGERbJ0g==",
+        "resolved": "5.1.0",
+        "contentHash": "it0pwHvWlTek2HpZYT0qM4aZr9C7dqWr7YJBI0VFuaftKUEgJMRghBXfcz5F6yjAhY7iBjn7QfJtwxZEw4XPpA==",
         "dependencies": {
           "CSVFile": "3.2.1",
           "CsvHelper": "30.0.1",
@@ -375,6 +369,22 @@
         "type": "Transitive",
         "resolved": "10.0.1",
         "contentHash": "xfaHEHVDkMOOZR5S6ZGezD0+vekdH1Nx/9Ih8/rOqOGSOk1fxiN3u94bYkBW/wigj0Uw2Wt3vvRj9mtYdgwEjw=="
+      },
+      "ffxivclientstructs": {
+        "type": "Project",
+        "dependencies": {
+          "InteropGenerator.Runtime": "[1.0.0, )"
+        }
+      },
+      "interopgenerator.runtime": {
+        "type": "Project"
+      },
+      "kamitoolkit": {
+        "type": "Project",
+        "dependencies": {
+          "FFXIVClientStructs": "[1.0.0, )",
+          "InteropGenerator.Runtime": "[1.0.0, )"
+        }
       }
     }
   }
