@@ -1,4 +1,7 @@
 using AllaganLib.GameSheets.ItemSources;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Services;
 
 namespace GlamourLog;
@@ -17,6 +20,7 @@ internal sealed class IpcProvider : IDisposable {
         RegisterFunc("IsContentComplete", (uint cfcId) => IsContentComplete(cfcId));
         RegisterFunc("EntrustAll", () => Svc.Commands.ProcessCommand("/glamourlog store"));
         RegisterFunc("IsBusy", () => Svc.Automation.CurrentTask is not null);
+        RegisterFunc("ReadyToStore", () => IsReadyToStore());
     }
 
     public void Dispose() {
@@ -108,5 +112,12 @@ internal sealed class IpcProvider : IDisposable {
                 result.Add(row.RowId);
         }
         return [.. result.OrderBy(x => x)];
+    }
+
+    // same checks I do in the tasks
+    private bool IsReadyToStore() {
+        if (AtkUnitBase.IsAddonReady("Cabinet") && UIState.Instance()->Cabinet.IsCabinetLoaded()) return true;
+        if (AtkUnitBase.IsAddonReady("MiragePrismPrismBox") && AtkUnitBase.IsAddonReady("MiragePrismPrismBoxCrystallize") && MirageManager.Instance() is not null and var mm && mm->PrismBoxLoaded) return true;
+        return false;
     }
 }

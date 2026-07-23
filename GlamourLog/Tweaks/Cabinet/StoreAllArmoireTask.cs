@@ -13,6 +13,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
     private const uint UninitializedCategoryIndex = uint.MaxValue; // value before first render
 
     protected override async Task Execute() {
+        using var scope = BeginScope(nameof(StoreAllArmoireTask));
         ErrorIf(!AtkUnitBase.IsAddonReady(AddonName) || !IsCabinetLoaded(), "Cabinet not ready");
         for (var categoryIndex = 0; categoryIndex < CategoryCount; categoryIndex++) {
             await SelectCategory(categoryIndex);
@@ -23,7 +24,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
     private async Task SelectCategory(int categoryIndex) {
         using var scope = BeginScope(nameof(SelectCategory));
         ErrorIf(!TrySelectCategory(categoryIndex), "Failed to switch category");
-        Svc.Log.Debug($"Switching to category {categoryIndex + 1}/{CategoryCount}");
+        Log($"Switching to category {categoryIndex + 1}/{CategoryCount}");
         await WaitUntil(() => IsCategoryReady(categoryIndex), "WaitForCategory");
         await NextFrame(2);
     }
@@ -31,7 +32,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
     private async Task StoreAllInCurrentCategory() {
         using var scope = BeginScope(nameof(StoreAllInCurrentCategory));
         while (TryGetNextCabinetId(out var cabinetId)) {
-            Svc.Log.Debug($"Storing cabinet item #{cabinetId}");
+            Log($"Storing cabinet item #{cabinetId}");
             ErrorIf(!StoreCabinetItem(cabinetId), "Failed to store item");
 
             await WaitUntil(() => IsCabinetItemStored(cabinetId) && IsStoreConfirmationClear(), "WaitForStored");
