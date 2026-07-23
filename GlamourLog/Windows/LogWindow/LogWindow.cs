@@ -151,6 +151,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         DetailList.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
         DetailList.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
         DetailList.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
+        DetailList.OnSourceChestMapLeftClick = SourceMapFlagger.OpenChestMap;
         DetailList.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
         DetailList.OnDetailSectionToggle = OnDetailSectionToggle;
         DetailList.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);

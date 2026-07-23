@@ -14,6 +14,7 @@ internal sealed unsafe class DetailRowsListNode : ListNode<DetailListRowData, De
     public Action<uint>? OnItemRightClick { get; set; }
     public Action<uint, SourceNavigateTarget?>? OnSourceHeaderRightClick { get; set; }
     public Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
+    public Action<uint, string>? OnSourceChestMapLeftClick { get; set; }
     public Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
     public Action<string, bool>? OnDetailSectionToggle { get; set; }
     public Func<string, bool>? IsDetailSectionCollapsed { get; set; }
@@ -56,6 +57,7 @@ internal sealed unsafe class DetailRowsListNode : ListNode<DetailListRowData, De
         OnItemRightClick = null;
         OnSourceHeaderRightClick = null;
         OnSourceMapFlagLeftClick = null;
+        OnSourceChestMapLeftClick = null;
         OnCraftRecipeJournalLeftClick = null;
         OnDetailSectionToggle = null;
         IsDetailSectionCollapsed = null;
@@ -128,6 +130,7 @@ internal sealed unsafe class DetailRowsListNode : ListNode<DetailListRowData, De
         node.OnItemRightClick = OnItemRightClick;
         node.OnSourceHeaderRightClick = OnSourceHeaderRightClick;
         node.OnSourceMapFlagLeftClick = OnSourceMapFlagLeftClick;
+        node.OnSourceChestMapLeftClick = OnSourceChestMapLeftClick;
         node.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
         node.OnDetailSectionToggle = OnDetailSectionToggle;
         node.IsDetailSectionCollapsed = IsDetailSectionCollapsed;

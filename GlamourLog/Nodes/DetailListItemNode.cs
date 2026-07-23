@@ -48,6 +48,7 @@ internal sealed class DetailListRowData {
     public SetListRowData? SharedModelRow { get; init; }
     public uint SharedModelItemId { get; init; } // shared model row represents this id for piece filter scope
     public float SourceChestLabelColumnWidth { get; init; } // duty-wide label column for aligned icon strips; 0 = per-row
+    public uint DungeonChestRowId { get; init; } // duty chest row; left-click opens map marker
 }
 
 internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
@@ -69,6 +70,7 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     public Action<uint>? OnItemRightClick { get; set; }
     public Action<uint, SourceNavigateTarget?>? OnSourceHeaderRightClick { get; set; }
     public Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
+    public Action<uint, string>? OnSourceChestMapLeftClick { get; set; }
     public Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
     public Action<string, bool>? OnDetailSectionToggle { get; set; } // fired when SectionHeader is toggled
     public Func<string, bool>? IsDetailSectionCollapsed { get; set; } // restore collapsed state for headers are rebuild if true
@@ -220,6 +222,18 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         // row width from parent updated; pooled ItemData may not re-run SetNodeData same frame
         if (ItemData is not null)
             ApplyDynamicWidth(ItemData);
+
+        if (ItemData is { Kind: DetailRowKind.SourceChest, DungeonChestRowId: not 0, SourceIconsOnly: false, PrimaryText.Length: > 0 })
+            ApplySourceChestLabelCollision(ItemData);
+    }
+
+    private void ApplySourceChestLabelCollision(DetailListRowData data) {
+        var hasChestType = data.SecondaryText.Length > 0;
+        var labelWidth = MeasureDutyChestLabelWidth(
+            data.PrimaryText,
+            hasChestType ? data.SecondaryText : string.Empty);
+        var labelColumnWidth = data.SourceChestLabelColumnWidth > 0f ? data.SourceChestLabelColumnWidth : labelWidth;
+        _inputCollision.Size = new Vector2(DutyChestLabelX + labelColumnWidth + DutyChestLabelIconGap * 0.5f, ItemHeight);
     }
 
     private void LayoutIconRow() {
@@ -462,6 +476,13 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
                     _primary.IsVisible = true;
                 // full-row hitbox would steal clicks from per-icon tooltips / item hits
                 _inputCollision.IsVisible = false;
+                // label-only hitbox when the chest has map coords; keep icons free for tooltips
+                if (!iconOnlyChest
+                    && itemData.DungeonChestRowId != 0) {
+                    ApplySourceChestLabelCollision(itemData);
+                    _inputCollision.IsVisible = true;
+                    _inputCollision.ShowClickableCursor = true;
+                }
                 break;
             case DetailRowKind.SourceArrowFlow:
                 _primary.IsVisible = false;
@@ -594,6 +615,11 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
             if (ItemData.Kind is DetailRowKind.SourceDuty && ItemData.NavigateTarget is { } nav2 && nav2.TerritoryTypeId != 0) {
                 OnSourceMapFlagLeftClick?.Invoke(nav2, ItemData.PrimaryText);
+                return;
+            }
+
+            if (ItemData.Kind is DetailRowKind.SourceChest && ItemData.DungeonChestRowId != 0) {
+                OnSourceChestMapLeftClick?.Invoke(ItemData.DungeonChestRowId, ItemData.PrimaryText);
                 return;
             }
         }

@@ -24,6 +24,12 @@
         "resolved": "1.2.39",
         "contentHash": "fcFN01tDTIQqDuTwr1jUQK/geofiwjG5DycJQOnC72i1SsLAk1ELe+apBOuZ11UMQG8YKFZG1FgvjZPbqHyatg=="
       },
+      "KamiToolKit": {
+        "type": "Direct",
+        "requested": "[2.1.9, )",
+        "resolved": "2.1.9",
+        "contentHash": "Kikeo7G7awFSKxKPSSGieDp5lSItRaDwkVICQrYxHOt04TIWYaF1tf5hGjArs8x8HHfAh5wWKRUVaDj5su6QrA=="
+      },
       "AllaganLib.GameSheets": {
         "type": "Transitive",
         "resolved": "2.2.6",
@@ -369,22 +375,6 @@
         "type": "Transitive",
         "resolved": "10.0.1",
         "contentHash": "xfaHEHVDkMOOZR5S6ZGezD0+vekdH1Nx/9Ih8/rOqOGSOk1fxiN3u94bYkBW/wigj0Uw2Wt3vvRj9mtYdgwEjw=="
-      },
-      "ffxivclientstructs": {
-        "type": "Project",
-        "dependencies": {
-          "InteropGenerator.Runtime": "[1.0.0, )"
-        }
-      },
-      "interopgenerator.runtime": {
-        "type": "Project"
-      },
-      "kamitoolkit": {
-        "type": "Project",
-        "dependencies": {
-          "FFXIVClientStructs": "[1.0.0, )",
-          "InteropGenerator.Runtime": "[1.0.0, )"
-        }
       }
     }
   }

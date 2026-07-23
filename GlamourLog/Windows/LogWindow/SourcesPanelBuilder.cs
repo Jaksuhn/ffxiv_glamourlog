@@ -110,15 +110,12 @@ internal static class SourcesPanelBuilder {
             });
 
             var chestIndex = DungeonChestLayout.Instance;
-            dutyChestRowIdsOrderedByCfc.TryGetValue(cfcId, out var fullChestOrder);
-            var chestKeysThisDuty = fullChestOrder is { Count: > 0 }
-                ? [.. fullChestOrder.Where(b.Chests.ContainsKey)]
-                : chestIndex.OrderChestRowIds(cfcId, b.Chests.Keys);
+            var fullChestOrder = dutyChestRowIdsOrderedByCfc.GetValueOrDefault(cfcId) ?? chestIndex.OrderChestRowIdsForCfc(cfcId);
+            var chestKeysThisDuty = fullChestOrder.Where(b.Chests.ContainsKey).ToList();
             var hasGeneral = b.General.Count > 0;
             var hasChests = chestKeysThisDuty.Count > 0;
 
-            var chestOrderForLabelWidth = fullChestOrder is { Count: > 0 } ? fullChestOrder : chestKeysThisDuty;
-            var maxDutyChestLabelWidth = chestIndex.ComputeMaxLabelColumnWidth(dutyChestMeasure, chestOrderForLabelWidth, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
+            var maxDutyChestLabelWidth = chestIndex.ComputeMaxLabelColumnWidth(dutyChestMeasure, fullChestOrder, extraPrimaryLabel: hasGeneral && hasChests ? "General" : null);
 
             if (hasGeneral) {
                 if (hasChests)
@@ -128,8 +125,17 @@ internal static class SourcesPanelBuilder {
             }
 
             foreach (var ck in chestKeysThisDuty) {
-                var chestNum = fullChestOrder is { Count: > 0 } ? fullChestOrder.IndexOf(ck) + 1 : chestKeysThisDuty.IndexOf(ck) + 1;
-                AppendIconStripRow(rows, $"Chest {chestNum}", chestIndex.FormatSecondaryLabel(ck), b.Chests[ck], scope, iconOnly: false, sourceChestLabelColumnWidth: maxDutyChestLabelWidth);
+                var chestNum = fullChestOrder.IndexOf(ck) + 1;
+                var hasChest = chestIndex.TryGet(ck, out var chest);
+                AppendIconStripRow(
+                    rows,
+                    $"Chest {chestNum}",
+                    hasChest ? chest.SecondaryLabel : string.Empty,
+                    b.Chests[ck],
+                    scope,
+                    iconOnly: false,
+                    sourceChestLabelColumnWidth: maxDutyChestLabelWidth,
+                    dungeonChestRowId: hasChest && chest.HasMapMarker ? ck : 0);
             }
         }
 
@@ -431,7 +437,7 @@ internal static class SourcesPanelBuilder {
         return enpcRow is null ? null : TryNavigateTargetFromNpc(enpcRow);
     }
 
-    private static void AppendIconStripRow(List<DetailListRowData> rows, string label, string secondaryLabel, IEnumerable<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal, float sourceChestLabelColumnWidth = 0f) {
+    private static void AppendIconStripRow(List<DetailListRowData> rows, string label, string secondaryLabel, IEnumerable<uint> itemIds, HashSet<uint> scope, bool iconOnly = false, SourceIconPresentation presentation = SourceIconPresentation.Normal, float sourceChestLabelColumnWidth = 0f, uint dungeonChestRowId = 0) {
         var ordered = itemIds.Where(id => id != 0).Distinct().OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal).ToList();
         if (ordered.Count == 0)
             return;
@@ -447,6 +453,7 @@ internal static class SourcesPanelBuilder {
             SourceIconOverflow = overflow,
             SourcePresentation = presentation,
             SourceChestLabelColumnWidth = sourceChestLabelColumnWidth,
+            DungeonChestRowId = dungeonChestRowId,
         });
     }
 
