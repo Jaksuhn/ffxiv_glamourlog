@@ -70,46 +70,10 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             if (!InventoryType.AllPlayer.Contains((InventoryType)eventData.Item.ContainerType))
                 continue;
 
-            var baseId = eventData.Item.BaseItemId;
-            if (eventData is InventoryItemRemovedArgs && TryFastPruneStoredItem(baseId))
-                return;
-
+            // always full resync else inventory/slot might be stale
             QueueListResync(eventData is InventoryItemRemovedArgs ? "inventory item removed" : "inventory item added");
             return;
         }
-    }
-
-    // deposit path: item already gone from inventory — prune local snapshot and refilter without native rebuild
-    private unsafe bool TryFastPruneStoredItem(uint itemId) {
-        itemId = ItemUtil.GetBaseId(itemId).ItemId;
-        if (itemId == 0 || _categoryRows.Length == 0 || _disposed)
-            return false;
-
-        var addon = GetAddon();
-        var data = GetData();
-        if (addon is null || !addon->IsVisible || data is null || data->CrystallizeCategory != _trackedCategory)
-            return false;
-
-        var kept = 0;
-        for (var i = 0; i < _categoryRows.Length; i++) {
-            if (ItemUtil.GetBaseId(_categoryRows[i].ItemId).ItemId != itemId)
-                _categoryRows[kept++] = _categoryRows[i];
-        }
-
-        if (kept == _categoryRows.Length)
-            return false;
-
-        Array.Resize(ref _categoryRows, kept);
-        _displayToSource = [];
-        _deferCategoryRestore = false;
-        _nativeTree.InvalidateBaseline();
-        _logNextApply = true;
-        LogFilterDebug(nameof(TryFastPruneStoredItem), $"pruned item {itemId}; snapshot={kept}");
-
-        // restore pruned list and refresh once so baseline is re-captured — avoid full Populate
-        RestoreFullCategory(data);
-        RequestAddonRefresh();
-        return true;
     }
 
     private unsafe void QueueListResync(string reason) {
@@ -134,6 +98,10 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             _nativeTree.InvalidateAll();
             _logNextApply = true;
             LogFilterDebug(nameof(QueueListResync), reason);
+
+            var data = GetData();
+            if (data is not null)
+                ClearCrystallizeSelection(data);
 
             // rebuild crystallize candidates from inventory; OnRefresh alone keeps our projected rows
             var agent = AgentMiragePrismPrismBox.Instance();
@@ -199,7 +167,9 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             return;
 
         if (!IsFilteringActive) {
-            PrepareForNativeRefresh(data);
+            // don't restore snapshots from unfiltered
+            if (_needsUnfilteredRepopulate)
+                PrepareForNativeRefresh(data);
             return;
         }
 
@@ -221,6 +191,26 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
         if (data is null)
             return;
 
+        if (!IsFilteringActive) {
+            if (_needsUnfilteredRepopulate) {
+                _refreshRecursionDepth++;
+                try {
+                    EnsureCategoryTracked(data);
+                    ApplyUnfilteredDisplay(addon, data);
+                }
+                finally {
+                    _refreshRecursionDepth--;
+                }
+            }
+            else if (_categoryRows.Length > 0) {
+                // leftover snapshop, get rid of it
+                ClearTransientState();
+                _nativeTree.InvalidateAll();
+            }
+
+            return;
+        }
+
         _refreshRecursionDepth++;
         try {
             EnsureCategoryTracked(data);
@@ -231,11 +221,6 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
                 _deferCategoryRestore = true;
                 ClearTransientState();
                 RequestAddonRefresh();
-                return;
-            }
-
-            if (!IsFilteringActive) {
-                ApplyUnfilteredDisplay(addon, data);
                 return;
             }
 
@@ -349,6 +334,10 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
 
     private unsafe void OnAddonUpdate(AtkUnitBase* addon) {
         if (addon is null || !addon->IsVisible)
+            return;
+
+        // don't touch anything if filters are off and not recovering
+        if (!IsFilteringActive && !_needsUnfilteredRepopulate && !_applyWhenReady)
             return;
 
         var data = GetData();
@@ -644,16 +633,34 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
         if (_deferCategoryRestore)
             return;
 
-        if (_categoryRows.Length > 0 && data->CrystallizeCategory == _trackedCategory)
-            RestoreFullCategory(data); // undo projection so native refresh sees full list
+        if (_categoryRows.Length == 0 || data->CrystallizeCategory != _trackedCategory)
+            return;
+
+        // don't restore pre-deposit/withdraw snapshop or else the inventory/slot will be at the wrong index
+        var nativeCount = (int)data->CrystallizeItemCount;
+        if (nativeCount >= 0 && nativeCount < _categoryRows.Length) {
+            LogFilterDebug(nameof(PrepareForNativeRefresh), $"skip restore; native shrunk {_categoryRows.Length}->{nativeCount}");
+            ClearTransientState();
+            _deferCategoryRestore = true;
+            _nativeTree.InvalidateBaseline();
+            ClearCrystallizeSelection(data);
+            return;
+        }
+
+        RestoreFullCategory(data); // undo projection so native refresh sees full list
     }
 
     private unsafe void ApplyEmptyCategory(MiragePrismPrismBoxData* data) {
         data->CrystallizeItemCount = 0;
-        data->CrystallizeItemIndex = 0;
+        ClearCrystallizeSelection(data);
         for (var i = 0; i < data->CrystallizeItems.Length; i++)
             data->CrystallizeItems[i] = default;
         _displayToSource = [];
+    }
+
+    private static unsafe void ClearCrystallizeSelection(MiragePrismPrismBoxData* data) {
+        data->CrystallizeItemIndex = 0;
+        data->CrystallizeSelectedItem = default;
     }
 
     private void ClearTransientState() {
@@ -713,7 +720,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
     private static unsafe void ClampCrystallizeSelection(MiragePrismPrismBoxData* data, uint previousSelectedItemId) {
         var count = data->CrystallizeItemCount;
         if (count == 0) {
-            data->CrystallizeItemIndex = 0;
+            ClearCrystallizeSelection(data);
             return;
         }
 
@@ -724,6 +731,10 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
                     return;
                 }
             }
+
+            // deposited / filtered out — don't leave the index on the row
+            ClearCrystallizeSelection(data);
+            return;
         }
 
         if (data->CrystallizeItemIndex >= count)
