@@ -28,6 +28,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     private CircleButtonNode? _helpMainMenuButton;
 
     private string _selectedCategoryId = "";
+    private string _persistedSearch = string.Empty;
     private GlamourSet? _selectedSet;
     private uint? _selectedSourcePieceItemId; // when set, costs/sources/lookalikes are narrowed to this piece
     private bool _pendingRefreshListsAndDetails; // queue ui work for the next safe update instead of mutating lists mid-click
@@ -107,12 +108,15 @@ internal unsafe partial class LogWindow : NativeAddon {
             leftWidth,
             listBottom - alignTop,
             onSearchChanged: () => {
+                _persistedSearch = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
                 _pendingResetSetScroll = true;
                 RefreshListsAndDetails();
             },
             onCategorySelected: OnCategorySelected) {
             Position = new Vector2(contentStart.X, alignTop),
         };
+        if (C.PersistSearch)
+            _categoryColumn.Search.Input.String = _persistedSearch;
         _categoryColumn.AttachNode(this);
 
         _setListColumn = new LogWindowSetListColumnNode(

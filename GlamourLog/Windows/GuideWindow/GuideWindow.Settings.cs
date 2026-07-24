@@ -18,6 +18,11 @@ public unsafe partial class GuideWindow {
                     if (addon is not null)
                         addon->ShouldFireCallbackAndHideOrClose = C.DisableClose;
                 }),
+            new CheckboxSettingBlock(
+                "Persist search",
+                "Keeps the search text when the Glamour Log window is closed and reopened.",
+                () => C.PersistSearch,
+                v => C.PersistSearch = v),
         ],
     };
 }

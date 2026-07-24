@@ -114,6 +114,7 @@ internal unsafe partial class LogWindow {
         if (string.IsNullOrWhiteSpace(current))
             return;
         _categoryColumn.Search.Input.String = string.Empty;
+        _persistedSearch = string.Empty;
     }
 
     private SetListRowData BuildSetListRowData(GlamourSet set, OwnershipQuery q, bool appendNotInListSuffix = false) {

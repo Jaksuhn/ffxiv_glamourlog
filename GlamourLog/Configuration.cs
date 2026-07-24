@@ -21,6 +21,7 @@ public class Configuration : IPluginConfiguration {
     public ListSortDirection SetListSortDirection { get; set; } = ListSortDirection.Ascending;
 
     public bool DisableClose { get; set; } = true;
+    public bool PersistSearch { get; set; }
 
     public bool HideCabinetOwnedItems { get; set; }
     public bool HideCabinetGearsetItems { get; set; }
