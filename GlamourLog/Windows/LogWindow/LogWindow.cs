@@ -1,3 +1,4 @@
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
@@ -154,9 +155,12 @@ internal unsafe partial class LogWindow : NativeAddon {
         DetailList.OnPieceLeftClick = OnDetailPieceItemLeftClick;
         DetailList.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
         DetailList.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);
-        DetailList.OnSourceMapFlagLeftClick = (nav, label) => SourceMapFlagger.SetFlagAndOpenMap(nav.TerritoryTypeId, nav.WorldPosition, label);
-        DetailList.OnSourceChestMapLeftClick = SourceMapFlagger.OpenChestMap;
-        DetailList.OnCraftRecipeJournalLeftClick = OnCraftRecipeJournalLeftClick;
+        DetailList.OnSourceMapFlagLeftClick = (nav, label) => nav.OpenMap(label);
+        DetailList.OnSourceChestMapLeftClick = (chestRowId, label) => {
+            if (DungeonChestLayout.Instance.TryGet(chestRowId, out var chest))
+                chest.OpenMap(label);
+        };
+        DetailList.OnCraftRecipeJournalLeftClick = (recipeId) => { if (recipeId is not 0) AgentRecipeNote.Instance()->OpenRecipeByRecipeId(recipeId); };
         DetailList.OnDetailSectionToggle = OnDetailSectionToggle;
         DetailList.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
         DetailList.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;

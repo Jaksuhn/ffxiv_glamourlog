@@ -171,12 +171,6 @@ internal unsafe partial class LogWindow {
             _ => null,
         };
 
-    private static void OnCraftRecipeJournalLeftClick(uint recipeRowId) {
-        if (recipeRowId == 0)
-            return;
-        AgentRecipeNote.Instance()->OpenRecipeByRecipeId(recipeRowId);
-    }
-
     private void OnDetailPieceItemLeftClick(uint itemId) {
         if (_selectedSet?.NonSetCabinetPiece == true)
             return;

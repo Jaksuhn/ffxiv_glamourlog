@@ -1,3 +1,5 @@
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+
 namespace GlamourLog;
 
 internal sealed class GlamourSet {
@@ -69,4 +71,18 @@ internal sealed class SetStatus {
 }
 
 // nav goal for a given source of an item. Can call navmesh on it via a context menu
-internal readonly record struct SourceNavigateTarget(uint TerritoryTypeId, Vector3 WorldPosition);
+internal readonly record struct SourceNavigateTarget(uint TerritoryTypeId, Vector3 WorldPosition) {
+    internal unsafe void OpenMap(string label) {
+        var agent = AgentMap.Instance();
+        if (agent is null)
+            return;
+        if (TerritoryType.GetRowRef(TerritoryTypeId) is not { IsValid: true, Value.Map.RowId: var mapId } || mapId == 0)
+            return;
+
+        var name = string.IsNullOrWhiteSpace(label) ? "Location" : label;
+        agent->FlagMarkerCount = 0; // need to replace last flag
+        agent->SetFlagMapMarker(TerritoryTypeId, mapId, WorldPosition);
+        agent->OpenMap(mapId, TerritoryTypeId, name, FFXIVClientStructs.FFXIV.Client.UI.Agent.MapType.QuestLog);
+        agent->OpenMap(mapId, TerritoryTypeId, name);
+    }
+}
