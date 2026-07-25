@@ -9,14 +9,12 @@ internal sealed class ParagraphNode : ResNode {
 
     private readonly ReadOnlySeString _content;
     private readonly float _textLeftInset;
-    private readonly float _textBoxHeight;
     private readonly TextNode _text;
     private float _lastLayoutWidth = -1f;
 
-    public ParagraphNode(float width, ReadOnlySeString content, float textLeftInset = 0f, float? textBoxHeight = null) {
+    public ParagraphNode(float width, ReadOnlySeString content, float textLeftInset = 0f) {
         _content = content;
         _textLeftInset = textLeftInset;
-        _textBoxHeight = textBoxHeight ?? Constants.DefaultGuideBodyTextBoxHeight;
 
         _text = new TextNode {
             FontType = FontType.Axis,
@@ -44,10 +42,9 @@ internal sealed class ParagraphNode : ResNode {
     private void ApplyHeight(float width) {
         _lastLayoutWidth = width;
         var textW = Math.Max(40f, width - _textLeftInset);
-        var textH = _textBoxHeight;
+        var textH = GuideTextLayout.MeasureWrappedHeight(_text, _content, textW);
         var h = textH + Constants.RowPadTop + Constants.RowPadBottom;
 
-        _text.String = _content;
         _text.Position = new Vector2(_textLeftInset, Constants.RowPadTop + Constants.TextTopInset);
         _text.Size = new Vector2(textW, textH);
         Size = new Vector2(width, h);

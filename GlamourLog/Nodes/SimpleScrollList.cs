@@ -3,7 +3,6 @@ using KamiToolKit.Nodes;
 namespace GlamourLog.Nodes;
 
 public static class SimpleScrollList {
-    // ScrollingAreaNode (KTK 1.x) reserved 16px for the scrollbar track + gap.
     public const float ScrollbarContentInset = 16f;
 
     public static ScrollingNode<VerticalListNode> Create(Vector2 position, Vector2 size, bool autoHideScrollBar) {

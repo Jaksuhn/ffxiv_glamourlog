@@ -11,6 +11,5 @@ public partial class GuideWindow {
                 .Append("The bottom number is the amount of glamour dresser slots you have\nsaved by having these pieces stored as outfits instead of being loose inside the dresser.\n\n")
                 .AddUiForeground(500).AddUiGlow(501).Append("※Completed counter combines sets in the dresser and the armoire.\n").AddUiGlowOff().AddUiForegroundOff()
                 .AddUiForeground(500).AddUiGlow(501).Append("※\"Misc Armoire\" are not included in either counters.").AddUiGlowOff().AddUiForegroundOff().Encode()),
-        BodyTextBoxHeight = 240f,
     };
 }

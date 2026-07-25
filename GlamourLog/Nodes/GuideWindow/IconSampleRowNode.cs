@@ -14,15 +14,13 @@ internal sealed class IconSampleRowNode : ResNode {
 
     private readonly IconExampleKind _kind;
     private readonly ReadOnlySeString _description;
-    private readonly float _textBoxHeight;
     private readonly TextNode _text;
     private readonly List<NodeBase> _sampleNodes = [];
     private float _lastLayoutWidth = -1f;
 
-    public IconSampleRowNode(float width, IconExampleKind kind, ReadOnlySeString description, float? textBoxHeight = null) {
+    public IconSampleRowNode(float width, IconExampleKind kind, ReadOnlySeString description) {
         _kind = kind;
         _description = description;
-        _textBoxHeight = textBoxHeight ?? Constants.DefaultGuideIconExampleTextBoxHeight;
 
         _text = new TextNode {
             FontType = FontType.Axis,
@@ -92,12 +90,11 @@ internal sealed class IconSampleRowNode : ResNode {
         _lastLayoutWidth = width;
         var textX = Constants.IconTextLeft;
         var textW = Math.Max(40f, width - textX);
-        var textH = _textBoxHeight;
+        var textH = GuideTextLayout.MeasureWrappedHeight(_text, _description, textW);
         var iconH = SampleIconHeight();
         var contentH = Math.Max(textH, iconH);
         var rowH = Constants.RowPadTop + contentH + Constants.RowPadBottom;
 
-        _text.String = _description;
         _text.Position = new Vector2(textX, Constants.RowPadTop + Constants.TextTopInset);
         _text.Size = new Vector2(textW, textH);
         Size = new Vector2(width, rowH);

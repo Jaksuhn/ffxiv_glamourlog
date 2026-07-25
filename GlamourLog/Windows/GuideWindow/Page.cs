@@ -8,8 +8,7 @@ internal sealed class Page {
     public required string SubCategoryTitle { get; init; }
     public ReadOnlySeString Body { get; init; } = string.Empty;
     public IReadOnlyList<ContentBlock> Blocks { get; init; } = []; // when empty, body will be a single text block
-    public float? BodyTextBoxHeight { get; init; } // fixed height for the implicit TextBlock when Blocks is empty
 
     internal IEnumerable<ContentBlock> EnumerateBlocks()
-        => Blocks.Count > 0 ? Blocks : [new GuideTextBlock(Body, TextLeftInset: 0f, TextBoxHeight: BodyTextBoxHeight)];
+        => Blocks.Count > 0 ? Blocks : [new GuideTextBlock(Body)];
 }

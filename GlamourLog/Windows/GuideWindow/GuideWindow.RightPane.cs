@@ -33,9 +33,9 @@ public partial class GuideWindow {
     }
 
     private NodeBase CreateRightPaneBlock(ContentBlock block) => block switch {
-        GuideTextBlock text => new ParagraphNode(_rightTextWidth, text.Text, text.TextLeftInset, text.TextBoxHeight),
+        GuideTextBlock text => new ParagraphNode(_rightTextWidth, text.Text, text.TextLeftInset),
         GuideHeadingBlock heading => new SectionTitleNode(_rightTextWidth, heading.Title),
-        IconExampleBlock icon => new IconSampleRowNode(_rightTextWidth, icon.Kind, icon.Description, icon.TextBoxHeight),
+        IconExampleBlock icon => new IconSampleRowNode(_rightTextWidth, icon.Kind, icon.Description),
         CheckboxSettingBlock setting => new ConfigCheckboxRowNode(_rightTextWidth, setting),
         _ => throw new ArgumentOutOfRangeException(nameof(block)),
     };
