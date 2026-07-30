@@ -1,5 +1,6 @@
 using clib.TaskSystem;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using GlamourLog.Services;
 using KamiToolKit.BaseTypes;
 using System.Threading.Tasks;
 using ContextMenu = KamiToolKit.ContextMenu.ContextMenu;
@@ -31,9 +32,7 @@ internal static class SourceContextMenu {
                     cfc.QueueDuty(levelSync: false);
             });
             if (Svc.Interface.IsPluginLoaded("AutoDuty")) {
-                menu.AddItem("AutoDuty", () => {
-                    // TODO
-                });
+                menu.AddItem("AutoDuty", () => Svc.Get<AutoDutyIpc>().FarmOutfit(cfcId));
             }
         }
 

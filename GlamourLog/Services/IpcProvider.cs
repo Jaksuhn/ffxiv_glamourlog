@@ -17,10 +17,10 @@ internal sealed class IpcProvider : IDisposable {
         RegisterFunc("IsItemInDresser", (uint itemId) => IsItemInDresser(itemId));
         RegisterFunc("IsSetComplete", (uint setItemId) => IsSetComplete(setItemId));
         RegisterFunc("GetItemsFromContent", (uint cfcId) => GetItemsFromContent(cfcId));
-        RegisterFunc("IsContentComplete", (uint cfcId) => IsContentComplete(cfcId));
+        RegisterFunc("IsContentComplete", (uint cfcId) => Svc.Get<OwnershipService>().IsContentComplete(cfcId));
         RegisterFunc("EntrustAll", () => Svc.Commands.ProcessCommand("/glamourlog store"));
         RegisterFunc("IsBusy", () => Svc.Automation.CurrentTask is not null);
-        RegisterFunc("ReadyToStore", () => IsReadyToStore());
+        RegisterFunc("ReadyToStore", IsReadyToStore);
     }
 
     public void Dispose() {
@@ -72,33 +72,6 @@ internal sealed class IpcProvider : IDisposable {
     private static bool IsSourceFromDuty(uint cfcId, ItemSource src)
         => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId
             || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId;
-
-    private static bool IsContentComplete(uint cfcId) {
-        if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })
-            return false;
-        var catalog = Svc.Get<CatalogService>();
-        if (!catalog.CatalogReady)
-            return false;
-
-        var q = Svc.Get<OwnershipService>().Query();
-        var cache = Svc.SheetManager.ItemInfoCache;
-        var any = false;
-        foreach (var set in catalog.GlamourSets) {
-            var status = q.For(set);
-            foreach (var pieceId in set.Items) {
-                if (pieceId == 0)
-                    continue;
-                if (cache.GetItemSources(pieceId) is not { Count: > 0 } list)
-                    continue;
-                if (!list.Any(src => IsSourceFromDuty(cfcId, src)))
-                    continue;
-                any = true;
-                if (status.Piece(pieceId) is not { IsOwned: true })
-                    return false;
-            }
-        }
-        return any;
-    }
 
     private static List<uint> GetItemsFromContent(uint cfcId) {
         if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })

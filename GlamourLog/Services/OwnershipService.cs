@@ -1,3 +1,4 @@
+using AllaganLib.GameSheets.ItemSources;
 using Dalamud.Game.Inventory.InventoryEventArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using System.Globalization;
@@ -233,6 +234,37 @@ internal sealed unsafe class OwnershipService : IDisposable {
         var set = Svc.Get<CatalogService>().GlamourSets.FirstOrDefault(s => s.ItemId == setItemId);
         return set is not null && Query().For(set).IsComplete;
     }
+
+    internal bool IsContentComplete(uint cfcId) {
+        if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })
+            return false;
+        var catalog = Svc.Get<CatalogService>();
+        if (!catalog.CatalogReady)
+            return false;
+
+        var q = Query();
+        var cache = Svc.SheetManager.ItemInfoCache;
+        var any = false;
+        foreach (var set in catalog.GlamourSets) {
+            var status = q.For(set);
+            foreach (var pieceId in set.Items) {
+                if (pieceId == 0)
+                    continue;
+                if (cache.GetItemSources(pieceId) is not { Count: > 0 } list)
+                    continue;
+                if (!list.Any(src => IsSourceFromDuty(cfcId, src)))
+                    continue;
+                any = true;
+                if (status.Piece(pieceId) is not { IsOwned: true })
+                    return false;
+            }
+        }
+        return any;
+    }
+
+    private static bool IsSourceFromDuty(uint cfcId, ItemSource src)
+        => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId
+            || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId;
 
     internal bool IsItemInDresser(uint itemId) {
         var q = Query();
