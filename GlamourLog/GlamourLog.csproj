@@ -31,6 +31,6 @@
 
 	<ItemGroup>
 		<PackageReference Include="croizat.clib" Version="1.0.69" />
-		<PackageReference Include="KamiToolKit" Version="2.1.9" />
+		<PackageReference Include="KamiToolKit" Version="2.2.1" />
 	</ItemGroup>
 </Project>

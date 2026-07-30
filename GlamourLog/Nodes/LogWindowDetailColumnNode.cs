@@ -9,7 +9,7 @@ internal sealed class LogWindowDetailColumnNode : ResNode {
         Size = size;
         List = new DetailRowsListNode {
             Position = Vector2.Zero,
-            OptionsList = [],
+            Sections = [],
         };
         List.AttachNode(this);
         List.Size = size;

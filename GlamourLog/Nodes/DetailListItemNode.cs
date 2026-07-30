@@ -14,7 +14,6 @@ internal enum SourceIconPresentation {
 }
 
 internal enum DetailRowKind {
-    SectionHeader,
     JournalHeader,
     EmptyHint,
     Piece,
@@ -44,14 +43,13 @@ internal sealed class DetailListRowData {
     public bool SourceIconsOnly { get; init; }
     public int SourceIconOverflow { get; init; } // # icons not shown when SourceItemIds exceeds space
     public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; } // left strip ids for SourceArrowFlow, right is SourceItemIds
-    public bool IsTopLevelSection { get; init; } // collapsed sections only hide nested content under these
     public SetListRowData? SharedModelRow { get; init; }
     public uint SharedModelItemId { get; init; } // shared model row represents this id for piece filter scope
     public float SourceChestLabelColumnWidth { get; init; } // duty-wide label column for aligned icon strips; 0 = per-row
     public uint DungeonChestRowId { get; init; } // duty chest row; left-click opens map marker
 }
 
-internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData>, IListItemNode {
+internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRowData>, ITreeListItemNode {
     public static float ItemHeight => 30f;
     private const float PieceIconSize = 22f;
     private const float PieceTextBoxHeight = 19f; // ellipsis needs extra height vs line size
@@ -72,8 +70,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     public Action<SourceNavigateTarget, string>? OnSourceMapFlagLeftClick { get; set; }
     public Action<uint, string>? OnSourceChestMapLeftClick { get; set; }
     public Action<uint>? OnCraftRecipeJournalLeftClick { get; set; }
-    public Action<string, bool>? OnDetailSectionToggle { get; set; } // fired when SectionHeader is toggled
-    public Func<string, bool>? IsDetailSectionCollapsed { get; set; } // restore collapsed state for headers are rebuild if true
     public Action<GlamourSet>? OnSharedModelSetLeftClick { get; set; }
     public Action<uint, GlamourSet>? OnSharedModelItemLeftClick { get; set; }
 
@@ -81,7 +77,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
     private readonly CollisionNode _inputCollision;
     private readonly TextNode _primary;
     private readonly TextNode _secondary;
-    private readonly TreeComboSectionNode _sectionChrome;
     private readonly TreeListSectionHeader _journalChrome;
     private readonly GlamourIconNode _storageBadge;
     private readonly InventoryBadgeNode _inventoryBadge;
@@ -99,14 +94,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
         _pieceIcon = new FramedItemIconNode(PieceIconSize) { IsVisible = false };
         _pieceIcon.AttachNode(this);
-
-        _sectionChrome = new TreeComboSectionNode(string.Empty, 200f) {
-            IsVisible = false,
-            Height = 24f,
-        };
-        // tree combo collision doesn't register on this row as a sibling; clicks go through _inputCollision + HandleClick
-        _sectionChrome.CollisionNode.NodeFlags = 0;
-        _sectionChrome.AttachNode(this);
 
         _journalChrome = new TreeListSectionHeader {
             Width = 200f,
@@ -199,9 +186,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
         _primary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
         _secondary.Size = new Vector2(Math.Max(20f, Width - DetailIconTextX - DetailTextRightReserve), 14f);
-        _sectionChrome.Width = Width;
-        _sectionChrome.Size = new Vector2(Width, _sectionChrome.Height);
-        _sectionChrome.Position = new Vector2(0f, 3f);
         _journalChrome.Width = Width;
         _journalChrome.Position = new Vector2(0f, 3f);
         var badgeY = ItemData?.Kind == DetailRowKind.Piece ? (ItemHeight - _storageBadge.Size.Y) * 0.5f : 3f;
@@ -331,7 +315,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
 
     protected override void SetNodeData(DetailListRowData itemData) {
         _pieceIcon.IsVisible = false;
-        _sectionChrome.IsVisible = false;
         _journalChrome.IsVisible = false;
         _secondary.IsVisible = false;
         _storageBadge.IsVisible = false;
@@ -368,18 +351,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
         _primary.AddTextFlags(TextFlags.Ellipsis);
 
         switch (itemData.Kind) {
-            case DetailRowKind.SectionHeader:
-                _primary.String = string.Empty;
-                _sectionChrome.IsVisible = true;
-                _sectionChrome.String = itemData.PrimaryText;
-                if (IsDetailSectionCollapsed is { } collapsedFn) {
-                    var wantCollapsed = collapsedFn(itemData.PrimaryText);
-                    if (_sectionChrome.IsCollapsed != wantCollapsed)
-                        _sectionChrome.IsCollapsed = wantCollapsed;
-                }
-                _inputCollision.IsVisible = true;
-                _inputCollision.ShowClickableCursor = true;
-                break;
             case DetailRowKind.JournalHeader:
                 _primary.String = string.Empty;
                 _journalChrome.IsVisible = true;
@@ -573,15 +544,6 @@ internal sealed unsafe class DetailListItemNode : ListItemNode<DetailListRowData
             return;
 
         if (eventData->IsLeftClick) {
-            if (ItemData.Kind is DetailRowKind.SectionHeader && ItemData.PrimaryText.Length > 0 && OnDetailSectionToggle is not null && IsDetailSectionCollapsed is not null) {
-                var title = ItemData.PrimaryText;
-                // Second argument: true = expand (remove from collapsed set); matches IsDetailSectionCollapsed true when currently collapsed.
-                var collapsedBefore = IsDetailSectionCollapsed(title);
-                OnDetailSectionToggle(title, collapsedBefore);
-                _sectionChrome.IsCollapsed = IsDetailSectionCollapsed(title);
-                return;
-            }
-
             if (ItemData.Kind is DetailRowKind.Piece && ItemData.ItemId != 0) {
                 OnPieceLeftClick?.Invoke(ItemData.ItemId);
                 return;

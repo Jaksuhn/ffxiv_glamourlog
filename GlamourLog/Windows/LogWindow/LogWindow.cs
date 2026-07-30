@@ -41,8 +41,6 @@ internal unsafe partial class LogWindow : NativeAddon {
     private GlamourSet? _pendingSelectSet;
     private bool _pendingCategoryPaneRebuild;
     private int _lastDataVersion = -1;
-    private readonly List<DetailListRowData> _detailRowOptions = [];
-    private readonly HashSet<string> _collapsedDetailSections = []; // remembered by title for this window only
     private readonly ContextMenu _contextMenu = new();
 
     private GlamourSetListNode? SetList => _setListColumn?.List;
@@ -161,8 +159,6 @@ internal unsafe partial class LogWindow : NativeAddon {
                 chest.OpenMap(label);
         };
         DetailList.OnCraftRecipeJournalLeftClick = (recipeId) => { if (recipeId is not 0) AgentRecipeNote.Instance()->OpenRecipeByRecipeId(recipeId); };
-        DetailList.OnDetailSectionToggle = OnDetailSectionToggle;
-        DetailList.IsDetailSectionCollapsed = title => _collapsedDetailSections.Contains(title);
         DetailList.OnSharedModelSetLeftClick = OnSharedModelSetLeftClick;
         DetailList.OnSharedModelItemLeftClick = OnSharedModelItemLeftClick;
         DetailList.AttachInteractivity();
@@ -349,8 +345,6 @@ internal unsafe partial class LogWindow : NativeAddon {
         _setListColumn = null;
         _detailColumn = null;
         _setListOptions.Clear();
-        _detailRowOptions.Clear();
-        _collapsedDetailSections.Clear();
         _categoryPaneOrder.Clear();
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;
