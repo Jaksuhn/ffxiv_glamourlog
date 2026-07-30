@@ -6,7 +6,7 @@ using System.Globalization;
 
 namespace GlamourLog.Services;
 
-// frozen ownership snapshot for one ui paint - this gets reused instead of calling services repeatedly mid-frame
+// snapshot used in one ui paint - this gets reused instead of calling services repeatedly mid-frame
 internal sealed class OwnershipQuery {
     private readonly Snapshot _snap;
     private readonly Dictionary<GlamourSet, SetStatus> _cache = [];
@@ -18,7 +18,7 @@ internal sealed class OwnershipQuery {
         var dresser = ownership.GetDresserItemIds();
         var armoire = ownership.GetArmoireItemIds();
         var setTokens = catalog.GlamourSets.Where(s => !s.NonSetCabinetPiece).Select(s => s.ItemId).ToHashSet();
-        HashSet<uint> storage = [.. dresser.Where(id => !setTokens.Contains(id))]; // set tokens aren't "owned pieces" — only loose dresser + armoire items belong here
+        HashSet<uint> storage = [.. dresser.Where(id => !setTokens.Contains(id))]; // set tokens aren't "owned pieces", only loose dresser + armoire items belong here
         storage.UnionWith(armoire);
         var inventory = Svc.Items.GetInventoryItemIds();
         return new OwnershipQuery(new Snapshot {
