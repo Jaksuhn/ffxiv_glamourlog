@@ -129,8 +129,8 @@ internal sealed class StoreAllDresserTask : TaskBase {
             if (!MirageStoreSetItem.TryGetRow(set.ItemId, out var setRow))
                 continue;
 
-            looseDresser ??= BuildLooseDresserIdSet();
-            var setScan = new OutfitStorageCtx(setRow, CollectOutfitIndices(setRow.RowId), looseDresser);
+            looseDresser ??= OwnershipService.BuildLooseDresserIdSet();
+            var setScan = new OutfitStorageCtx(setRow, OwnershipService.CollectOutfitIndices(setRow.RowId), looseDresser);
             foreach (var pieceId in set.Items) {
                 if (pieceId == 0)
                     continue;
@@ -175,15 +175,11 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
     private static bool TryCreateStorableRow(uint itemId, OutfitStorageCtx scan, out PrismBoxCrystallizeItem row) {
         row = default;
-        var baseId = ItemUtil.GetBaseId(itemId).ItemId;
-        if (baseId == 0 || Svc.Get<OwnershipService>().IsCabinetItem(baseId) || scan.LooseDresser.Contains(baseId) || !HasUnsetSlotForPiece(scan.Row, baseId, scan.Outfits))
+        if (!Svc.Get<OwnershipService>().IsDresserPieceStorable(itemId, scan.Row, scan.Outfits, scan.LooseDresser))
             return false;
 
         var handle = (ItemHandle)itemId;
         if (!handle.TrySetItemLocation())
-            return false;
-
-        if (handle.InGearset || handle.IsRepairable)
             return false;
 
         row = new PrismBoxCrystallizeItem {
@@ -209,62 +205,6 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
     private static unsafe bool IsPrismBoxReady()
         => AtkUnitBase.IsAddonReady(Crystallize) && AtkUnitBase.IsAddonReady(PrismBox) && MirageManager.Instance()->PrismBoxLoaded;
-
-    private static unsafe HashSet<uint> BuildLooseDresserIdSet() {
-        var finder = ItemFinderModule.Instance();
-        if (finder is null)
-            return [];
-
-        var ids = new HashSet<uint>();
-        foreach (var id in finder->GlamourDresserBaseItemIds) {
-            if (id != 0)
-                ids.Add(id);
-        }
-
-        return ids;
-    }
-
-    private static unsafe List<uint> CollectOutfitIndices(uint setItemId) {
-        var mirage = MirageManager.Instance();
-        if (mirage is null)
-            return [];
-
-        var ids = mirage->PrismBoxItemIds;
-        var result = new List<uint>(1);
-        for (var i = 0; i < ids.Length; i++) {
-            if (ids[i] == setItemId)
-                result.Add((uint)i);
-        }
-
-        return result;
-    }
-
-    // only store a piece when at least one matching outfit slot still needs it
-    private static unsafe bool HasUnsetSlotForPiece(MirageStoreSetItem setRow, uint pieceBaseId, IReadOnlyList<uint> outfitIndices) {
-        var mirage = MirageManager.Instance();
-        if (mirage is null)
-            return true;
-
-        int? pieceSheetSlot = null;
-        foreach (var (slotIndex, itemRef) in setRow.Items.Index()) {
-            if (itemRef.RowId != 0 && ItemUtil.GetBaseId(itemRef.RowId).ItemId == pieceBaseId) {
-                pieceSheetSlot = slotIndex;
-                break;
-            }
-        }
-
-        if (pieceSheetSlot is null)
-            return false;
-        if (outfitIndices.Count == 0)
-            return true;
-
-        foreach (var outfitIndex in outfitIndices) {
-            if (!mirage->IsSetSlotUnlocked(outfitIndex, pieceSheetSlot.Value))
-                return true;
-        }
-
-        return false;
-    }
 
     private static unsafe bool IsSentSlotConsumed(PrismBoxCrystallizeItem row) {
         if (row.Inventory == InventoryType.Invalid)

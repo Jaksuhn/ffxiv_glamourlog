@@ -1,6 +1,7 @@
 using AllaganLib.GameSheets.ItemSources;
 using Dalamud.Game.Inventory.InventoryEventArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using System.Globalization;
 
 namespace GlamourLog.Services;
@@ -323,4 +324,101 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     internal bool IsItemInArmoire(uint itemId)
         => Svc.Items.IsInArmoire(itemId);
+
+    // true if store-all armoire or dresser would store this item
+    internal bool IsItemStorable(uint itemId)
+        => IsArmoireStorable(itemId) || IsDresserStorable(itemId);
+
+    private static bool IsArmoireStorable(uint itemId) {
+        var baseId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (baseId == 0 || !Svc.Items.IsCabinetItem(baseId) || Svc.Items.IsInCabinet(baseId))
+            return false;
+
+        var handle = (ItemHandle)baseId;
+        return handle.TrySetItemLocation() && !handle.InGearset && !handle.IsRepairable;
+    }
+
+    private bool IsDresserStorable(uint itemId) {
+        var baseId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (baseId == 0 || IsCabinetItem(baseId))
+            return false;
+
+        HashSet<uint>? looseDresser = null;
+        foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
+            if (set.NonSetCabinetPiece || !set.Items.Any(id => ItemUtil.GetBaseId(id).ItemId == baseId))
+                continue;
+            if (!MirageStoreSetItem.TryGetRow(set.ItemId, out var setRow))
+                continue;
+
+            looseDresser ??= BuildLooseDresserIdSet();
+            if (IsDresserPieceStorable(itemId, setRow, CollectOutfitIndices(setRow.RowId), looseDresser))
+                return true;
+        }
+
+        return false;
+    }
+
+    internal bool IsDresserPieceStorable(uint itemId, MirageStoreSetItem setRow, IReadOnlyList<uint> outfitIndices, HashSet<uint> looseDresser) {
+        var baseId = ItemUtil.GetBaseId(itemId).ItemId;
+        if (baseId == 0 || IsCabinetItem(baseId) || looseDresser.Contains(baseId) || !HasUnsetSlotForPiece(setRow, baseId, outfitIndices))
+            return false;
+
+        var handle = (ItemHandle)itemId;
+        return handle.TrySetItemLocation() && !handle.InGearset && !handle.IsRepairable;
+    }
+
+    internal static unsafe HashSet<uint> BuildLooseDresserIdSet() {
+        var finder = ItemFinderModule.Instance();
+        if (finder is null)
+            return [];
+
+        var ids = new HashSet<uint>();
+        foreach (var id in finder->GlamourDresserBaseItemIds) {
+            if (id != 0)
+                ids.Add(id);
+        }
+
+        return ids;
+    }
+
+    internal static unsafe List<uint> CollectOutfitIndices(uint setItemId) {
+        var mirage = MirageManager.Instance();
+        if (mirage is null)
+            return [];
+
+        var ids = mirage->PrismBoxItemIds;
+        var result = new List<uint>(1);
+        for (var i = 0; i < ids.Length; i++) {
+            if (ids[i] == setItemId)
+                result.Add((uint)i);
+        }
+
+        return result;
+    }
+
+    private static unsafe bool HasUnsetSlotForPiece(MirageStoreSetItem setRow, uint pieceBaseId, IReadOnlyList<uint> outfitIndices) {
+        var mirage = MirageManager.Instance();
+        if (mirage is null)
+            return true;
+
+        int? pieceSheetSlot = null;
+        foreach (var (slotIndex, itemRef) in setRow.Items.Index()) {
+            if (itemRef.RowId != 0 && ItemUtil.GetBaseId(itemRef.RowId).ItemId == pieceBaseId) {
+                pieceSheetSlot = slotIndex;
+                break;
+            }
+        }
+
+        if (pieceSheetSlot is null)
+            return false;
+        if (outfitIndices.Count == 0)
+            return true;
+
+        foreach (var outfitIndex in outfitIndices) {
+            if (!mirage->IsSetSlotUnlocked(outfitIndex, pieceSheetSlot.Value))
+                return true;
+        }
+
+        return false;
+    }
 }

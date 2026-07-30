@@ -21,6 +21,7 @@ internal sealed class IpcProvider : IDisposable {
         RegisterFunc("EntrustAll", () => Svc.Commands.ProcessCommand("/glamourlog store"));
         RegisterFunc("IsBusy", () => Svc.Automation.CurrentTask is not null);
         RegisterFunc("ReadyToStore", IsReadyToStore);
+        RegisterFunc("IsItemStorable", (uint itemId) => Svc.Get<OwnershipService>().IsItemStorable(itemId));
     }
 
     public void Dispose() {
