@@ -2,7 +2,6 @@ using clib.TaskSystem;
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Services;
 using System.Threading.Tasks;
@@ -17,6 +16,13 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
     private readonly HashSet<uint> _pendingStoredBaseIds = []; // don't re-select while the game is still moving it
     private readonly HashSet<uint> _visitedInventoryBaseIds = [];
+
+    private unsafe uint GlamourPrismCount {
+        get {
+            if (AgentMiragePrismPrismSetConvert.Instance() is null) return 0;
+            return AgentMiragePrismPrismSetConvert.Instance()->Data->GlamourPrismCount;
+        }
+    }
 
     // outfit slots + loose dresser ids for one candidate set
     private readonly struct OutfitStorageCtx(MirageStoreSetItem row, IReadOnlyList<uint> outfits, HashSet<uint> looseDresser) {
@@ -70,6 +76,11 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
         if (rows.All(IsSentSlotConsumed))
             return;
+
+        if (rows.Count > GlamourPrismCount) {
+            Svc.Chat.EchoError($"Unable to store items. Insufficient glamour prisms");
+            throw new InvalidOperationException($"Insufficent glamour prisms");
+        }
 
         var result = TrySendDirect(scan, rows);
         ErrorIf(result.FilledCount == 0, "No store slots populated");
