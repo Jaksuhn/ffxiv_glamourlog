@@ -17,12 +17,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
     private readonly HashSet<uint> _pendingStoredBaseIds = []; // don't re-select while the game is still moving it
     private readonly HashSet<uint> _visitedInventoryBaseIds = [];
 
-    private unsafe uint GlamourPrismCount {
-        get {
-            if (AgentMiragePrismPrismSetConvert.Instance() is null) return 0;
-            return AgentMiragePrismPrismSetConvert.Instance()->Data->GlamourPrismCount;
-        }
-    }
+    private unsafe int GlamourPrismCount => InventoryManager.Instance()->GetInventoryItemCount(21800); // exactly what GlamourPrismCount calls
 
     // outfit slots + loose dresser ids for one candidate set
     private readonly struct OutfitStorageCtx(MirageStoreSetItem row, IReadOnlyList<uint> outfits, HashSet<uint> looseDresser) {
