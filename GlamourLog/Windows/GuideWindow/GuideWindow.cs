@@ -27,7 +27,7 @@ public unsafe partial class GuideWindow : NativeAddon {
     private Vector2 _pendingScreenOrigin;
 
     private TextNode? _categoryHeading;
-    private VerticalListNode? _leftNavList;
+    private SidebarNavList? _leftNavList;
     private ResNode? _rightHeaderRow;
     private ScrollingNode<VerticalListNode>? _rightScroll;
     private VerticalLineNode? _splitter;
@@ -81,19 +81,11 @@ public unsafe partial class GuideWindow : NativeAddon {
         }
 
         _pageBlocks.Clear();
-        foreach (var section in _categorySections) {
-            section.CategoryRow.ClearClickHandlers();
-            foreach (var (pageRow, _) in section.Pages)
-                pageRow.ClearClickHandlers();
-        }
-        _categorySections.Clear();
-
-        _leftNavList?.Dispose();
+        DisposeLeftNav();
         _rightScroll?.Dispose();
         _rightHeaderRow?.Dispose();
         _splitter?.Dispose();
         _categoryHeading?.Dispose();
-        _leftNavList = null;
         _rightScroll = null;
         _rightHeaderRow = null;
         _splitter = null;
@@ -143,7 +135,7 @@ public unsafe partial class GuideWindow : NativeAddon {
         _categoryHeading.AttachNode(this);
 
         // not ScrollingListNode: its scroll collision layer misaligns list button hits
-        _leftNavList = new VerticalListNode {
+        _leftNavList = new SidebarNavList {
             Position = new Vector2(innerLeft, leftListTop),
             Size = new Vector2(LeftColumnWidth, leftListH),
             ItemSpacing = 0f,
@@ -189,14 +181,10 @@ public unsafe partial class GuideWindow : NativeAddon {
             var category = NavCategories[c];
 
             var categoryRow = new SidebarCategoryRowNode(category.Title, () => OnParentCategoryClicked(catIndex));
-            _leftNavList.AddNode(categoryRow);
-
             var pages = new List<(SidebarPageRowNode Btn, Page Page)>();
             foreach (var page in category.Pages) {
                 var captured = page;
-                var pageRow = new SidebarPageRowNode(page.SubCategoryTitle, () => OnSubClicked(captured));
-                _leftNavList.AddNode(pageRow);
-                pages.Add((pageRow, page));
+                pages.Add((new SidebarPageRowNode(page.SubCategoryTitle, () => OnSubClicked(captured)), page));
             }
 
             _categorySections.Add(new SidebarSection {
@@ -209,17 +197,43 @@ public unsafe partial class GuideWindow : NativeAddon {
         _rightScroll.RecalculateSizes();
     }
 
+    // hiding in-place leaves collisions and results in overlaps which makes clicking on some rows impossible in certain collapse orders
     private void SyncLeftNav() {
+        if (_leftNavList is null)
+            return;
+
+        var visible = new List<NodeBase>(_categorySections.Count * 2);
         for (var i = 0; i < _categorySections.Count; i++) {
-            var expanded = i == _expandedCategoryIndex;
             var section = _categorySections[i];
+            visible.Add(section.CategoryRow);
+
+            var expanded = i == _expandedCategoryIndex;
             foreach (var (btn, page) in section.Pages) {
-                btn.IsVisible = expanded;
                 btn.SetPageSelected(expanded && ReferenceEquals(page, _selectedPage));
+                if (expanded)
+                    visible.Add(btn);
             }
         }
 
-        _leftNavList?.RecalculateLayout();
+        _leftNavList.SetManagedNodes(visible);
+    }
+
+    // page rows may be detached from the list; dispose them explicitly or they leak
+    private void DisposeLeftNav() {
+        _leftNavList?.ReleaseManagedNodes();
+
+        foreach (var section in _categorySections) {
+            section.CategoryRow.ClearClickHandlers();
+            section.CategoryRow.Dispose();
+            foreach (var (pageRow, _) in section.Pages) {
+                pageRow.ClearClickHandlers();
+                pageRow.Dispose();
+            }
+        }
+
+        _categorySections.Clear();
+        _leftNavList?.Dispose();
+        _leftNavList = null;
     }
 
     private void OnParentCategoryClicked(int catIndex) {
@@ -250,16 +264,9 @@ public unsafe partial class GuideWindow : NativeAddon {
     protected override void OnFinalize(AtkUnitBase* addon) {
         base.OnFinalize(addon);
 
-        foreach (var section in _categorySections) {
-            section.CategoryRow.ClearClickHandlers();
-            foreach (var (pageRow, _) in section.Pages)
-                pageRow.ClearClickHandlers();
-        }
-
-        _categorySections.Clear();
+        DisposeLeftNav();
         _pageBlocks.Clear();
         _categoryHeading = null;
-        _leftNavList = null;
         _rightHeaderRow = null;
         _rightScroll = null;
         _splitter = null;
