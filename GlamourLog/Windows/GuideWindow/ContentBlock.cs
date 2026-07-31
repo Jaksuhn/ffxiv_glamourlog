@@ -7,6 +7,7 @@ internal abstract record ContentBlock;
 internal sealed record GuideTextBlock(ReadOnlySeString Text, float TextLeftInset = 0f) : ContentBlock;
 internal sealed record GuideHeadingBlock(string Title) : ContentBlock;
 internal sealed record IconExampleBlock(IconExampleKind Kind, ReadOnlySeString Description) : ContentBlock;
+internal sealed record CircleButtonGalleryBlock : ContentBlock;
 
 internal sealed record CheckboxSettingBlock : ContentBlock {
     public string Label { get; }

@@ -6,6 +6,9 @@ public partial class GuideWindow {
             new("Guide", [Icons, GuideCounters, Integrations]),
             new("Tweaks", [TweaksArmoire, TweaksDresser]),
             new("Settings", [SettingsLogWindow]),
+            #if DEBUG
+            new("Debug", [DebugCircleButtons]),
+            #endif
     ];
 }
 

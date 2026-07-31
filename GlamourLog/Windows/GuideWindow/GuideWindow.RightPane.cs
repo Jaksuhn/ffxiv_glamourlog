@@ -37,6 +37,7 @@ public partial class GuideWindow {
         GuideHeadingBlock heading => new SectionTitleNode(_rightTextWidth, heading.Title),
         IconExampleBlock icon => new IconSampleRowNode(_rightTextWidth, icon.Kind, icon.Description),
         CheckboxSettingBlock setting => new ConfigCheckboxRowNode(_rightTextWidth, setting),
+        CircleButtonGalleryBlock => new CircleButtonGalleryNode(_rightTextWidth),
         _ => throw new ArgumentOutOfRangeException(nameof(block)),
     };
 
@@ -66,6 +67,9 @@ public partial class GuideWindow {
                     break;
                 case ConfigCheckboxRowNode setting:
                     setting.Relayout(layoutWidth);
+                    break;
+                case CircleButtonGalleryNode gallery:
+                    gallery.Relayout(layoutWidth);
                     break;
             }
         }
