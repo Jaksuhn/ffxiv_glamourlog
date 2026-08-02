@@ -25,7 +25,7 @@ internal sealed class ExtraAddonButtons : IAsyncDisposable {
 
     private bool _disposed;
 
-    public ExtraAddonButtons() {
+    public unsafe ExtraAddonButtons() {
         _cabinetController = new AddonController {
             AddonName = "Cabinet",
             OnSetup = OnCabinetSetup,
