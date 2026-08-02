@@ -1,7 +1,7 @@
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using GlamourLog.Features.Cabinet;
-using GlamourLog.Features.PrismBox;
+using GlamourLog.Tweaks.Cabinet;
+using GlamourLog.Tweaks.PrismBox;
 using GlamourLog.Services;
 using KamiToolKit.Controllers;
 using KamiToolKit.Enums;

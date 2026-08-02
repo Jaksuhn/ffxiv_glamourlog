@@ -1,6 +1,6 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 
-namespace GlamourLog.Features.Cabinet;
+namespace GlamourLog.Tweaks.Cabinet;
 
 // items currently equipped on any gearset (so cabinet filters can hide them)
 // TODO: move to base class

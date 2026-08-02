@@ -1,6 +1,6 @@
 using GlamourLog.Services;
 
-namespace GlamourLog.Features.PrismBox;
+namespace GlamourLog.Tweaks.PrismBox;
 
 internal sealed class HideDresserDepositedFilter : IRowFilter {
     public bool IsEnabled => C.HideCrystallizeOwnedItems;

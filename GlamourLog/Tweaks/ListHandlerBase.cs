@@ -1,6 +1,6 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
-namespace GlamourLog.Features;
+namespace GlamourLog.Tweaks;
 
 internal abstract partial class ListHandlerBase(uint emptyListTextNodeId, IRowFilter[] filters) {
     protected readonly uint EmptyListTextNodeId = emptyListTextNodeId;

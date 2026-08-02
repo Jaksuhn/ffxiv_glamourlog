@@ -1,4 +1,4 @@
-namespace GlamourLog.Features.Cabinet;
+namespace GlamourLog.Tweaks.Cabinet;
 
 internal sealed partial class CabinetListHandler {
     private const int MaxHiddenItemLogLines = 48;

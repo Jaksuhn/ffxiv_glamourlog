@@ -6,7 +6,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Services;
 using System.Threading.Tasks;
 
-namespace GlamourLog.Features.PrismBox;
+namespace GlamourLog.Tweaks.PrismBox;
 
 internal sealed class StoreAllDresserTask : TaskBase {
     private const string Crystallize = "MiragePrismPrismBoxCrystallize";

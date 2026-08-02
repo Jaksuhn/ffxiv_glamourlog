@@ -1,7 +1,7 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
-namespace GlamourLog.Features.PrismBox;
+namespace GlamourLog.Tweaks.PrismBox;
 
 internal sealed partial class CrystallizeListHandler {
     private unsafe void LogFilterApplied(MiragePrismPrismBoxData* data, AtkUnitBase* addon, int sourceCount, int visibleCount) {

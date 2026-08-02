@@ -1,7 +1,7 @@
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
-namespace GlamourLog.Features.PrismBox;
+namespace GlamourLog.Tweaks.PrismBox;
 
 // hook LoadAtkValues for buffer layout, repopulate from filtered snapshot
 internal sealed unsafe class CrystallizeNativeTree : IDisposable {

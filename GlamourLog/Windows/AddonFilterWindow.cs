@@ -1,6 +1,6 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using GlamourLog.Features.Cabinet;
-using GlamourLog.Features.PrismBox;
+using GlamourLog.Tweaks.Cabinet;
+using GlamourLog.Tweaks.PrismBox;
 using GlamourLog.Nodes;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Nodes;

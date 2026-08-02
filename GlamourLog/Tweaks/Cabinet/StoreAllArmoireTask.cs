@@ -5,7 +5,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using System.Threading.Tasks;
 using CabinetSheet = Lumina.Excel.Sheets.Cabinet;
 
-namespace GlamourLog.Features.Cabinet;
+namespace GlamourLog.Tweaks.Cabinet;
 
 internal sealed class StoreAllArmoireTask : AutoTask {
     private const string AddonName = "Cabinet";

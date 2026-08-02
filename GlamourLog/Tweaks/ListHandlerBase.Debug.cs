@@ -1,4 +1,4 @@
-namespace GlamourLog.Features;
+namespace GlamourLog.Tweaks;
 
 internal abstract partial class ListHandlerBase {
     protected void LogFilterDebug(string phase, string message)

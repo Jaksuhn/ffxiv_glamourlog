@@ -1,6 +1,6 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
-namespace GlamourLog.Features.PrismBox;
+namespace GlamourLog.Tweaks.PrismBox;
 
 // atk buffer read/write for crystallize tree node 11; layout captured from LoadAtkValues
 internal readonly struct CrystallizeAtkSlot {

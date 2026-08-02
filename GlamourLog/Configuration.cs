@@ -1,10 +1,14 @@
 using System.ComponentModel;
 using Dalamud.Configuration;
+using Newtonsoft.Json;
 
 namespace GlamourLog;
 
 [Serializable]
-public class Configuration : IPluginConfiguration {
+public class Configuration : IPluginConfiguration, IPluginService {
+    [JsonIgnore] public int InitOrder => -100;
+    [JsonIgnore] public static Configuration C => Configuration.Get();
+
     public int Version { get; set; } = 0;
 
     public bool HideCompleted { get; set; }

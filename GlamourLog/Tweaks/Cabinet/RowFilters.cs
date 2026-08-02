@@ -1,6 +1,6 @@
 using GlamourLog.Services;
 
-namespace GlamourLog.Features.Cabinet;
+namespace GlamourLog.Tweaks.Cabinet;
 
 internal sealed class HideDepositedItemsFilter : IRowFilter {
     public bool IsEnabled => C.HideCabinetOwnedItems;

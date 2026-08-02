@@ -13,6 +13,11 @@ internal sealed class WindowsService : IPluginService, IAsyncDisposable {
     private GuideWindow? _mainMenuWindow;
     private LogWindow? _logWindow;
 
+    public WindowsService() {
+        Svc.Interface.UiBuilder.OpenMainUi += ToggleMainWindow;
+        Svc.Interface.UiBuilder.OpenConfigUi += ToggleMainMenu;
+    }
+
     internal FilterWindow FilterWindow => _filterWindow ??= new FilterWindow {
         InternalName = "GlamourLogFilter",
         Title = "Set list filters",
@@ -58,20 +63,16 @@ internal sealed class WindowsService : IPluginService, IAsyncDisposable {
             return;
         _disposed = true;
 
-        // LogWindow owns the filter-window relationship; tear it down first.
-        // NativeAddon: Close/Dispose on main thread; CloseAsync/DisposeAsync off it.
-        if (ThreadSafety.IsMainThread) {
-            DisposeWindowSync(_logWindow, nameof(LogWindow));
-            DisposeWindowSync(_filterWindow, nameof(FilterWindow));
-            DisposeWindowSync(_addonFilterWindow, nameof(AddonFilterWindow));
-            DisposeWindowSync(_mainMenuWindow, nameof(GuideWindow));
-        }
-        else {
-            await DisposeWindowAsync(_logWindow, nameof(LogWindow));
-            await DisposeWindowAsync(_filterWindow, nameof(FilterWindow));
-            await DisposeWindowAsync(_addonFilterWindow, nameof(AddonFilterWindow));
-            await DisposeWindowAsync(_mainMenuWindow, nameof(GuideWindow));
-        }
+        Svc.Interface.UiBuilder.OpenMainUi -= ToggleMainWindow;
+        Svc.Interface.UiBuilder.OpenConfigUi -= ToggleMainMenu;
+
+        // NativeAddon Dispose must run on the framework thread.
+        await Svc.Framework.RunOnFrameworkThread(() => {
+            DisposeWindow(_logWindow, nameof(LogWindow));
+            DisposeWindow(_filterWindow, nameof(FilterWindow));
+            DisposeWindow(_addonFilterWindow, nameof(AddonFilterWindow));
+            DisposeWindow(_mainMenuWindow, nameof(GuideWindow));
+        });
 
         _filterWindow = null;
         _addonFilterWindow = null;
@@ -79,22 +80,11 @@ internal sealed class WindowsService : IPluginService, IAsyncDisposable {
         _logWindow = null;
     }
 
-    private static void DisposeWindowSync(NativeAddon? window, string name) {
+    private static void DisposeWindow(NativeAddon? window, string name) {
         if (window is null)
             return;
         try {
             window.Dispose();
-        }
-        catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(WindowsService)}] Failed to dispose {name}");
-        }
-    }
-
-    private static async ValueTask DisposeWindowAsync(NativeAddon? window, string name) {
-        if (window is null)
-            return;
-        try {
-            await window.DisposeAsync();
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, $"[{nameof(WindowsService)}] Failed to dispose {name}");

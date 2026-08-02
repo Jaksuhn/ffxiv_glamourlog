@@ -8,7 +8,7 @@ using KamiToolKit.Controllers;
 using System.Threading.Tasks;
 using static FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule;
 
-namespace GlamourLog.Features.Cabinet;
+namespace GlamourLog.Tweaks.Cabinet;
 
 internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginService, IAsyncDisposable {
     public int InitOrder => 10; // after ownership

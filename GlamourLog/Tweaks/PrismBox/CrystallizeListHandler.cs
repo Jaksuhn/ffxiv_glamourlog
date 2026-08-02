@@ -6,7 +6,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Controllers;
 using System.Threading.Tasks;
 
-namespace GlamourLog.Features.PrismBox;
+namespace GlamourLog.Tweaks.PrismBox;
 
 internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginService, IAsyncDisposable {
     private readonly CrystallizeNativeTree _nativeTree;

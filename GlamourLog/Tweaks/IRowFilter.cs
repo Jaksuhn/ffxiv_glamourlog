@@ -1,4 +1,4 @@
-namespace GlamourLog.Features;
+namespace GlamourLog.Tweaks;
 
 internal interface IRowFilter {
     bool IsEnabled { get; }
