@@ -131,7 +131,8 @@ internal sealed unsafe class CrystallizeNativeTree : IDisposable {
         HideAllItemRenderers(TreeList);
         ClearTreeDisplay(TreeList);
         if (addon is not null)
-            SetTreeListVisible(addon, false, hideOtherTreeLists: true);
+            // don't disable sibling trees — that leaves native lists grayed/non-interactive after handoff
+            SetTreeListVisible(addon, false, hideOtherTreeLists: false);
     }
 
     internal void EnsureAllTreeListsVisible(AtkUnitBase* addon) {

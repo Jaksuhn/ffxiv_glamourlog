@@ -21,7 +21,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
     private int _deferredRefreshDepth;
     private int _snapshotCapturePasses;
     private bool _deferCategoryRestore; // skip restore until native flags settle after flag change
-    private bool _needsUnfilteredRepopulate; // one-shot baseline repopulate after filter disable
+    private bool _needsUnfilteredRepopulate; // recovery after filter disable
     private bool _refreshScheduled;
     private bool _resyncScheduled;
     private bool _applyWhenReady; // wait for native populate instead of hammering OnRefresh
@@ -139,23 +139,59 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
         }
 
         if (!IsFilteringActive) {
-            // restore agent array before refresh so capture sees full category, not projected count
-            if (_categoryRows.Length > 0 && data->CrystallizeCategory == _trackedCategory)
+            // Un-project the open category from the kept snapshot
+            if (HasSnapshotFor(data->CrystallizeCategory) && _nativeTree.HasBaseline) {
                 RestoreFullCategory(data);
-            _nativeTree.InvalidateAtkCache();
+                _needsUnfilteredRepopulate = true;
+                _applyWhenReady = false;
+                _logNextApply = true;
+                LogFilterDebug(nameof(ApplyConfigChange), $"filters disabled; restoring category {data->CrystallizeCategory}");
+                ApplyUnfilteredDisplay(addon, data);
+                return;
+            }
+
+            // No snapshot/baseline, call a rebuild
+            ClearTransientState();
+            _deferCategoryRestore = true;
+            _nativeTree.InvalidateAll();
+            ClearCrystallizeSelection(data);
             _needsUnfilteredRepopulate = true;
-        }
-        else if (!_nativeTree.IsBaselineValidFor(data->CrystallizeCategory, _categoryRows.Length)) {
-            _nativeTree.InvalidateAtkCache();
+            _applyWhenReady = true;
+            _logNextApply = true;
+            LogFilterDebug(nameof(ApplyConfigChange), $"filters disabled; native rebuild for category {data->CrystallizeCategory}");
+
+            var agent = AgentMiragePrismPrismBox.Instance();
+            if (agent is not null && agent->PopulateCrystallizeAndFireRefresh())
+                return;
+
+            RequestAddonRefresh();
+            return;
         }
 
+        // filters on: re-apply to the open category without discarding the capture when there is one
+        _needsUnfilteredRepopulate = false;
         _logNextApply = true;
-        LogFilterDebug(nameof(ApplyConfigChange), IsFilteringActive
-            ? $"filters enabled for category {data->CrystallizeCategory}"
-            : $"filters disabled for category {data->CrystallizeCategory}");
+        LogFilterDebug(nameof(ApplyConfigChange), $"filters enabled for category {data->CrystallizeCategory}");
+
+        if (HasSnapshotFor(data->CrystallizeCategory) && _nativeTree.HasBaseline) {
+            if (TryApplyFilterPipeline(addon, data)) {
+                SetEmptyListMessageVisible(addon, _displayToSource.Length is 0);
+                return;
+            }
+        }
+
+        // need a fresh capture
+        _applyWhenReady = true;
+        if (_categoryRows.Length > 0 && data->CrystallizeCategory == _trackedCategory)
+            RestoreFullCategory(data); // undo projection so refresh/capture sees the full list
+        else
+            _nativeTree.InvalidateAtkCache();
 
         addon->OnRefresh(0, null);
     }
+
+    private bool HasSnapshotFor(int category)
+        => _categoryRows.Length > 0 && _trackedCategory == category;
 
     private unsafe void OnPreRefresh(AtkUnitBase* addon) {
         var data = GetData();
@@ -167,7 +203,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             return;
 
         if (!IsFilteringActive) {
-            // don't restore snapshots from unfiltered
+            // only restore while recovering from filter-off, otherwise native owns the list
             if (_needsUnfilteredRepopulate)
                 PrepareForNativeRefresh(data);
             return;
@@ -195,17 +231,14 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             if (_needsUnfilteredRepopulate) {
                 _refreshRecursionDepth++;
                 try {
-                    EnsureCategoryTracked(data);
                     ApplyUnfilteredDisplay(addon, data);
                 }
                 finally {
                     _refreshRecursionDepth--;
                 }
             }
-            else if (_categoryRows.Length > 0) {
-                // leftover snapshop, get rid of it
-                ClearTransientState();
-                _nativeTree.InvalidateAll();
+            else {
+                ApplyUnfilteredIdle(addon, data);
             }
 
             return;
@@ -296,39 +329,66 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
     private unsafe void ApplyUnfilteredDisplay(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
         _displayToSource = [];
 
-        if (!TryCaptureCategorySnapshot(data)) {
-            if (!data->IsPopulatingComplete) {
-                _applyWhenReady = true;
-                return;
-            }
-
+        if (!data->IsPopulatingComplete) {
             _applyWhenReady = true;
-            if (++_snapshotCapturePasses < 3)
-                RequestAddonRefresh();
             return;
         }
 
-        _applyWhenReady = false;
-        _snapshotCapturePasses = 0;
-        RestoreFullCategory(data);
-
-        if (!TryEnsureBaselineFromNative(addon, data) && !_nativeTree.HasBaseline) {
-            _applyWhenReady = true;
-            RequestAddonRefresh();
-            return;
-        }
-
-        // only repopulate atk tree when recovering from filter-off; passive capture preserves native headers
-        if (_needsUnfilteredRepopulate) {
+        // prefer un-projecting from snapshot
+        if (HasSnapshotFor(data->CrystallizeCategory) && _nativeTree.HasBaseline) {
+            RestoreFullCategory(data);
             if (!TryRepopulateTree(addon, data, isFilteringActive: false)) {
                 _applyWhenReady = true;
                 RequestAddonRefresh();
                 return;
             }
 
+            _applyWhenReady = false;
             _needsUnfilteredRepopulate = false;
+            SetEmptyListMessageVisible(addon, false);
+            _nativeTree.EnsureAllTreeListsVisible(addon);
             if (ConsumeLogNextApply())
                 LogFilterDebug(nameof(ApplyUnfilteredDisplay), $"restored unfiltered category {data->CrystallizeCategory} ({_categoryRows.Length} rows)");
+            // drop the snapshot after a restore so it doesn't get re-applied on the next refresh
+            ClearTransientState();
+            _nativeTree.InvalidateBaseline();
+            _nativeTree.InvalidateAtkCache();
+            return;
+        }
+
+        // native rebuild w/o snapshot
+        _applyWhenReady = false;
+        _snapshotCapturePasses = 0;
+        _needsUnfilteredRepopulate = false;
+        _trackedCategory = data->CrystallizeCategory;
+        ClearTransientState();
+        ApplyUnfilteredIdle(addon, data, wipeAtkIfEmpty: true);
+
+        if (ConsumeLogNextApply()) {
+            var count = (int)data->CrystallizeItemCount;
+            LogFilterDebug(nameof(ApplyUnfilteredDisplay), $"handed off unfiltered category {data->CrystallizeCategory} (native count={count})");
+        }
+    }
+
+    private unsafe void ApplyUnfilteredIdle(AtkUnitBase* addon, MiragePrismPrismBoxData* data, bool wipeAtkIfEmpty = false) {
+        var categoryChanged = data->CrystallizeCategory != _trackedCategory;
+        if (categoryChanged)
+            _trackedCategory = data->CrystallizeCategory;
+
+        ClearTransientState();
+
+        if (!data->IsPopulatingComplete)
+            return;
+
+        var empty = data->CrystallizeItemCount == 0 && ScanPopulatedCategoryItemCount(data) == 0;
+        SetEmptyListMessageVisible(addon, empty);
+        if (empty) {
+            // a native empty category doesn't call LoadAtkValues, so that's unreliable
+            if (wipeAtkIfEmpty || categoryChanged)
+                _nativeTree.ClearToEmpty(addon);
+        }
+        else {
+            _nativeTree.EnsureAllTreeListsVisible(addon);
         }
     }
 
@@ -336,20 +396,22 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
         if (addon is null || !addon->IsVisible)
             return;
 
-        // don't touch anything if filters are off and not recovering
-        if (!IsFilteringActive && !_needsUnfilteredRepopulate && !_applyWhenReady)
-            return;
-
         var data = GetData();
         if (data is null)
             return;
+
+        // filters fully off: track tab swaps and sync empty text
+        if (!IsFilteringActive && !_needsUnfilteredRepopulate && !_applyWhenReady) {
+            ApplyUnfilteredIdle(addon, data);
+            return;
+        }
 
         if (TryDetectCategoryDrift(addon, data))
             return;
 
         var populationIncomplete = !data->IsPopulatingComplete;
         if (_applyWhenReady && !populationIncomplete && data->CrystallizeCategory == _trackedCategory) {
-            _applyWhenReady = false; // consumed; ApplyFilteredDisplay re-sets if still waiting
+            _applyWhenReady = false; // consumed; ApplyFilteredDisplay / ApplyUnfilteredDisplay re-sets if still waiting
             RequestAddonRefresh();
         }
         else if (IsFilteringActive && data->CrystallizeCategory == _trackedCategory
@@ -357,6 +419,9 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             RequestAddonRefresh();
         }
         _populationWasIncomplete = populationIncomplete;
+
+        if (!IsFilteringActive)
+            return;
 
         if (TryDetectNativeListDrift(data))
             return;
@@ -371,8 +436,8 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             return;
         }
 
-        // PostRefresh/PostRequestedUpdate can leave this cleared after a restore→native cycle; re-assert while idle-empty
-        if (IsFilteringActive && ShouldShowEmptyListMessage(data)) {
+        // PostRefresh/PostRequestedUpdate can leave this cleared after a restore->native cycle; re-assert while idle/empty
+        if (ShouldShowEmptyListMessage(data)) {
             SetEmptyListMessageVisible(addon, true);
         }
     }
@@ -480,12 +545,12 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
         _trackedCategory = category;
         ClearTransientState();
         _snapshotCapturePasses = 0;
-        _applyWhenReady = true;
         _emptyAppliedCategory = int.MinValue;
         _logNextApply = true;
         _nativeTree.InvalidateAll();
         _needsUnfilteredRepopulate = false;
         _populationWasIncomplete = false;
+        _applyWhenReady = IsFilteringActive; // only arm a filter re-apply when we're actually filtering; don't do anything if filters are off
         LogFilterDebug(nameof(EnsureCategoryTracked), $"tracking category {category}");
     }
 
@@ -636,18 +701,9 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
         if (_categoryRows.Length == 0 || data->CrystallizeCategory != _trackedCategory)
             return;
 
-        // don't restore pre-deposit/withdraw snapshop or else the inventory/slot will be at the wrong index
-        var nativeCount = (int)data->CrystallizeItemCount;
-        if (nativeCount >= 0 && nativeCount < _categoryRows.Length) {
-            LogFilterDebug(nameof(PrepareForNativeRefresh), $"skip restore; native shrunk {_categoryRows.Length}->{nativeCount}");
-            ClearTransientState();
-            _deferCategoryRestore = true;
-            _nativeTree.InvalidateBaseline();
-            ClearCrystallizeSelection(data);
-            return;
-        }
-
-        RestoreFullCategory(data); // undo projection so native refresh sees full list
+        // always un-project before a native refresh. a smaller CrystallizeItemCount at this point is my projection, not an actual shrink
+        // if it was an actual shrink, it would wipe the snapshot so filter-off had nothing to restore. real deposit/withdraw paths set _deferCategoryRestore via QueueListResync.
+        RestoreFullCategory(data);
     }
 
     private unsafe void ApplyEmptyCategory(MiragePrismPrismBoxData* data) {
