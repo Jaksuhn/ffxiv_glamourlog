@@ -15,8 +15,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
 
     private readonly AddonController<AddonCabinet> _addonController;
 
-    // last full-category capture; kept after Project so filter-off can un-project
-    private CategoryRowSnapshot[] _rows = [];
+    private CategoryRowSnapshot[] _rows = []; // keep after Project so turning filters off can un-project ItemSlots
     private uint[] _itemIds = [];
     private uint _categoryIndex = uint.MaxValue;
     private int _projectedVisible = -1;
@@ -38,8 +37,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
     }
 
     private bool ShouldExcludeItem(uint itemId) => itemId == 0 || Filters.Any(f => f.IsEnabled && f.ShouldHide(itemId));
-
-    private bool HasCaptureFor(uint categoryIndex) => _rows.Length > 0 && _categoryIndex == categoryIndex;
+    private bool HasCaptureFor(uint categoryIndex) => _categoryIndex == categoryIndex && _projectedVisible >= 0;
 
     internal void OnConfigChanged() {
         Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
@@ -61,14 +59,14 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
         }
 
         if (!IsFilteringActive) {
-            // force a category reload
+            // native PendingUpdate rebuilds ItemCaches but not ItemSlots, unproject
             if (HasCaptureFor(addon->CategoryIndex)) {
+                var restored = Restore(agent, addon);
+                LogFilterDebug(nameof(ApplyConfigChange), $"filters disabled; restored {restored} rows");
                 ReleaseRows();
-                RequestNativeCategoryReload(agent, addon);
-                LogFilterDebug(nameof(ApplyConfigChange), "filters disabled; requested category reload");
             }
             else {
-                LogFilterDebug(nameof(ApplyConfigChange), "filters disabled; no capture to clear");
+                LogFilterDebug(nameof(ApplyConfigChange), "filters disabled; no capture to restore");
             }
 
             _applyWhenReady = false;
@@ -131,8 +129,15 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
     }
 
     private unsafe void OnAddonUpdate(AddonCabinet* addon) {
-        if (addon is null || !IsFilteringActive)
+        if (addon is null)
             return;
+
+        if (!IsFilteringActive) {
+            // Restore() hides the empty message when unfiltering a non-empty list; native empty
+            // categories often never put it back after a tab change, so sync from the live count.
+            SyncIdleEmptyListMessage(addon);
+            return;
+        }
 
         if (_applyWhenReady)
             TryApplyFilter(addon);
@@ -252,6 +257,20 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
         return visible.Count;
     }
 
+    // required because native category reload does not rewrite ItemSlots
+    private unsafe int Restore(AgentCabinet* agent, AddonCabinet* addon) {
+        for (var i = 0; i < _rows.Length; i++) {
+            _rows[i].Slot.ApplyTo(ref addon->ItemSlots[i]);
+            _rows[i].Cache.ApplyTo(ref agent->ItemCaches[i]);
+        }
+
+        ClearRowRange(agent, addon, _rows.Length);
+        ApplyListCount(addon, _rows.Length);
+        _projectedVisible = _rows.Length;
+        SetEmptyListMessageVisible((AtkUnitBase*)addon, _rows.Length is 0);
+        return _rows.Length;
+    }
+
     private void ReleaseRows() {
         foreach (var row in _rows)
             row.Dispose();
@@ -269,16 +288,18 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
         }
     }
 
-    private static unsafe void RequestNativeCategoryReload(AgentCabinet* agent, AddonCabinet* addon) {
-        if (addon->CategoryIndex == uint.MaxValue)
-            return;
-        agent->SelectedCategoryIndex = (byte)(addon->CategoryIndex + 1);
-        agent->PendingUpdate = true;
-        ClearCabinetSelection(addon, agent);
-    }
-
     private unsafe bool ShouldShowEmptyListMessage(AddonCabinet* addon)
         => HasCaptureFor(addon->CategoryIndex) && _projectedVisible == 0;
+
+    private unsafe void SyncIdleEmptyListMessage(AddonCabinet* addon) {
+        var agent = AgentCabinet.Instance();
+        if (agent is null || agent->PendingUpdate || !IsCategoryReady(agent, addon))
+            return;
+
+        var count = ReadCategoryItemCount(addon, agent);
+        if (count >= 0)
+            SetEmptyListMessageVisible((AtkUnitBase*)addon, count == 0);
+    }
 
     private static unsafe bool IsCategoryReady(AgentCabinet* agent, AddonCabinet* addon)
         => addon->CategoryIndex != uint.MaxValue
