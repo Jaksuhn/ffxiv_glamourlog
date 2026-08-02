@@ -68,7 +68,7 @@ internal unsafe class FilterWindow : NativeAddon {
                     flip(C);
                     cb.IsChecked = read(C);
                     C.Save();
-                    Svc.Get<CatalogService>().NotifyOwnershipChanged();
+                    CatalogService.Get().NotifyOwnershipChanged();
                 },
             };
             y += rowHeight + 2f;

@@ -6,7 +6,7 @@ using GlamourLog.Services;
 
 namespace GlamourLog;
 
-internal sealed class IpcProvider : IDisposable {
+internal sealed class IpcProvider : IPluginService, IDisposable {
     private readonly List<System.Action> _providers = [];
 
     public IpcProvider() {
@@ -17,11 +17,11 @@ internal sealed class IpcProvider : IDisposable {
         RegisterFunc("IsItemInDresser", (uint itemId) => IsItemInDresser(itemId));
         RegisterFunc("IsSetComplete", (uint setItemId) => IsSetComplete(setItemId));
         RegisterFunc("GetItemsFromContent", (uint cfcId) => GetItemsFromContent(cfcId));
-        RegisterFunc("IsContentComplete", (uint cfcId) => Svc.Get<OwnershipService>().IsContentComplete(cfcId));
+        RegisterFunc("IsContentComplete", (uint cfcId) => OwnershipService.Get().IsContentComplete(cfcId));
         RegisterFunc("EntrustAll", () => Svc.Commands.ProcessCommand("/glamourlog store"));
         RegisterFunc("IsBusy", () => Svc.Automation.CurrentTask is not null);
         RegisterFunc("ReadyToStore", IsReadyToStore);
-        RegisterFunc("IsItemStorable", (uint itemId) => Svc.Get<OwnershipService>().IsItemStorable(itemId));
+        RegisterFunc("IsItemStorable", (uint itemId) => OwnershipService.Get().IsItemStorable(itemId));
     }
 
     public void Dispose() {
@@ -44,18 +44,18 @@ internal sealed class IpcProvider : IDisposable {
     private static bool IsItemOwned(uint itemId) => IsItemInArmoire(itemId) || IsItemInDresser(itemId);
 
     private static bool IsItemInArmoire(uint itemId)
-        => Svc.Get<OwnershipService>().Query().Locate(itemId) is PieceLocation.Armoire;
+        => OwnershipService.Get().Query().Locate(itemId) is PieceLocation.Armoire;
 
     private static List<uint> GetArmoireItemIds() {
-        Svc.Get<OwnershipService>().BuildLalaExport(out _, out var armoires);
+        OwnershipService.Get().BuildLalaExport(out _, out var armoires);
         return [.. armoires];
     }
 
     private static List<uint> GetDresserItemIds() {
-        var ownership = Svc.Get<OwnershipService>();
+        var ownership = OwnershipService.Get();
         ownership.BuildLalaExport(out var outfitsBySetId, out _);
         var dresserIds = ownership.GetDresserItemIds();
-        var setTokens = Svc.Get<CatalogService>().GlamourSets.Select(s => s.ItemId).ToHashSet();
+        var setTokens = CatalogService.Get().GlamourSets.Select(s => s.ItemId).ToHashSet();
         var result = new HashSet<uint>(dresserIds.Where(id => !setTokens.Contains(id)));
         foreach (var pieces in outfitsBySetId.Values) {
             foreach (var id in pieces)
@@ -65,10 +65,10 @@ internal sealed class IpcProvider : IDisposable {
     }
 
     private static bool IsItemInDresser(uint itemId)
-        => Svc.Get<OwnershipService>().IsItemInDresser(itemId);
+        => OwnershipService.Get().IsItemInDresser(itemId);
 
     private static bool IsSetComplete(uint setItemId)
-        => Svc.Get<OwnershipService>().IsSetComplete(setItemId);
+        => OwnershipService.Get().IsSetComplete(setItemId);
 
     private static bool IsSourceFromDuty(uint cfcId, ItemSource src)
         => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId

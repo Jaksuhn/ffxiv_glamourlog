@@ -18,7 +18,7 @@ internal unsafe partial class LogWindow {
         if (!IsOpen || !CanPaintLists())
             return;
         try {
-            RefreshDetails(Svc.Get<OwnershipService>().Query());
+            RefreshDetails(OwnershipService.Get().Query());
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
@@ -87,7 +87,7 @@ internal unsafe partial class LogWindow {
             var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
             foreach (var kv in ordered) {
                 var owned = OwnershipService.GetOwnedCurrencyCount(kv.Key);
-                var (costNav, costTip, npcName, shopName) = SourcesPanelBuilder.FindVendorForCurrency(Svc.Get<CatalogService>(), _selectedSet, _selectedSourcePieceItemId, kv.Key);
+                var (costNav, costTip, npcName, shopName) = SourcesPanelBuilder.FindVendorForCurrency(CatalogService.Get(), _selectedSet, _selectedSourcePieceItemId, kv.Key);
                 var currencyName = Item.GetRow(kv.Key).Name.ToString().Trim();
                 costEntries.Add(new DetailListRowData {
                     Kind = DetailRowKind.Cost,
@@ -107,7 +107,7 @@ internal unsafe partial class LogWindow {
         }
 
         var sourceChildren = SourcesPanelBuilder.BuildSourceSections(
-            Svc.Get<CatalogService>(),
+            CatalogService.Get(),
             _selectedSet,
             _selectedSourcePieceItemId,
             DetailList.DutyChestMeasureNode);
@@ -129,7 +129,7 @@ internal unsafe partial class LogWindow {
         totals = [];
         IEnumerable<uint> pieceIds = pieceFilterPieceItemId is { } only ? [only] : set.Items;
         foreach (var itemId in pieceIds) {
-            foreach (var (cid, amt) in Svc.Get<CatalogService>().GetPrimaryItemCosts(itemId, Svc.Get<CatalogService>().GetCategoryForPreferredCost(set))) {
+            foreach (var (cid, amt) in CatalogService.Get().GetPrimaryItemCosts(itemId, CatalogService.Get().GetCategoryForPreferredCost(set))) {
                 totals.TryGetValue(cid, out var t);
                 totals[cid] = t + amt;
             }
@@ -156,7 +156,7 @@ internal unsafe partial class LogWindow {
         if (_selectedSet is null)
             return null;
 
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
 
         if (_selectedSourcePieceItemId is { } pieceId) {
             var itemSiblings = catalog.GetSharedModelItemSiblings(pieceId);

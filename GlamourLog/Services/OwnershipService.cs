@@ -14,7 +14,7 @@ internal sealed class OwnershipQuery {
     private OwnershipQuery(Snapshot snap) => _snap = snap;
 
     internal static OwnershipQuery Capture(OwnershipService ownership) {
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         var dresser = ownership.GetDresserItemIds();
         var armoire = ownership.GetArmoireItemIds();
         var setTokens = catalog.GlamourSets.Where(s => !s.NonSetCabinetPiece).Select(s => s.ItemId).ToHashSet();
@@ -127,7 +127,7 @@ internal sealed class OwnershipQuery {
     }
 
     private bool ComputeCanAffordMissing(GlamourSet set) {
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         var category = catalog.GetCategoryForPreferredCost(set);
         var totals = new Dictionary<uint, uint>();
         foreach (var itemId in set.Items) {
@@ -184,7 +184,7 @@ internal static class PieceLocationExtensions {
     };
 }
 
-internal sealed unsafe class OwnershipService : IDisposable {
+internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
     public OwnershipService() {
         Svc.Items.ArmoireChanged += OnArmoireChanged;
         Svc.Items.DresserChanged += OnDresserChanged;
@@ -200,14 +200,14 @@ internal sealed unsafe class OwnershipService : IDisposable {
     internal event System.Action? ArmoireOwnershipChanged;
 
     private void OnArmoireChanged() {
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         catalog.OnArmoireChanged();
         catalog.NotifyOwnershipChanged();
         ArmoireOwnershipChanged?.Invoke();
     }
 
     private void OnDresserChanged() {
-        Svc.Get<CatalogService>().NotifyOwnershipChanged();
+        CatalogService.Get().NotifyOwnershipChanged();
     }
 
     private void OnInventoryChanged(IReadOnlyCollection<InventoryEventArgs> events) {
@@ -221,7 +221,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
                 continue;
 
             var itemId = eventData.Item.BaseItemId;
-            var catalog = Svc.Get<CatalogService>();
+            var catalog = CatalogService.Get();
             if (catalog.GlamourSets.Any(set => set.Items.Contains(itemId)) || catalog.IsKnownCostCurrency(itemId)) {
                 catalog.NotifyOwnershipChanged();
                 return;
@@ -232,14 +232,14 @@ internal sealed unsafe class OwnershipService : IDisposable {
     internal OwnershipQuery Query() => OwnershipQuery.Capture(this);
 
     internal bool IsSetComplete(uint setItemId) {
-        var set = Svc.Get<CatalogService>().GlamourSets.FirstOrDefault(s => s.ItemId == setItemId);
+        var set = CatalogService.Get().GlamourSets.FirstOrDefault(s => s.ItemId == setItemId);
         return set is not null && Query().For(set).IsComplete;
     }
 
     internal bool IsContentComplete(uint cfcId) {
         if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })
             return false;
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         if (!catalog.CatalogReady)
             return false;
 
@@ -269,7 +269,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
 
     internal bool IsItemInDresser(uint itemId) {
         var q = Query();
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         if (q.IsDresserListed(itemId) && catalog.GlamourSets.All(s => s.ItemId != itemId))
             return true;
         return catalog.GlamourSets.Any(s => s.Items.Contains(itemId) && q.Locate(itemId, s) is PieceLocation.OutfitSlot);
@@ -283,7 +283,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
     internal void BuildLalaExport(out Dictionary<string, uint[]> outfitsBySetId, out uint[] armoires) {
         var dresserIds = GetDresserItemIds();
         var outfitsBuilder = new Dictionary<string, HashSet<uint>>();
-        foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
+        foreach (var set in CatalogService.Get().GlamourSets) {
             if (set.ItemId == 0 || !dresserIds.Contains(set.ItemId))
                 continue;
             var setRow = MirageStoreSetItem.GetRow(set.ItemId);
@@ -303,7 +303,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
     }
 
     internal bool IsCrystallizeItemFullyDeposited(uint itemId) {
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         var setTokens = catalog.GlamourSets.Where(s => !s.NonSetCabinetPiece).Select(s => s.ItemId).ToHashSet();
         return Svc.Items.IsFullyDepositedInDresser(itemId, setTokens);
     }
@@ -311,7 +311,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
     // prefers Allagan Tools for non-gil currencies when available
     // doesn't work for gil because AT stores it as a uint and that can overflow
     internal static int GetOwnedCurrencyCount(uint costItemId) {
-        if (costItemId is not 1 && Svc.Get<AllaganToolsIpc>().TryGetOwnedCount(costItemId, out var allaganCount))
+        if (costItemId is not 1 && AllaganToolsIpc.Get().TryGetOwnedCount(costItemId, out var allaganCount))
             return allaganCount;
         return Svc.Items.GetOwnedCurrencyCount(costItemId);
     }
@@ -344,7 +344,7 @@ internal sealed unsafe class OwnershipService : IDisposable {
             return false;
 
         HashSet<uint>? looseDresser = null;
-        foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
+        foreach (var set in CatalogService.Get().GlamourSets) {
             if (set.NonSetCabinetPiece || !set.Items.Any(id => ItemUtil.GetBaseId(id).ItemId == baseId))
                 continue;
             if (!MirageStoreSetItem.TryGetRow(set.ItemId, out var setRow))

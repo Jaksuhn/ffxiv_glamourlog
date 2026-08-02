@@ -5,7 +5,7 @@ using GlamourLog.Services;
 
 namespace GlamourLog.Tweaks;
 
-internal class ChatAlerts : IDisposable {
+internal class ChatAlerts : IPluginService, IDisposable {
     public ChatAlerts() {
         Svc.Chat.ChatMessage += OnChatMessage;
     }
@@ -24,11 +24,11 @@ internal class ChatAlerts : IDisposable {
         if (message.Message.Payloads.FirstOrDefault(p => p is ItemPayload) is not ItemPayload { Item: var row })
             return;
 
-        var ownership = Svc.Get<OwnershipService>();
+        var ownership = OwnershipService.Get();
         if (ownership.IsItemInArmoire(row.RowId))
             return;
 
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         if (catalog.GlamourSets.Where(s => s.Items.Contains(row.RowId)).ToList() is not { Count: > 0 } sets)
             return;
 

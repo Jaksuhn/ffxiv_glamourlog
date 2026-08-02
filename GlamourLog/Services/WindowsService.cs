@@ -4,7 +4,9 @@ using System.Threading.Tasks;
 
 namespace GlamourLog.Services;
 
-internal sealed class WindowsService : IAsyncDisposable {
+internal sealed class WindowsService : IPluginService, IAsyncDisposable {
+    public int InitOrder => 5;
+
     private bool _disposed;
     private FilterWindow? _filterWindow;
     private AddonFilterWindow? _addonFilterWindow;

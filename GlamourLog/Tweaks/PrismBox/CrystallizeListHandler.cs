@@ -1,4 +1,5 @@
 using Dalamud.Game.Inventory.InventoryEventArgTypes;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -7,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace GlamourLog.Features.PrismBox;
 
-internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDisposable {
+internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginService, IAsyncDisposable {
     private readonly CrystallizeNativeTree _nativeTree;
     private readonly AddonController<AtkUnitBase> _addonController;
 
@@ -38,7 +39,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IAsyncDi
             OnUpdate = OnAddonUpdate,
             OnFinalize = OnFinalize,
         };
-        _addonController.Enable();
+        IFramework.Get().Run(() => _addonController.Enable());
         Svc.GameInventory.InventoryChanged += OnInventoryChanged;
     }
 

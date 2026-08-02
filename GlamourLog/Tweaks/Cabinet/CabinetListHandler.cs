@@ -1,3 +1,4 @@
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
@@ -9,7 +10,9 @@ using static FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule;
 
 namespace GlamourLog.Features.Cabinet;
 
-internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDisposable {
+internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginService, IAsyncDisposable {
+    public int InitOrder => 10; // after ownership
+
     private bool _disposed;
     private const string AddonName = "Cabinet";
 
@@ -32,8 +35,8 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
             OnFinalize = OnFinalize,
         };
 
-        _addonController.Enable();
-        Svc.Get<OwnershipService>().ArmoireOwnershipChanged += OnArmoireOwnershipChanged;
+        IFramework.Get().Run(() => _addonController.Enable());
+        OwnershipService.Get().ArmoireOwnershipChanged += OnArmoireOwnershipChanged;
     }
 
     private bool ShouldExcludeItem(uint itemId) => itemId == 0 || Filters.Any(f => f.IsEnabled && f.ShouldHide(itemId));
@@ -210,7 +213,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
                 return false;
         }
 
-        var ownership = Svc.Get<OwnershipService>();
+        var ownership = OwnershipService.Get();
         var rows = count == 0 ? [] : new CategoryRowSnapshot[count];
         var itemIds = count == 0 ? [] : new uint[count];
         for (var i = 0; i < count; i++) {
@@ -331,14 +334,14 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
     private static unsafe uint ResolveRowItemId(AgentCabinet* agent, AddonCabinet* addon, int index) {
         var cacheId = agent->ItemCaches[index].Id;
         if (cacheId != 0)
-            return Svc.Get<OwnershipService>().GetItemIdFromLookups(cacheId);
+            return OwnershipService.Get().GetItemIdFromLookups(cacheId);
 
         if (agent->Items == null)
             return 0;
 
         var itemsIndex = addon->ItemSlots[index].ItemsArrayIndex;
         return itemsIndex < agent->ItemCount
-            ? Svc.Get<OwnershipService>().GetItemIdFromLookups(agent->Items[itemsIndex].Id)
+            ? OwnershipService.Get().GetItemIdFromLookups(agent->Items[itemsIndex].Id)
             : 0;
     }
 
@@ -493,7 +496,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IAsyncDispos
             return;
         _disposed = true;
         await Svc.Framework.RunOnFrameworkThread(() => {
-            Svc.Get<OwnershipService>().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
+            OwnershipService.Get().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
             _addonController.Dispose();
             ClearFilterState();
         });

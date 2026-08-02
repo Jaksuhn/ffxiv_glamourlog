@@ -53,7 +53,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     public LogWindow(FilterWindow filterWindow) {
         _filterWindow = filterWindow;
         _selectedCategoryId = AllCategoryId;
-        _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
+        _lastDataVersion = CatalogService.Get().DataVersion;
         DisableClose = C.DisableClose;
     }
 
@@ -76,7 +76,7 @@ internal unsafe partial class LogWindow : NativeAddon {
     }
 
     private void PaintListsCore() {
-        var q = Svc.Get<OwnershipService>().Query();
+        var q = OwnershipService.Get().Query();
         RefreshRows(q);
         RefreshDetails(q);
     }
@@ -204,13 +204,13 @@ internal unsafe partial class LogWindow : NativeAddon {
             TextTooltip = "Help and tweak settings",
             Size = new Vector2(HelpMenuButtonSize, HelpMenuButtonSize),
             Position = new Vector2(contentStart.X + leftPad, helpBtnY),
-            OnClick = () => { Svc.Get<WindowsService>().ToggleMainMenuNearLogWindow(); },
+            OnClick = () => { WindowsService.Get().ToggleMainMenuNearLogWindow(); },
         };
         _helpMainMenuButton.AttachNode(this);
 
         _categoryPaneOrder.Clear();
         _categoryPaneOrder.AddRange(BuildOrderedCategoryPaneList());
-        _lastDataVersion = Svc.Get<CatalogService>().DataVersion;
+        _lastDataVersion = CatalogService.Get().DataVersion;
 
         addon->ShouldFireCallbackAndHideOrClose = C.DisableClose;
 
@@ -257,7 +257,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         }
 
         try {
-            if (Svc.Get<CatalogService>().TryConsumePendingListRefresh())
+            if (CatalogService.Get().TryConsumePendingListRefresh())
                 _pendingRefreshListsAndDetails = true;
 
             if (_pendingCategoryPaneRebuild) {

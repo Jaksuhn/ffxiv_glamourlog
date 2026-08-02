@@ -3,7 +3,7 @@ using Dalamud.Plugin.Ipc;
 
 namespace GlamourLog.Services;
 
-internal sealed class AutoDutyIpc {
+internal sealed class AutoDutyIpc : IPluginService {
     private static readonly string[] GlamourFarmEnable = [
         "EnablePreLoopActions",
         "AutoRepair",
@@ -33,7 +33,7 @@ internal sealed class AutoDutyIpc {
             return;
         }
 
-        if (Svc.Get<OwnershipService>().IsContentComplete(cfcId)) {
+        if (OwnershipService.Get().IsContentComplete(cfcId)) {
             Svc.Chat.EchoMessage("All outfit pieces from this duty collected.");
             return;
         }

@@ -5,13 +5,13 @@ namespace GlamourLog.Features.PrismBox;
 internal sealed class HideDresserDepositedFilter : IRowFilter {
     public bool IsEnabled => C.HideCrystallizeOwnedItems;
     public bool ShouldHide(uint itemId)
-        => itemId != 0 && Svc.Get<OwnershipService>().IsCrystallizeItemFullyDeposited(ItemUtil.GetBaseId(itemId).ItemId);
+        => itemId != 0 && OwnershipService.Get().IsCrystallizeItemFullyDeposited(ItemUtil.GetBaseId(itemId).ItemId);
 }
 
 internal sealed class HideArmoireEligibleFilter : IRowFilter {
     public bool IsEnabled => C.HideCrystallizeArmoireEligibleItems;
     public bool ShouldHide(uint itemId)
-        => itemId != 0 && Svc.Get<OwnershipService>().IsCabinetItem(itemId);
+        => itemId != 0 && OwnershipService.Get().IsCabinetItem(itemId);
 }
 
 internal sealed class HideNonOutfitItemsFilter : IRowFilter {

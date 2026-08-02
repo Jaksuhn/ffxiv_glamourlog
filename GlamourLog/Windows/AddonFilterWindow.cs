@@ -41,13 +41,13 @@ internal unsafe class AddonFilterWindow : NativeAddon {
             "When the armoire window is open, all entries that already exist inside the armoire will be hidden.",
             c => c.HideCabinetOwnedItems,
             c => c.HideCabinetOwnedItems ^= true,
-            () => Svc.Get<CabinetListHandler>().OnConfigChanged()),
+            () => CabinetListHandler.Get().OnConfigChanged()),
         new(
             "Hide items in gearsets",
             "When the armoire window is open, all entries that are part of gearsets will be hidden",
             c => c.HideCabinetGearsetItems,
             c => c.HideCabinetGearsetItems ^= true,
-            () => Svc.Get<CabinetListHandler>().OnConfigChanged()),
+            () => CabinetListHandler.Get().OnConfigChanged()),
     ];
 
     public static FilterOption[] DresserOptions { get; } = [
@@ -56,19 +56,19 @@ internal unsafe class AddonFilterWindow : NativeAddon {
             "When the glamour creation window is open, items already in the glamour dresser (loose or in an outfit) are hidden.",
             c => c.HideCrystallizeOwnedItems,
             c => c.HideCrystallizeOwnedItems ^= true,
-            () => Svc.Get<CrystallizeListHandler>().OnConfigChanged()),
+            () => CrystallizeListHandler.Get().OnConfigChanged()),
         new(
             "Hide armoire-eligible items",
             "When the glamour creation window is open, items that can be stored in the armoire are hidden (whether or not you already own them there).",
             c => c.HideCrystallizeArmoireEligibleItems,
             c => c.HideCrystallizeArmoireEligibleItems ^= true,
-            () => Svc.Get<CrystallizeListHandler>().OnConfigChanged()),
+            () => CrystallizeListHandler.Get().OnConfigChanged()),
         new(
             "Hide non-outfit items",
             "When the glamour creation window is open, items that are not part of any outfit set are hidden.",
             c => c.HideCrystallizeNonOutfitItems,
             c => c.HideCrystallizeNonOutfitItems ^= true,
-            () => Svc.Get<CrystallizeListHandler>().OnConfigChanged()),
+            () => CrystallizeListHandler.Get().OnConfigChanged()),
     ];
 
     public static float HeightFor(int optionCount)

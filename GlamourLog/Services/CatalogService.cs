@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace GlamourLog.Services;
 
-internal sealed class CatalogService : IDisposable {
+internal sealed class CatalogService : IPluginService, IDisposable {
     private bool _disposed;
 
     internal ReadOnlyCollection<GlamourSet> GlamourSets { get; private set; } = new ReadOnlyCollection<GlamourSet>([]);
@@ -99,7 +99,7 @@ internal sealed class CatalogService : IDisposable {
             }
             _costCurrencyItemIds = BuildAllPrimaryCostCurrencyIds();
             Interlocked.Exchange(ref _pendingListRefresh, 1);
-            Svc.Get<WindowsService>().RefreshLogWindow();
+            WindowsService.Get().RefreshLogWindow();
         }
         catch (OperationCanceledException) {
             // cancelled by logout / disable / superseded build
@@ -114,7 +114,7 @@ internal sealed class CatalogService : IDisposable {
     internal bool IsKnownCostCurrency(uint itemId) => itemId != 0 && _catalogBuilt && _costCurrencyItemIds.Contains(itemId);
     internal bool IsMirageOutfitPiece(uint itemId) => itemId != 0 && _catalogBuilt && MirageOutfitPieceIds.Contains(itemId);
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
-    internal void NotifyOwnershipChanged() => Svc.Get<WindowsService>().RefreshLogWindow();
+    internal void NotifyOwnershipChanged() => WindowsService.Get().RefreshLogWindow();
 
     internal IReadOnlyList<OutfitCategory> OutfitCategories => _catalog.ClassifiableCategories; // excludes synthetic (non rule-matched) categories
     internal OutfitCategory UncategorizedTab => _catalog.UncategorizedBucket;

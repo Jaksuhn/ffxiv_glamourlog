@@ -3,7 +3,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 
 namespace GlamourLog.Services;
 
-internal sealed class AllaganToolsIpc {
+internal sealed class AllaganToolsIpc : IPluginService {
     private readonly ICallGateSubscriber<uint, bool, uint[], uint> _itemCountOwned;
 
     public AllaganToolsIpc() {

@@ -28,34 +28,18 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
         dalamud.InitCustomClientStructs();
 #endif
         CLibMain.Init(dalamud, this, CLibModule.All);
-        await Svc.Framework.RunOnFrameworkThread(() => KamiToolKitLibrary.Initialize(dalamud));
+        KamiToolKitLibrary.Initialize(dalamud);
 
         C = dalamud.GetPluginConfig() as Configuration ?? new Configuration();
-        Svc.Register<CatalogService>();
-        Svc.Register<OwnershipService>();
-        Svc.Register<CabinetListHandler>();
-        Svc.Register<CrystallizeListHandler>();
-        Svc.Register<AllaganToolsIpc>();
-        Svc.Register<AutoDutyIpc>();
-        Svc.Register<IpcProvider>();
-        Svc.Register<ChatAlerts>();
-
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
-        Svc.Register<WindowsService>();
-        Svc.Register<ExtraAddonButtons>();
-        Svc.Interface.UiBuilder.OpenMainUi += Svc.Get<WindowsService>().ToggleMainWindow;
-        Svc.Interface.UiBuilder.OpenConfigUi += Svc.Get<WindowsService>().ToggleMainMenu;
+        Svc.Interface.UiBuilder.OpenMainUi += WindowsService.Get().ToggleMainWindow;
+        Svc.Interface.UiBuilder.OpenConfigUi += WindowsService.Get().ToggleMainMenu;
     }
 
     public async ValueTask DisposeAsync() {
         _commands.ForEach(c => Svc.Commands.RemoveHandler(c));
-
-        var windows = Svc.Get<WindowsService>();
-        await Svc.Framework.RunOnFrameworkThread(() => {
-            Svc.Interface.UiBuilder.OpenMainUi -= windows.ToggleMainWindow;
-            Svc.Interface.UiBuilder.OpenConfigUi -= windows.ToggleMainMenu;
-        });
-
+        Svc.Interface.UiBuilder.OpenMainUi -= WindowsService.Get().ToggleMainWindow;
+        Svc.Interface.UiBuilder.OpenConfigUi -= WindowsService.Get().ToggleMainMenu;
         await CLibMain.DisposeAsync();
         await Svc.Framework.RunOnFrameworkThread(KamiToolKitLibrary.Dispose);
     }
@@ -76,7 +60,7 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 
     private static CommandNode<object> BuildRoot()
         => CommandNode<object>.Root("Glamour Log commands")
-            .Default(_ => Svc.Get<WindowsService>().ToggleMainWindow())
+            .Default(_ => WindowsService.Get().ToggleMainWindow())
             .Sub("stop", "Cancel any running tasks", stop => stop
                 .Handle((_, _) => Svc.Automation.Stop()))
             .Sub("store", "Store all eligible items in your armoire/dresser", store => store

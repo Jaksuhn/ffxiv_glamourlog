@@ -14,7 +14,7 @@ public unsafe partial class GuideWindow {
                 () => C.DisableClose,
                 v => C.DisableClose = v,
                 () => {
-                    AtkUnitBase* addon = Svc.Get<WindowsService>().LogWindow;
+                    AtkUnitBase* addon = WindowsService.Get().LogWindow;
                     if (addon is not null)
                         addon->ShouldFireCallbackAndHideOrClose = C.DisableClose;
                 }),

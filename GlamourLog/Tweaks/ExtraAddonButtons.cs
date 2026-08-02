@@ -1,3 +1,4 @@
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Features.Cabinet;
 using GlamourLog.Features.PrismBox;
@@ -9,7 +10,9 @@ using System.Threading.Tasks;
 
 namespace GlamourLog.Tweaks;
 
-internal sealed class ExtraAddonButtons : IAsyncDisposable {
+internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
+    public int InitOrder => 15;
+
     private const uint CabinetPrevArrowId = 3;
     private const uint CabinetNextArrowId = 4;
     private const uint CrystallizePrevArrowId = 6;
@@ -39,8 +42,10 @@ internal sealed class ExtraAddonButtons : IAsyncDisposable {
             OnUpdate = OnCrystallizeUpdate,
         };
 
-        _cabinetController.Enable();
-        _crystallizeController.Enable();
+        IFramework.Get().Run(() => {
+            _cabinetController.Enable();
+            _crystallizeController.Enable();
+        });
     }
 
     private unsafe void OnCabinetSetup(AtkUnitBase* addon) {
@@ -52,7 +57,7 @@ internal sealed class ExtraAddonButtons : IAsyncDisposable {
         var (filterPos, storePos, size) = ComputeAfterArrowPositions(addon, prev, next);
 
         _cabinetFilterButton = CreateFilterButton(filterPos, size, () => {
-            var windows = Svc.Get<WindowsService>();
+            var windows = WindowsService.Get();
             var origin = FilterOriginNearButton(_cabinetFilterButton, AddonFilterWindow.WindowWidth);
             windows.AddonFilterWindow.OpenOrToggleNear(AddonFilterKind.Armoire, "Armoire filters", AddonFilterWindow.ArmoireOptions, origin);
         }, "Armoire list filters");
@@ -75,7 +80,7 @@ internal sealed class ExtraAddonButtons : IAsyncDisposable {
         var (filterPos, storePos, size) = ComputeAboveArrowPositions(addon, prev, next);
 
         _crystallizeFilterButton = CreateFilterButton(filterPos, size, () => {
-            var windows = Svc.Get<WindowsService>();
+            var windows = WindowsService.Get();
             var origin = FilterOriginNearButton(_crystallizeFilterButton, AddonFilterWindow.WindowWidth);
             windows.AddonFilterWindow.OpenOrToggleNear(AddonFilterKind.Dresser, "Dresser filters", AddonFilterWindow.DresserOptions, origin);
         }, "Dresser list filters");
@@ -91,14 +96,14 @@ internal sealed class ExtraAddonButtons : IAsyncDisposable {
 
     private unsafe void OnCabinetFinalize(AtkUnitBase* _) {
         DisposeCabinetButtons();
-        var filter = Svc.Get<WindowsService>().AddonFilterWindow;
+        var filter = WindowsService.Get().AddonFilterWindow;
         if (filter.ActiveKind == AddonFilterKind.Armoire)
             filter.CloseIfOpen();
     }
 
     private unsafe void OnCrystallizeFinalize(AtkUnitBase* _) {
         DisposeCrystallizeButtons();
-        var filter = Svc.Get<WindowsService>().AddonFilterWindow;
+        var filter = WindowsService.Get().AddonFilterWindow;
         if (filter.ActiveKind == AddonFilterKind.Dresser)
             filter.CloseIfOpen();
     }
@@ -106,14 +111,14 @@ internal sealed class ExtraAddonButtons : IAsyncDisposable {
     private unsafe void OnCabinetUpdate(AtkUnitBase* _) {
         if (_cabinetFilterButton is null)
             return;
-        var filter = Svc.Get<WindowsService>().AddonFilterWindow;
+        var filter = WindowsService.Get().AddonFilterWindow;
         _cabinetFilterButton.Icon = filter is { IsOpen: true, ActiveKind: AddonFilterKind.Armoire } ? CircleButtonIcon.ActiveGearCog : CircleButtonIcon.GearCog;
     }
 
     private unsafe void OnCrystallizeUpdate(AtkUnitBase* _) {
         if (_crystallizeFilterButton is null)
             return;
-        var filter = Svc.Get<WindowsService>().AddonFilterWindow;
+        var filter = WindowsService.Get().AddonFilterWindow;
         _crystallizeFilterButton.Icon = filter is { IsOpen: true, ActiveKind: AddonFilterKind.Dresser } ? CircleButtonIcon.ActiveGearCog : CircleButtonIcon.GearCog;
     }
 

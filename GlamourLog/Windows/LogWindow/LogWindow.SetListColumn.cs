@@ -18,7 +18,7 @@ internal unsafe partial class LogWindow {
             return;
         }
 
-        var mirageCatalogSets = Svc.Get<CatalogService>().GlamourSets.Where(s => !s.NonSetCabinetPiece).ToList();
+        var mirageCatalogSets = CatalogService.Get().GlamourSets.Where(s => !s.NonSetCabinetPiece).ToList();
         var ownedMirageSets = mirageCatalogSets.Where(s => q.For(s).IsComplete).ToList();
         var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || q.For(x).IsComplete);
         _statsSetsLine.String = $"{ownedMirageSets.Count} / {totalObtainable}";
@@ -35,7 +35,7 @@ internal unsafe partial class LogWindow {
         if (ItemFinderModule.Instance() is null)
             return;
 
-        RepopulateSetListFromFilteredRows(Svc.Get<OwnershipService>().Query());
+        RepopulateSetListFromFilteredRows(OwnershipService.Get().Query());
     }
 
     private void RepopulateSetListFromFilteredRows(OwnershipQuery q) {
@@ -140,7 +140,7 @@ internal unsafe partial class LogWindow {
 
     // build a row for a lookalike item that may not have its own set
     private SetListRowData BuildSharedModelItemRow(uint itemId, OwnershipQuery q) {
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         var set = catalog.FindCatalogSetForItem(itemId)
             ?? new GlamourSet { // fake a one-piece set so the normal row renderer gets reused
                 ItemId = itemId,

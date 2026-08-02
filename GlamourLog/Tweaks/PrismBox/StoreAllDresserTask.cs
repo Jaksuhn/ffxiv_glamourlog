@@ -28,7 +28,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
     protected override async Task Execute() {
         using var scope = BeginScope(nameof(StoreAllDresserTask));
-        using var deferCrystallizeRefresh = Svc.Get<CrystallizeListHandler>().DeferRefresh();
+        using var deferCrystallizeRefresh = CrystallizeListHandler.Get().DeferRefresh();
         ErrorIf(!IsPrismBoxReady(), "Dresser not ready");
 
         while (true) {
@@ -119,7 +119,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
             }
         }
 
-        itemIds.ForEach(id => Svc.Get<CrystallizeListHandler>().NotifyItemStored(id));
+        itemIds.ForEach(id => CrystallizeListHandler.Get().NotifyItemStored(id));
         PrunePendingStored();
     }
 
@@ -131,7 +131,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
         _visitedInventoryBaseIds.Clear();
 
         HashSet<uint>? looseDresser = null;
-        foreach (var set in Svc.Get<CatalogService>().GlamourSets) {
+        foreach (var set in CatalogService.Get().GlamourSets) {
             if (!MirageStoreSetItem.TryGetRow(set.ItemId, out var setRow))
                 continue;
 
@@ -181,7 +181,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
     private static bool TryCreateStorableRow(uint itemId, OutfitStorageCtx scan, out PrismBoxCrystallizeItem row) {
         row = default;
-        if (!Svc.Get<OwnershipService>().IsDresserPieceStorable(itemId, scan.Row, scan.Outfits, scan.LooseDresser))
+        if (!OwnershipService.Get().IsDresserPieceStorable(itemId, scan.Row, scan.Outfits, scan.LooseDresser))
             return false;
 
         var handle = (ItemHandle)itemId;
@@ -202,7 +202,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
             return true;
         if (row.Inventory != InventoryType.Invalid && IsSentSlotConsumed(row))
             return true;
-        if (Svc.Get<OwnershipService>().IsCrystallizeItemFullyDeposited(itemId))
+        if (OwnershipService.Get().IsCrystallizeItemFullyDeposited(itemId))
             return true;
 
         var handle = (ItemHandle)itemId;

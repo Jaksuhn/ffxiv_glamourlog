@@ -4,11 +4,11 @@ namespace GlamourLog;
 
 internal partial class LogWindow {
     private List<string> BuildOrderedCategoryPaneList() {
-        var r = new List<string> { AllCategoryId, Svc.Get<CatalogService>().UncategorizedTab.Name };
-        foreach (var (category, _) in Svc.Get<CatalogService>().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
+        var r = new List<string> { AllCategoryId, CatalogService.Get().UncategorizedTab.Name };
+        foreach (var (category, _) in CatalogService.Get().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
             r.Add(category.Name);
-        r.Add(Svc.Get<CatalogService>().MiscArmoireTab.Name);
-        r.Add(Svc.Get<CatalogService>().UnobtainableTab.Name);
+        r.Add(CatalogService.Get().MiscArmoireTab.Name);
+        r.Add(CatalogService.Get().UnobtainableTab.Name);
         return r;
     }
 
@@ -18,14 +18,14 @@ internal partial class LogWindow {
 
     private List<GlamourSet> CategoryRows(string categoryId)
         => categoryId == AllCategoryId
-            ? [.. Svc.Get<CatalogService>().GlamourSets]
-            : Svc.Get<CatalogService>().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
+            ? [.. CatalogService.Get().GlamourSets]
+            : CatalogService.Get().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
 
     private void SyncCategoryPaneToDataVersion() {
         if (_categoryColumn is null)
             return;
 
-        var catalog = Svc.Get<CatalogService>();
+        var catalog = CatalogService.Get();
         var dataVersion = catalog.DataVersion;
         if (_lastDataVersion == dataVersion)
             return;
