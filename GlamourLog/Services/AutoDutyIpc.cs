@@ -28,7 +28,7 @@ internal sealed class AutoDutyIpc {
     }
 
     internal void FarmOutfit(uint cfcId) {
-        if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true, Value.TerritoryType.RowId: > 0 and var territory, Value: var cfc }) {
+        if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true, Value.TerritoryType.RowId: > 0 and var territory }) {
             Svc.Chat.EchoMessage("GlamourLog: invalid duty.");
             return;
         }
