@@ -7,6 +7,7 @@ namespace GlamourLog.Services;
 internal sealed class WindowsService : IAsyncDisposable {
     private bool _disposed;
     private FilterWindow? _filterWindow;
+    private AddonFilterWindow? _addonFilterWindow;
     private GuideWindow? _mainMenuWindow;
     private LogWindow? _logWindow;
 
@@ -14,6 +15,13 @@ internal sealed class WindowsService : IAsyncDisposable {
         InternalName = "GlamourLogFilter",
         Title = "Set list filters",
         Size = new Vector2(FilterWindow.WindowWidth, FilterWindow.WindowHeight),
+        RememberClosePosition = false,
+    };
+
+    internal AddonFilterWindow AddonFilterWindow => _addonFilterWindow ??= new AddonFilterWindow {
+        InternalName = "GlamourLogAddonFilter",
+        Title = "Filters",
+        Size = new Vector2(AddonFilterWindow.WindowWidth, AddonFilterWindow.HeightFor(2)),
         RememberClosePosition = false,
     };
 
@@ -53,15 +61,18 @@ internal sealed class WindowsService : IAsyncDisposable {
         if (ThreadSafety.IsMainThread) {
             DisposeWindowSync(_logWindow, nameof(LogWindow));
             DisposeWindowSync(_filterWindow, nameof(FilterWindow));
+            DisposeWindowSync(_addonFilterWindow, nameof(AddonFilterWindow));
             DisposeWindowSync(_mainMenuWindow, nameof(GuideWindow));
         }
         else {
             await DisposeWindowAsync(_logWindow, nameof(LogWindow));
             await DisposeWindowAsync(_filterWindow, nameof(FilterWindow));
+            await DisposeWindowAsync(_addonFilterWindow, nameof(AddonFilterWindow));
             await DisposeWindowAsync(_mainMenuWindow, nameof(GuideWindow));
         }
 
         _filterWindow = null;
+        _addonFilterWindow = null;
         _mainMenuWindow = null;
         _logWindow = null;
     }

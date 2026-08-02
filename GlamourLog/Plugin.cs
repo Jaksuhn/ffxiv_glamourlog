@@ -42,6 +42,7 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 
         _commands.ForEach(c => Svc.Commands.AddHandler(c, new(OnCommand) { HelpMessage = $"Toggle the {nameof(GlamourLog)} window" }));
         Svc.Register<WindowsService>();
+        Svc.Register<ExtraAddonButtons>();
         Svc.Interface.UiBuilder.OpenMainUi += Svc.Get<WindowsService>().ToggleMainWindow;
         Svc.Interface.UiBuilder.OpenConfigUi += Svc.Get<WindowsService>().ToggleMainMenu;
     }
