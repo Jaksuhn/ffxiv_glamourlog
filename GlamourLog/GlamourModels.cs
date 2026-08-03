@@ -7,6 +7,7 @@ internal sealed class GlamourSet {
     public required string Name { get; init; } // display name
     public required string? CategoryName { get; init; } // when null it's either unsorted or unobtainable
     public required bool IsUnobtainable { get; init; }
+    internal bool BaseIsUnobtainable { get; init; } // result before UnobtainableService runs and checks quest/achievement completion
     public required IReadOnlyList<uint> Items { get; init; }
     public required uint ItemLevel { get; init; } // for sorting
     public required decimal PatchNo { get; init; } // for sorting

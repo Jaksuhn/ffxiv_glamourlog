@@ -147,6 +147,7 @@ internal unsafe partial class LogWindow {
                 Name = Item.GetRow(itemId).Name.ToString(),
                 CategoryName = null,
                 IsUnobtainable = false,
+                BaseIsUnobtainable = false,
                 Items = [itemId],
                 ItemLevel = Item.GetRow(itemId).LevelItem.RowId,
                 PatchNo = 0m,

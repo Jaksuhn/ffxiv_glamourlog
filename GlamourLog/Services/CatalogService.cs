@@ -23,10 +23,14 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     private int _pendingListRefresh; // ui picks this up next frame after a background rebuild
     private CancellationTokenSource? _catalogCts;
 
+    private readonly UnobtainableService _unobtainable;
+
     internal int DataVersion { get; private set; }
 
     public CatalogService() {
+        _unobtainable = UnobtainableService.Get();
         Svc.ClientState.Login += OnClientLogin;
+        _unobtainable.Changed += OnUnobtainableChanged;
 
         if (Svc.ClientState.IsLoggedIn)
             InvalidateCatalog();
@@ -37,6 +41,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
             return;
         _disposed = true;
         Svc.ClientState.Login -= OnClientLogin;
+        _unobtainable.Changed -= OnUnobtainableChanged;
         _catalogCts?.Cancel();
         _catalogCts?.Dispose();
         _catalogCts = null;
@@ -47,6 +52,10 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     }
 
     private void OnClientLogin() => InvalidateCatalog();
+    private void OnUnobtainableChanged() {
+        if (_catalogBuilt)
+            RefreshUnobtainable();
+    }
     internal void OnArmoireChanged() => InvalidateCatalog();
 
     private void InvalidateCatalog() {
@@ -88,9 +97,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
                 ArmoireItemIds = built.ArmoireItemIds;
                 GlamourSets = built.Sets;
                 MirageOutfitPieceIds = [.. GlamourSets.Where(s => !s.NonSetCabinetPiece).SelectMany(s => s.Items)];
-                GlamourSetsByCategory.Clear();
-                foreach (var group in GlamourSets.GroupBy(s => _catalog.GetDisplayCategoryName(new ClassifyResult(s.CategoryName, s.IsUnobtainable))))
-                    GlamourSetsByCategory[group.Key] = [.. group];
+                RebuildCategoryMapUnlocked();
                 _sharedModelGroups = GlamourSets.GroupBy(s => s.ModelSignature).ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
                 _sharedModelItemGroups = CatalogBuilder.BuildSharedModelItemGroups(GlamourSets.SelectMany(s => s.Items));
                 LogMissingMirageSets();
@@ -107,6 +114,25 @@ internal sealed class CatalogService : IPluginService, IDisposable {
         catch (Exception ex) {
             Svc.Log.Error(ex, $"{nameof(CatalogService)} catalog build");
         }
+    }
+
+    private void RefreshUnobtainable() {
+        lock (_glamourDataLock) {
+            if (!_catalogBuilt)
+                return;
+            GlamourSets = CatalogBuilder.ReapplyUnobtainable(GlamourSets);
+            RebuildCategoryMapUnlocked();
+            _sharedModelGroups = GlamourSets.GroupBy(s => s.ModelSignature).ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
+            DataVersion++;
+        }
+        Interlocked.Exchange(ref _pendingListRefresh, 1);
+        WindowsService.Get().RefreshLogWindow();
+    }
+
+    private void RebuildCategoryMapUnlocked() {
+        GlamourSetsByCategory.Clear();
+        foreach (var group in GlamourSets.GroupBy(s => _catalog.GetDisplayCategoryName(new ClassifyResult(s.CategoryName, s.IsUnobtainable))))
+            GlamourSetsByCategory[group.Key] = [.. group];
     }
 
     internal bool CatalogReady => _catalogBuilt;

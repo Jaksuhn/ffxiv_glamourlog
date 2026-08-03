@@ -1,5 +1,6 @@
 using AllaganLib.GameSheets.Sheets;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using GlamourLog.Services;
 
 namespace GlamourLog;
 
@@ -22,10 +23,12 @@ internal static unsafe class CatalogBuilder {
         var itemSheet = Svc.SheetManager.GetSheet<ItemSheet>();
         var specialShopByItemId = Catalog.BuildSpecialShopByReceiveItemId();
         var itemByRowId = Item.Where(i => i.RowId > 0).ToDictionary(i => i.RowId);
+        var unobtainable = UnobtainableService.Get();
         return MirageStoreSetItem.Where(x => x.RowId > 0).Select(x => {
             var items = x.Items.Where(i => i.RowId > 0).Select(i => i.RowId).ToList().AsReadOnly();
             var specialShopRow = Enumerable.FirstOrDefault(Enumerable.Select<uint, SpecialShop?>(items, id => specialShopByItemId.TryGetValue(id, out var s) ? s : null), s => s is not null);
             var r = catalog.ClassifySet(x, items, specialShopRow, pvpSeries);
+            var isUnobtainable = unobtainable.Apply(r.IsUnobtainable, items);
 
             var name = string.Empty;
             uint sortIl = 0;
@@ -42,7 +45,8 @@ internal static unsafe class CatalogBuilder {
                 Name = name,
                 Items = items,
                 CategoryName = r.CategoryName,
-                IsUnobtainable = r.IsUnobtainable,
+                IsUnobtainable = isUnobtainable,
+                BaseIsUnobtainable = r.IsUnobtainable,
                 ItemLevel = sortIl,
                 PatchNo = sortPatch,
                 NonSetCabinetPiece = false,
@@ -81,6 +85,7 @@ internal static unsafe class CatalogBuilder {
                 Items = items,
                 CategoryName = bucketName,
                 IsUnobtainable = false,
+                BaseIsUnobtainable = false,
                 ItemLevel = row.LevelItem.RowId,
                 PatchNo = itemSheet.GetItemPatch(itemId),
                 NonSetCabinetPiece = true,
@@ -101,6 +106,29 @@ internal static unsafe class CatalogBuilder {
         var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets);
         var allSets = ApplySharedModelMetadata([.. mirageSets, .. miscArmoireEntries]).AsReadOnly();
         return new CatalogBuildResult(catalog, allSets, armoireItemIds);
+    }
+
+    internal static ReadOnlyCollection<GlamourSet> ReapplyUnobtainable(IReadOnlyList<GlamourSet> sets) {
+        var unobtainable = UnobtainableService.Get();
+        var updated = new List<GlamourSet>(sets.Count);
+        foreach (var s in sets) {
+            updated.Add(new GlamourSet {
+                ItemId = s.ItemId,
+                Name = s.Name,
+                Items = s.Items,
+                CategoryName = s.CategoryName,
+                IsUnobtainable = !s.NonSetCabinetPiece && unobtainable.Apply(s.BaseIsUnobtainable, s.Items),
+                BaseIsUnobtainable = s.BaseIsUnobtainable,
+                ItemLevel = s.ItemLevel,
+                PatchNo = s.PatchNo,
+                NonSetCabinetPiece = s.NonSetCabinetPiece,
+                IsIncompatible = s.IsIncompatible,
+                ModelSignature = s.ModelSignature,
+                SharedModelGroupSize = s.SharedModelGroupSize,
+                HasPartialSharedModels = s.HasPartialSharedModels,
+            });
+        }
+        return updated.AsReadOnly();
     }
 
     internal static Dictionary<ItemModelInfo, List<uint>> BuildSharedModelItemGroups(IEnumerable<uint> itemIds)
@@ -128,6 +156,7 @@ internal static unsafe class CatalogBuilder {
                 Items = s.Items,
                 CategoryName = s.CategoryName,
                 IsUnobtainable = s.IsUnobtainable,
+                BaseIsUnobtainable = s.BaseIsUnobtainable,
                 ItemLevel = s.ItemLevel,
                 PatchNo = s.PatchNo,
                 NonSetCabinetPiece = s.NonSetCabinetPiece,

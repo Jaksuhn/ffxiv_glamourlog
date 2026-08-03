@@ -12,7 +12,7 @@
 		<IconUrl>https://puni.sh/api/plugins/icon/136</IconUrl>
 		<Tags>glamour</Tags>
 
-		<LocalCS>false</LocalCS>
+		<LocalCS>true</LocalCS>
 	</PropertyGroup>
 
     <ItemGroup>
