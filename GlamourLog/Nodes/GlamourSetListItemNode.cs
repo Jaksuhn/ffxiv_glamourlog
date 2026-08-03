@@ -11,6 +11,7 @@ internal sealed class SetListRowData {
     public required string Subtitle { get; init; }
     public required bool IsOwned { get; init; }
     public required bool IsUnobtainable { get; init; }
+    public required bool IsMogstation { get; init; }
     public required bool ShowStorage { get; init; }
     public bool ShowArmoireWarning { get; init; }
     public GlamourIconNode.IconPart StorageIconPart { get; init; } = GlamourIconNode.IconPart.Dresser;
@@ -68,6 +69,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemWithFocusNav<SetLi
         _chrome.Title.String = itemData.Title;
         _chrome.Subtitle.String = itemData.Subtitle;
         _chrome.UnobtainableBadge.IsVisible = itemData.IsUnobtainable;
+        _chrome.MogstationBadge.IsVisible = itemData.IsMogstation;
         _chrome.CheckBadge.IsVisible = itemData.IsOwned;
 
         if (itemData.ShowStorage) {

@@ -20,6 +20,9 @@ internal static class SetListFilterSort {
         if (C.HideUnobtainable)
             rows = [.. rows.Where(r => !r.IsUnobtainable || q.For(r).IsComplete)];
 
+        if (C.HideMogstation)
+            rows = [.. rows.Where(r => !IsMogstationSet(r))];
+
         if (C.HideSharedModels)
             rows = HideSharedModelSets(rows, q);
 
@@ -76,6 +79,12 @@ internal static class SetListFilterSort {
 
     internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q)
         => Apply(searchTrimmed, categoryRows, q).Contains(set);
+
+    internal static bool IsMogstationSet(GlamourSet set)
+        => set.CategoryName == "Mogstation" || set.Items.Any(IsMogstationItem);
+
+    internal static bool IsMogstationItem(uint itemId)
+        => FittingShopItemSet.Any(s => s.Items.Any(i => i.RowId == itemId));
 
     private static bool PassesTradeableFilter(GlamourSet set) {
         if (set.NonSetCabinetPiece && set.Items.Count == 1)

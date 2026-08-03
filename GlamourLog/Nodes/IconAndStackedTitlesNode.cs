@@ -17,6 +17,7 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
 
     public FramedItemIconNode Icon { get; }
     public UnobtainableBadgeNode UnobtainableBadge { get; }
+    public MogstationBadgeNode MogstationBadge { get; }
     public CheckMarkBadgeNode CheckBadge { get; }
     public TextNode Title { get; }
     public TextNode Subtitle { get; }
@@ -29,12 +30,14 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
 
         Icon = new FramedItemIconNode(iconSize);
         UnobtainableBadge = new UnobtainableBadgeNode();
+        MogstationBadge = new MogstationBadgeNode();
         CheckBadge = new CheckMarkBadgeNode();
         Title = CreateTitleNode(titleColor);
         Subtitle = CreateSubtitleNode();
 
         Icon.AttachNode(this);
         UnobtainableBadge.AttachNode(this);
+        MogstationBadge.AttachNode(this);
         CheckBadge.AttachNode(this);
         Title.AttachNode(this);
         Subtitle.AttachNode(this);
@@ -45,6 +48,7 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
         Icon.Position = new Vector2(_iconLeftMargin, iconY);
         Icon.Size = new Vector2(_iconSize, _iconSize);
         UnobtainableBadge.LayoutOverIcon(Icon.Position, Icon.Size);
+        MogstationBadge.LayoutOverIcon(Icon.Position, Icon.Size);
         CheckBadge.Position = new Vector2(_iconLeftMargin + _iconSize - CheckBadge.Size.X - 4f, iconY + _iconSize - CheckBadge.Size.Y);
 
         var textW = Math.Max(0f, width - TextX - textRightMargin - textReserve);

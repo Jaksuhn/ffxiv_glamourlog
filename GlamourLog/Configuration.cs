@@ -15,6 +15,7 @@ public class Configuration : IPluginConfiguration, IPluginService {
     public bool ShowOnlyCompleted { get; set; }
     public bool HideIncompatible { get; set; }
     public bool HideUnobtainable { get; set; }
+    public bool HideMogstation { get; set; }
     public bool HideNonPartials { get; set; }
     public bool HideUnaffordable { get; set; }
     public bool HideUnready { get; set; }
