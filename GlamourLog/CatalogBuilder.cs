@@ -79,12 +79,13 @@ internal static unsafe class CatalogBuilder {
                 continue;
 
             var items = new ReadOnlyCollection<uint>([itemId]);
+            var isUnobtainable = UnobtainableService.Get().Apply(false, items);
             entries.Add(new GlamourSet {
                 ItemId = itemId,
                 Name = name,
                 Items = items,
                 CategoryName = bucketName,
-                IsUnobtainable = false,
+                IsUnobtainable = isUnobtainable,
                 BaseIsUnobtainable = false,
                 ItemLevel = row.LevelItem.RowId,
                 PatchNo = itemSheet.GetItemPatch(itemId),
@@ -117,7 +118,7 @@ internal static unsafe class CatalogBuilder {
                 Name = s.Name,
                 Items = s.Items,
                 CategoryName = s.CategoryName,
-                IsUnobtainable = !s.NonSetCabinetPiece && unobtainable.Apply(s.BaseIsUnobtainable, s.Items),
+                IsUnobtainable = unobtainable.Apply(s.BaseIsUnobtainable, s.Items),
                 BaseIsUnobtainable = s.BaseIsUnobtainable,
                 ItemLevel = s.ItemLevel,
                 PatchNo = s.PatchNo,
