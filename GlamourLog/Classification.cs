@@ -1,5 +1,5 @@
-using AllaganLib.GameSheets.Caches;
 using AllaganLib.GameSheets.ItemSources;
+using GlamourLog.Services;
 
 namespace GlamourLog;
 
@@ -87,14 +87,15 @@ internal sealed class LateTabBundleRule(OutfitCategory owner) : IGlamourCategory
     }
 
     private static bool MatchesSourcePredicates(uint itemId, CategoryDiscriminator d, bool checkQuest, bool checkTerritory) {
-        if (Svc.SheetManager.ItemInfoCache.GetItemSources(itemId) is not { Count: > 0 } list)
+        var list = ItemAcquisitionService.Get().GetSources(itemId);
+        if (list.Count == 0)
             return false;
         foreach (var src in list) {
             if (checkQuest && src is ItemQuestSource qs && !IsOptionalQuestReward(qs, itemId) && MatchesQuestJournal(qs, d.QuestJournalMatches))
                 return true;
             // gear comes from coffer, check the coffer's quest source e.g. welkin attire -> welkin attire coffer -> from job quest
             // sometimes allagan lib has the source as loot. I have no idea why
-            if (checkQuest && src is ItemSupplementSource { Type: ItemInfoType.Loot or ItemInfoType.Coffer, CostItem.RowId: var cofferId and not 0 } && MatchesQuestSourcesOnItem(cofferId, d.QuestJournalMatches))
+            if (checkQuest && ItemAcquisitionService.TryGetAttireCofferItemId(src) is { } cofferId && MatchesQuestSourcesOnItem(cofferId, d.QuestJournalMatches))
                 return true;
             if (checkTerritory && src.MapIds is { Count: > 0 } mapIds) {
                 foreach (var mapId in mapIds) {
@@ -107,9 +108,7 @@ internal sealed class LateTabBundleRule(OutfitCategory owner) : IGlamourCategory
     }
 
     private static bool MatchesQuestSourcesOnItem(uint itemId, List<QuestJournalMatch> matches) {
-        if (Svc.SheetManager.ItemInfoCache.GetItemSources(itemId) is not { Count: > 0 } list)
-            return false;
-        foreach (var src in list) {
+        foreach (var src in ItemAcquisitionService.Get().GetSources(itemId)) {
             if (src is ItemQuestSource qs && !IsOptionalQuestReward(qs, itemId) && MatchesQuestJournal(qs, matches))
                 return true;
         }

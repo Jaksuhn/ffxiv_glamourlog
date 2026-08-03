@@ -214,7 +214,13 @@ internal sealed class RepurchaseIndex {
 
     // items that themselves are not quest-gated, but are sold for seasonal currencies
     private static PieceResult? EvaluateSeasonalShopSources(uint itemId) {
-        if (Svc.SheetManager.ItemInfoCache.GetItemSources(itemId) is not { Count: > 0 } sources)
+        var acquisition = ItemAcquisitionService.Get();
+        var sources = acquisition.GetSources(itemId);
+        if (sources.Count == 0)
+            return null;
+
+        // ignore in this case or else you get stuff like mogtome dungeon gear flagged as unobtainable when the seasonal shop closes
+        if (acquisition.HasDutyOrCraftSource(itemId))
             return null;
 
         var sawSeasonal = false;
@@ -381,10 +387,8 @@ internal sealed class RepurchaseIndex {
     }
 
     private static void CollectQuestIdsFromCurrencyItem(uint costItemId, List<uint> questIds) {
-        if (Svc.SheetManager.ItemInfoCache.GetItemSources(costItemId) is not { Count: > 0 } sources)
-            return;
         var seen = new HashSet<uint>(questIds);
-        foreach (var src in sources) {
+        foreach (var src in ItemAcquisitionService.Get().GetSources(costItemId)) {
             if (src is not ItemQuestSource { Quest.RowId: var questId and not 0 })
                 continue;
             if (seen.Add(questId))

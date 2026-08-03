@@ -52,11 +52,11 @@ internal static class SourcesPanelBuilder {
         if (scope.Count == 0)
             return sections;
 
-        var cache = Svc.SheetManager.ItemInfoCache;
+        var acquisition = ItemAcquisitionService.Get();
         var sourcesByPiece = new Dictionary<uint, List<ItemSource>>();
         foreach (var itemId in scope) {
-            var list = cache.GetItemSources(itemId);
-            if (list is { Count: > 0 })
+            var list = acquisition.GetSources(itemId);
+            if (list.Count > 0)
                 sourcesByPiece[itemId] = [.. list];
         }
 
@@ -154,9 +154,7 @@ internal static class SourcesPanelBuilder {
     }
 
     private static string DutyName(uint cfcId)
-        => ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true, Value.NameFormatted: var n }
-            ? n.ToString()
-            : string.Empty;
+        => ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true, Value.NameFormatted: var n } ? n.ToString() : string.Empty;
 
     private sealed class DutyBuckets {
         internal HashSet<uint> General { get; } = [];
@@ -213,21 +211,15 @@ internal static class SourcesPanelBuilder {
     }
 
     // first in-world npc shop that sells a set piece for this currency (map pin). mog station text if it's cash-shop only
-    internal static (SourceNavigateTarget? NavigateTarget, string VendorTooltip, string NpcName, string ShopName) FindVendorForCurrency(
-        CatalogService catalog,
-        GlamourSet set,
-        uint? costScopePieceItemId,
-        uint currencyItemId) {
+    internal static (SourceNavigateTarget? NavigateTarget, string VendorTooltip, string NpcName, string ShopName) FindVendorForCurrency(CatalogService catalog, GlamourSet set, uint? costScopePieceItemId, uint currencyItemId) {
         var cat = catalog.GetCategoryForPreferredCost(set);
-        var cache = Svc.SheetManager.ItemInfoCache;
+        var acquisition = ItemAcquisitionService.Get();
         IEnumerable<uint> pieceIds = costScopePieceItemId is { } only ? [only] : set.Items;
 
         foreach (var pieceId in pieceIds) {
             if (!catalog.GetPrimaryItemCosts(pieceId, cat).Any(c => c.ItemId == currencyItemId))
                 continue;
-            if (cache.GetItemSources(pieceId) is not { Count: > 0 } list)
-                continue;
-            foreach (var src in list) {
+            foreach (var src in acquisition.GetSources(pieceId)) {
                 if (src is not ItemShopSource shopSource || !shopSource.Type.IsShop())
                     continue;
                 var shop = shopSource.Shop;
@@ -248,9 +240,7 @@ internal static class SourcesPanelBuilder {
         foreach (var pieceId in pieceIds) {
             if (!catalog.GetPrimaryItemCosts(pieceId, cat).Any(c => c.ItemId == currencyItemId))
                 continue;
-            if (cache.GetItemSources(pieceId) is not { Count: > 0 } list)
-                continue;
-            if (list.Any(static s => s is ItemCashShopSource)) {
+            if (acquisition.GetSources(pieceId).Any(static s => s is ItemCashShopSource)) {
                 var cashShop = FormatShopTypeLabel(ItemInfoType.CashShop);
                 return (null, $"Mog Station\n{cashShop}", "Mog Station", cashShop);
             }

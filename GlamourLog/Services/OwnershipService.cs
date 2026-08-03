@@ -1,4 +1,3 @@
-using AllaganLib.GameSheets.ItemSources;
 using Dalamud.Game.Inventory.InventoryEventArgTypes;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -244,16 +243,14 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
             return false;
 
         var q = Query();
-        var cache = Svc.SheetManager.ItemInfoCache;
+        var acquisition = ItemAcquisitionService.Get();
         var any = false;
         foreach (var set in catalog.GlamourSets) {
             var status = q.For(set);
             foreach (var pieceId in set.Items) {
                 if (pieceId == 0)
                     continue;
-                if (cache.GetItemSources(pieceId) is not { Count: > 0 } list)
-                    continue;
-                if (!list.Any(src => IsSourceFromDuty(cfcId, src)))
+                if (!acquisition.GetSources(pieceId).Any(src => ItemAcquisitionService.IsSourceFromCfc(src, cfcId)))
                     continue;
                 any = true;
                 if (status.Piece(pieceId) is not { IsOwned: true })
@@ -262,10 +259,6 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
         }
         return any;
     }
-
-    private static bool IsSourceFromDuty(uint cfcId, ItemSource src)
-        => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId
-            || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId;
 
     internal bool IsItemInDresser(uint itemId) {
         var q = Query();

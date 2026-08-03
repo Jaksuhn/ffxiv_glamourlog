@@ -1,4 +1,3 @@
-using AllaganLib.GameSheets.ItemSources;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
@@ -70,19 +69,13 @@ internal sealed class IpcProvider : IPluginService, IDisposable {
     private static bool IsSetComplete(uint setItemId)
         => OwnershipService.Get().IsSetComplete(setItemId);
 
-    private static bool IsSourceFromDuty(uint cfcId, ItemSource src)
-        => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId
-            || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId;
-
     private static List<uint> GetItemsFromContent(uint cfcId) {
         if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true })
             return [];
-        var cache = Svc.SheetManager.ItemInfoCache;
+        var acquisition = ItemAcquisitionService.Get();
         var result = new HashSet<uint>();
         foreach (var row in Item.Where(i => i.RowId > 0)) {
-            if (cache.GetItemSources(row.RowId) is not { Count: > 0 } list)
-                continue;
-            if (list.Any(src => IsSourceFromDuty(cfcId, src)))
+            if (acquisition.GetSources(row.RowId).Any(src => ItemAcquisitionService.IsSourceFromCfc(src, cfcId)))
                 result.Add(row.RowId);
         }
         return [.. result.OrderBy(x => x)];
