@@ -37,8 +37,23 @@ internal sealed class OwnershipQuery {
         return status;
     }
 
-    internal int CountCompleteIn(IEnumerable<GlamourSet> sets)
-        => sets.Count(s => For(s).IsComplete);
+    internal CompletionCounts CountCompletions(IEnumerable<GlamourSet> sets) {
+        var ownedObtainable = 0;
+        var totalObtainable = 0;
+        var ownedUnobtainable = 0;
+        foreach (var set in sets) {
+            var complete = For(set).IsComplete;
+            if (set.IsUnobtainable) {
+                if (complete)
+                    ownedUnobtainable++;
+                continue;
+            }
+            totalObtainable++;
+            if (complete)
+                ownedObtainable++;
+        }
+        return new CompletionCounts(ownedObtainable, totalObtainable, ownedUnobtainable);
+    }
 
     // with a set: only counts as outfit-slot if it's in that set's outfit. without: any mirage outfit counts
     internal PieceLocation Locate(uint itemId, GlamourSet? set = null) {

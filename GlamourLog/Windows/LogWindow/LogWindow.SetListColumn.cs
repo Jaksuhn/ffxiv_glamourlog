@@ -18,12 +18,11 @@ internal unsafe partial class LogWindow {
             return;
         }
 
-        // unobtainable complete sets count toward owned but not the total (allows overcap e.g. 51/50)
         var mirageCatalogSets = CatalogService.Get().GlamourSets.Where(s => !s.NonSetCabinetPiece).ToList();
-        var ownedMirageSets = mirageCatalogSets.Where(s => q.For(s).IsComplete).ToList();
-        var totalMirageSets = mirageCatalogSets.Count(s => !s.IsUnobtainable);
-        _statsSetsLine.String = $"{ownedMirageSets.Count} / {totalMirageSets}";
-        _statsSpaceLine.String = $"{ownedMirageSets.Sum(x => x.Items.Count - 1)}";
+        var counts = q.CountCompletions(mirageCatalogSets);
+        _statsSetsLine.String = $"{counts.OwnedObtainable} / {counts.TotalObtainable}";
+        // dresser space saved still includes every complete outfit (obtainable or not)
+        _statsSpaceLine.String = $"{mirageCatalogSets.Where(s => q.For(s).IsComplete).Sum(x => x.Items.Count - 1)}";
 
         _categoryColumn?.UpdateButtonStates(_selectedCategoryId, CategoryRows, q);
 

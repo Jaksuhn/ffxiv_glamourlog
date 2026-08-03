@@ -54,6 +54,8 @@ internal sealed class PieceStatus {
     internal bool IsStored => Location is PieceLocation.Armoire or PieceLocation.LooseDresser or PieceLocation.OutfitSlot;
 }
 
+internal readonly record struct CompletionCounts(int OwnedObtainable, int TotalObtainable, int OwnedUnobtainable);
+
 // completion/storage badges for a set in a given snapshot
 internal sealed class SetStatus {
     internal required GlamourSet Set { get; init; }
