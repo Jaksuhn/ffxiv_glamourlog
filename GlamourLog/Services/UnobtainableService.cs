@@ -127,56 +127,53 @@ internal sealed class RepurchaseIndex {
 
     // null = leave ClassifyResult alone; true/false = force IsUnobtainable
     public unsafe bool? EvaluateSetUnobtainable(IReadOnlyList<uint> itemIds) {
-        var sawListing = false;
-        var deferred = false;
-        var locked = false;
-        var sawSeasonalShop = false;
-        var seasonalShopLocked = false;
+        PieceResult? repurchase = null;
+        PieceResult? seasonal = null;
         var achievementsLoaded = CSAchievement.Instance()->IsLoaded();
 
         foreach (var itemId in itemIds) {
-            if (_byItemId.TryGetValue(itemId, out var listings) && listings.Length > 0) {
-                sawListing = true;
-                switch (EvaluatePiece(listings, achievementsLoaded)) {
-                    case PieceResult.Obtainable:
-                        break;
-                    case PieceResult.Deferred:
-                        deferred = true;
-                        break;
-                    case PieceResult.Unobtainable:
-                        locked = true;
-                        break;
-                }
-            }
+            if (_byItemId.TryGetValue(itemId, out var listings) && listings.Length > 0)
+                repurchase = FoldWorse(repurchase, EvaluatePiece(listings, achievementsLoaded));
 
             // event vendors (e.g. Dreamer) aren't on recompense; gate via shop festival / seasonal cost currencies
-            switch (EvaluateSeasonalShopSources(itemId)) {
-                case PieceResult.Obtainable:
-                    sawSeasonalShop = true;
-                    break;
-                case PieceResult.Unobtainable:
-                    sawSeasonalShop = true;
-                    seasonalShopLocked = true;
-                    break;
-            }
+            seasonal = FoldWorse(seasonal, EvaluateSeasonalShopSources(itemId));
         }
 
-        if (deferred)
+        if (repurchase is PieceResult.Deferred)
             return null;
-        if (sawListing)
-            return locked;
-        if (sawSeasonalShop)
-            return seasonalShopLocked;
+        if (repurchase is { } r)
+            return r == PieceResult.Unobtainable;
+        if (seasonal is { } s)
+            return s == PieceResult.Unobtainable;
         return null;
     }
 
     private enum PieceResult : byte { Obtainable, Unobtainable, Deferred }
 
+    // deferred > unobtainable > obtainable; null = nothing yet
+    private static PieceResult? FoldWorse(PieceResult? acc, PieceResult? next) {
+        if (next is null)
+            return acc;
+        if (acc is null)
+            return next;
+        if (acc is PieceResult.Deferred || next is PieceResult.Deferred)
+            return PieceResult.Deferred;
+        if (acc is PieceResult.Unobtainable || next is PieceResult.Unobtainable)
+            return PieceResult.Unobtainable;
+        return PieceResult.Obtainable;
+    }
+
+    [Flags]
+    private enum LockedListingFlags : byte {
+        None = 0,
+        Locked = 1,
+        FestivalActive = 2,
+        AlwaysAvailableQuest = 4,
+        DeferredAchievement = 8,
+    }
+
     private static PieceResult EvaluatePiece(ImmutableArray<RepurchaseListing> listings, bool achievementsLoaded) {
-        var needsAchievement = false;
-        var anyFestivalActive = false;
-        var hasAlwaysAvailableQuest = false;
-        var hasLockedSeasonalOrAchievement = false;
+        var locked = LockedListingFlags.None;
 
         foreach (var listing in listings) {
             if (!listing.HasGates)
@@ -186,30 +183,25 @@ internal sealed class RepurchaseIndex {
                 return PieceResult.Obtainable;
 
             if (deferredAch)
-                needsAchievement = true;
+                locked |= LockedListingFlags.DeferredAchievement;
 
             if (listing.FestivalRefs.Length > 0) {
-                if (IsAnyFestivalActive(listing.FestivalRefs))
-                    anyFestivalActive = true;
-                else
-                    hasLockedSeasonalOrAchievement = true;
+                locked |= IsAnyFestivalActive(listing.FestivalRefs) ? LockedListingFlags.FestivalActive : LockedListingFlags.Locked;
             }
             else if (listing.AchievementId != 0) {
-                // achievements are loaded and they're incomplete
                 if (!deferredAch)
-                    hasLockedSeasonalOrAchievement = true;
+                    locked |= LockedListingFlags.Locked; // achievements are loaded and they're incomplete
             }
             else if (listing.QuestIds.Length > 0) {
-                // festival == 0 should be non-seasonal quests
-                hasAlwaysAvailableQuest = true;
+                locked |= LockedListingFlags.AlwaysAvailableQuest; // festival == 0 should be non-seasonal quests
             }
         }
 
-        if (needsAchievement)
+        if (locked.HasFlag(LockedListingFlags.DeferredAchievement))
             return PieceResult.Deferred;
-        if (anyFestivalActive || hasAlwaysAvailableQuest)
+        if (locked.HasFlag(LockedListingFlags.FestivalActive) || locked.HasFlag(LockedListingFlags.AlwaysAvailableQuest))
             return PieceResult.Obtainable;
-        return hasLockedSeasonalOrAchievement ? PieceResult.Unobtainable : PieceResult.Obtainable;
+        return locked.HasFlag(LockedListingFlags.Locked) ? PieceResult.Unobtainable : PieceResult.Obtainable;
     }
 
     // items that themselves are not quest-gated, but are sold for seasonal currencies
@@ -223,22 +215,16 @@ internal sealed class RepurchaseIndex {
         if (acquisition.HasDutyOrCraftSource(itemId))
             return null;
 
-        var sawSeasonal = false;
-        var anyActive = false;
-        foreach (var src in sources) {
-            if (src is not ItemSpecialShopSource shopSrc)
-                continue;
-            var festivals = CollectSeasonalFestivalRefs(shopSrc);
-            if (festivals.Length == 0)
-                continue;
-            sawSeasonal = true;
-            if (IsAnyFestivalActive(festivals))
-                anyActive = true;
-        }
-
-        if (!sawSeasonal)
+        var festivalGroups = sources.OfType<ItemSpecialShopSource>().Select(CollectSeasonalFestivalRefs).ToArray();
+        // don't mark as unobtainable if any of the seasonal shop sources are empty
+        if (festivalGroups.Any(f => f.Length == 0))
             return null;
-        return anyActive ? PieceResult.Obtainable : PieceResult.Unobtainable;
+
+        var seasonal = festivalGroups.Where(f => f.Length > 0).ToArray();
+        if (seasonal.Length == 0)
+            return null;
+
+        return seasonal.Any(IsAnyFestivalActive) ? PieceResult.Obtainable : PieceResult.Unobtainable;
     }
 
     private static ImmutableArray<FestivalRef> CollectSeasonalFestivalRefs(ItemSpecialShopSource shopSrc) {
