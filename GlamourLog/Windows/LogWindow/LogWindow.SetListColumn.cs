@@ -18,10 +18,11 @@ internal unsafe partial class LogWindow {
             return;
         }
 
+        // unobtainable complete sets count toward owned but not the total (allows overcap e.g. 51/50)
         var mirageCatalogSets = CatalogService.Get().GlamourSets.Where(s => !s.NonSetCabinetPiece).ToList();
         var ownedMirageSets = mirageCatalogSets.Where(s => q.For(s).IsComplete).ToList();
-        var totalObtainable = mirageCatalogSets.Count(x => !x.IsUnobtainable || q.For(x).IsComplete);
-        _statsSetsLine.String = $"{ownedMirageSets.Count} / {totalObtainable}";
+        var totalMirageSets = mirageCatalogSets.Count(s => !s.IsUnobtainable);
+        _statsSetsLine.String = $"{ownedMirageSets.Count} / {totalMirageSets}";
         _statsSpaceLine.String = $"{ownedMirageSets.Sum(x => x.Items.Count - 1)}";
 
         _categoryColumn?.UpdateButtonStates(_selectedCategoryId, CategoryRows, q);
@@ -132,6 +133,7 @@ internal unsafe partial class LogWindow {
             Title = set.Name,
             Subtitle = subtitle,
             IsOwned = status.IsComplete,
+            IsUnobtainable = set.IsUnobtainable,
             ShowStorage = status.Storage is SetStorageState.Dresser or SetStorageState.Armoire,
             ShowArmoireWarning = status.ArmoireMisplaced,
             StorageIconPart = status.Storage == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,
@@ -183,6 +185,7 @@ internal unsafe partial class LogWindow {
             Title = Item.GetRow(itemId).Name.ToString(),
             Subtitle = subtitle,
             IsOwned = ownedInStorage,
+            IsUnobtainable = set.IsUnobtainable,
             ShowStorage = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose or ItemStorageState.Armoire,
             ShowArmoireWarning = piece?.ShowArmoireWarning ?? false,
             StorageIconPart = iconPart,

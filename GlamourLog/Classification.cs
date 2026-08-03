@@ -129,10 +129,10 @@ internal sealed class LateTabBundleRule(OutfitCategory owner) : IGlamourCategory
 internal sealed class OutfitCategory(string name, int uiPriority) {
     public string Name { get; } = name; // ui label
     public int UiPriority { get; } = uiPriority; // sort order ascending
-    public bool IsSyntheticBucket { get; init; } // this is for non-rule matched buckets like unsorted, misc armoire and unobtainable
+    public bool IsSyntheticBucket { get; init; } // this is for non-rule matched buckets like unsorted and misc armoire
     public List<IGlamourCategoryRule> Rules { get; } = []; // defines which sets land here
     public CategoryDiscriminator Discriminator { get; } = new();
 }
 
-// null name = didn't match a rule therefore it's either unsorted or unobtainable
+// null name = didn't match a rule therefore it's unsorted (and may still be marked unobtainable)
 internal readonly record struct ClassifyResult(string? CategoryName, bool IsUnobtainable);

@@ -116,7 +116,10 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
             btn.Selected = categoryId == selectedCategoryId;
             if (countByButton.TryGetValue(btn, out var countNode)) {
                 var cr = categoryRows(categoryId);
-                countNode.String = $"{q.CountCompleteIn(cr)}/{cr.Count}";
+                // unobtainable can still count as owned, but they don't increase the total
+                var owned = q.CountCompleteIn(cr);
+                var total = cr.Count(s => !s.IsUnobtainable);
+                countNode.String = $"{owned}/{total}";
             }
         }
         SyncCountLayouts();

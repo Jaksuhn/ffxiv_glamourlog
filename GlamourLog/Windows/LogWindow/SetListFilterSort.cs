@@ -17,6 +17,9 @@ internal static class SetListFilterSort {
         if (C.HideIncompatible)
             rows = [.. rows.Where(r => !r.IsIncompatible)];
 
+        if (C.HideUnobtainable)
+            rows = [.. rows.Where(r => !r.IsUnobtainable || q.For(r).IsComplete)];
+
         if (C.HideSharedModels)
             rows = HideSharedModelSets(rows, q);
 

@@ -7,6 +7,7 @@ using TerritoryIntendedUseEnum = FFXIVClientStructs.FFXIV.Client.Enums.Territory
 namespace GlamourLog;
 
 internal sealed class Catalog {
+    // these are all pre-pvp series pvp sets
     private static readonly ImmutableHashSet<uint> UnobtainableMirageRowIds = new HashSet<uint> { 45320, 45248, 45247, 45306, 45340, 45289, 45339, 45222, 45330, 45223, 45424, 45423 }.ToImmutableHashSet();
 
     public IReadOnlyList<OutfitCategory> UITabsInOrder { get; }
@@ -15,7 +16,6 @@ internal sealed class Catalog {
     public OutfitCategory DungeonChest { get; }
     public OutfitCategory UncategorizedBucket { get; }
     public OutfitCategory MiscArmoireBucket { get; }
-    public OutfitCategory UnobtainableBucket { get; }
 
     private Catalog(
         IReadOnlyList<OutfitCategory> uiTabsInOrder,
@@ -23,15 +23,13 @@ internal sealed class Catalog {
         OutfitCategory pvpSeriesAttire,
         OutfitCategory dungeonChest,
         OutfitCategory uncategorizedBucket,
-        OutfitCategory miscArmoireBucket,
-        OutfitCategory unobtainableBucket) {
+        OutfitCategory miscArmoireBucket) {
         UITabsInOrder = uiTabsInOrder;
         ClassifiableCategories = classifiableCategories;
         PvpSeriesAttire = pvpSeriesAttire;
         DungeonChest = dungeonChest;
         UncategorizedBucket = uncategorizedBucket;
         MiscArmoireBucket = miscArmoireBucket;
-        UnobtainableBucket = unobtainableBucket;
     }
 
     internal static HashSet<uint> BuildCurrencyIdsFromCfcSupplemental<T>(string resourceName, Func<T, uint> itemIdSelector, Func<T, uint> cfcIdSelector, Func<T, bool>? rowFilter, params uint[] allowedContentTypes) where T : ICsv, new()
@@ -90,19 +88,23 @@ internal sealed class Catalog {
             if (!row.AttireItems.ContainsAll(itemIds)) continue;
             if (row.RowId == clientPvpSeries)
                 return new ClassifyResult(PvpSeriesAttire.Name, false);
-            var hasCosts = itemIds.Any(Svc.Items.HasAnyCosts);
-            if (!hasCosts)
-                return new ClassifyResult(null, true); // old series gear with no listed cost = unobtainable
+            // retired series with no shop costs — keep under PvP, mark unobtainable
+            if (!itemIds.Any(Svc.Items.HasAnyCosts))
+                return new ClassifyResult(PvpSeriesAttire.Name, true);
             if (ClassifyFromRules(ctx) is { } fromPvp)
                 return new ClassifyResult(fromPvp, false);
+            return new ClassifyResult(PvpSeriesAttire.Name, false);
         }
         if (ClassifyFromRules(ctx) is { } cat)
             return new ClassifyResult(cat, false);
-        return new ClassifyResult(null, UnobtainableMirageRowIds.Contains(mirageRow.RowId));
+        // pre-series PvP attire (before Series rewards existed)
+        if (UnobtainableMirageRowIds.Contains(mirageRow.RowId))
+            return new ClassifyResult(PvpSeriesAttire.Name, true);
+        return new ClassifyResult(null, false);
     }
 
-    public string GetDisplayCategoryName(ClassifyResult r)
-        => r.IsUnobtainable ? UnobtainableBucket.Name : (r.CategoryName ?? UncategorizedBucket.Name);
+    public string GetDisplayCategoryName(string? categoryName)
+        => categoryName ?? UncategorizedBucket.Name;
 
     // keep all-armoire sets if they still cost a dungeon chest piece (otherwise they'd vanish from the log)
     public bool IncludeAfterArmoireFilter(IReadOnlyList<uint> items, HashSet<uint> armoireItems) {
@@ -118,12 +120,11 @@ internal sealed class Catalog {
     internal static Catalog CreateEmptyStub() {
         var uncategorized = new OutfitCategory("Unsorted", int.MinValue) { IsSyntheticBucket = true };
         var miscArmoire = new OutfitCategory("Misc Armoire", 17) { IsSyntheticBucket = true };
-        var unobtainableBucket = new OutfitCategory("Unobtainable", int.MaxValue) { IsSyntheticBucket = true };
         var pvp = new OutfitCategory("PvP", 1);
         var dungeons = new OutfitCategory("Dungeons", 8);
         OutfitCategory[] classifiable = [];
-        var uiTabs = new List<OutfitCategory> { uncategorized, miscArmoire, unobtainableBucket };
-        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire, unobtainableBucket);
+        var uiTabs = new List<OutfitCategory> { uncategorized, miscArmoire };
+        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire);
     }
 
     // tradecraftCurrencyItemIds must be resolved via CurrencyManager after login. It's not populated before
@@ -231,7 +232,6 @@ internal sealed class Catalog {
 
         var uncategorized = new OutfitCategory("Unsorted", int.MinValue) { IsSyntheticBucket = true };
         var miscArmoire = new OutfitCategory("Misc Armoire", 17) { IsSyntheticBucket = true };
-        var unobtainableBucket = new OutfitCategory("Unobtainable", int.MaxValue) { IsSyntheticBucket = true };
 
         OutfitCategory[] classifiable = [
             goldSaucer, pvp, tribes, jobGear, island, gil, tradecraft, forays,
@@ -241,9 +241,8 @@ internal sealed class Catalog {
         var uiTabs = new List<OutfitCategory> { uncategorized };
         uiTabs.AddRange(classifiable);
         uiTabs.Add(miscArmoire);
-        uiTabs.Add(unobtainableBucket);
 
-        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire, unobtainableBucket);
+        return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire);
     }
 
     public static Dictionary<uint, SpecialShop> BuildSpecialShopByReceiveItemId()

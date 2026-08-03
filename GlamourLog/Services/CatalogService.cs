@@ -131,7 +131,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
 
     private void RebuildCategoryMapUnlocked() {
         GlamourSetsByCategory.Clear();
-        foreach (var group in GlamourSets.GroupBy(s => _catalog.GetDisplayCategoryName(new ClassifyResult(s.CategoryName, s.IsUnobtainable))))
+        foreach (var group in GlamourSets.GroupBy(s => _catalog.GetDisplayCategoryName(s.CategoryName)))
             GlamourSetsByCategory[group.Key] = [.. group];
     }
 
@@ -145,16 +145,14 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     internal IReadOnlyList<OutfitCategory> OutfitCategories => _catalog.ClassifiableCategories; // excludes synthetic (non rule-matched) categories
     internal OutfitCategory UncategorizedTab => _catalog.UncategorizedBucket;
     internal OutfitCategory MiscArmoireTab => _catalog.MiscArmoireBucket;
-    internal OutfitCategory UnobtainableTab => _catalog.UnobtainableBucket;
 
     // synthetic tabs don't have a preferred currency to pin costs to
     internal string? GetCategoryForPreferredCost(GlamourSet set) {
-        if (set.IsUnobtainable || set.CategoryName is null)
+        if (set.CategoryName is null)
             return null;
         lock (_glamourDataLock) {
             if (set.CategoryName == _catalog.UncategorizedBucket.Name
                 || set.CategoryName == _catalog.MiscArmoireBucket.Name
-                || set.CategoryName == _catalog.UnobtainableBucket.Name
                 || set.NonSetCabinetPiece)
                 return null;
             return set.CategoryName;
@@ -263,7 +261,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
 
     internal string GetCategoryBucketKey(GlamourSet set) {
         lock (_glamourDataLock)
-            return _catalog.GetDisplayCategoryName(new ClassifyResult(set.CategoryName, set.IsUnobtainable));
+            return _catalog.GetDisplayCategoryName(set.CategoryName);
     }
 
     private HashSet<uint> BuildAllPrimaryCostCurrencyIds() {

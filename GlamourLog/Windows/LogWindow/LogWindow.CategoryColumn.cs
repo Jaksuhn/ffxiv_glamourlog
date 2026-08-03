@@ -8,7 +8,6 @@ internal partial class LogWindow {
         foreach (var (category, _) in CatalogService.Get().OutfitCategories.Select((c, ix) => (c, ix)).OrderBy(x => x.c.UiPriority).ThenBy(x => x.ix))
             r.Add(category.Name);
         r.Add(CatalogService.Get().MiscArmoireTab.Name);
-        r.Add(CatalogService.Get().UnobtainableTab.Name);
         return r;
     }
 

@@ -16,6 +16,7 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
     private readonly float _iconSize;
 
     public FramedItemIconNode Icon { get; }
+    public UnobtainableBadgeNode UnobtainableBadge { get; }
     public CheckMarkBadgeNode CheckBadge { get; }
     public TextNode Title { get; }
     public TextNode Subtitle { get; }
@@ -27,18 +28,23 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
         _iconLeftMargin = iconLeftMargin;
 
         Icon = new FramedItemIconNode(iconSize);
+        UnobtainableBadge = new UnobtainableBadgeNode();
         CheckBadge = new CheckMarkBadgeNode();
         Title = CreateTitleNode(titleColor);
         Subtitle = CreateSubtitleNode();
 
-        foreach (var child in (NodeBase[])[Icon, CheckBadge, Title, Subtitle])
-            child.AttachNode(this);
+        Icon.AttachNode(this);
+        UnobtainableBadge.AttachNode(this);
+        CheckBadge.AttachNode(this);
+        Title.AttachNode(this);
+        Subtitle.AttachNode(this);
     }
 
     public void Relayout(float width, float height, float textRightMargin, float textReserve = 0f) {
         var iconY = (height - _iconSize) * 0.5f;
         Icon.Position = new Vector2(_iconLeftMargin, iconY);
         Icon.Size = new Vector2(_iconSize, _iconSize);
+        UnobtainableBadge.LayoutOverIcon(Icon.Position, Icon.Size);
         CheckBadge.Position = new Vector2(_iconLeftMargin + _iconSize - CheckBadge.Size.X - 4f, iconY + _iconSize - CheckBadge.Size.Y);
 
         var textW = Math.Max(0f, width - TextX - textRightMargin - textReserve);

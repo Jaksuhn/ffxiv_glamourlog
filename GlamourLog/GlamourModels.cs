@@ -5,7 +5,7 @@ namespace GlamourLog;
 internal sealed class GlamourSet {
     public required uint ItemId { get; init; }
     public required string Name { get; init; } // display name
-    public required string? CategoryName { get; init; } // when null it's either unsorted or unobtainable
+    public required string? CategoryName { get; init; } // when null it's unsorted
     public required bool IsUnobtainable { get; init; }
     internal bool BaseIsUnobtainable { get; init; } // result before UnobtainableService runs and checks quest/achievement completion
     public required IReadOnlyList<uint> Items { get; init; }
