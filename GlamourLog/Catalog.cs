@@ -2,6 +2,7 @@ using Dalamud.Game;
 using LuminaSupplemental.Excel.Model;
 using LuminaSupplemental.Excel.Services;
 using System.Collections.Immutable;
+using TerritoryIntendedUseEnum = FFXIVClientStructs.FFXIV.Client.Enums.TerritoryIntendedUse;
 
 namespace GlamourLog;
 
@@ -132,7 +133,7 @@ internal sealed class Catalog {
         static OutfitCategory Cat(string name, int uiP) => new(name, uiP);
 
         var goldSaucer = Cat("Gold Saucer", 0);
-        goldSaucer.Discriminator.LateCostCurrencyItemIds.AddRange([29, 41629]); // mgp, mgf
+        goldSaucer.Discriminator.TerritoryIntendedUseIds.AddRange([(uint)TerritoryIntendedUseEnum.GoldSaucer, (uint)TerritoryIntendedUseEnum.Blunderville]);
         goldSaucer.Rules.Add(new LateTabBundleRule(goldSaucer));
 
         var pvp = Cat("PvP", 1);
@@ -141,10 +142,15 @@ internal sealed class Catalog {
 
         var tribes = Cat("Tribes", 2);
         tribes.Discriminator.LateCostCurrencyItemIds.AddRange(BeastTribe.Where(r => r.CurrencyItem.RowId != 0).Select(r => r.CurrencyItem.RowId));
+        tribes.Discriminator.QuestJournalMatches.AddRange([
+            new(QuestJournalKind.JournalSection, 4), // Allied Society Quests (ARR–EW)
+            new(QuestJournalKind.JournalSection, 5), // Allied Society Quests (Dawntrail)
+        ]);
         tribes.Rules.Add(new LateTabBundleRule(tribes));
 
         var jobGear = Cat("Job Gear", 5);
         jobGear.Discriminator.SpecialShopPredicate = shop => shop.UseCurrencyType == 8 && shop.Quest.RowId > 0;
+        jobGear.Discriminator.QuestJournalMatches.Add(new(QuestJournalKind.JournalSection, 6)); // Class & Job Quests
         jobGear.Rules.Add(new LateTabBundleRule(jobGear));
 
         var gil = Cat("Gil", 3);
@@ -156,13 +162,9 @@ internal sealed class Catalog {
         tradecraft.Discriminator.LateCostCurrencyItemIds.AddRange(tradecraftCurrencyItemIds);
         tradecraft.Rules.Add(new LateTabBundleRule(tradecraft));
 
-        var eureka = Cat("Eureka", 6);
-        eureka.Discriminator.LateCostCurrencyItemIds.AddRange([21801, 21803]); // protean crystals, anemos crystals
-        eureka.Rules.Add(new LateTabBundleRule(eureka));
-
-        var occultCrescent = Cat("Occult Crescent", 7);
-        occultCrescent.Discriminator.LateCostCurrencyItemIds.AddRange([45043, 45044]); // enlightenment silver/gold pieces
-        occultCrescent.Rules.Add(new LateTabBundleRule(occultCrescent));
+        var forays = Cat("Forays", 6);
+        forays.Discriminator.TerritoryIntendedUseIds.AddRange([(uint)TerritoryIntendedUseEnum.Eureka, (uint)TerritoryIntendedUseEnum.Bozja, (uint)TerritoryIntendedUseEnum.OccultCrescent]);
+        forays.Rules.Add(new LateTabBundleRule(forays));
 
         var dungeons = Cat("Dungeons", 8);
         dungeons.Discriminator.PieceOrCostItemIds = dungeonChestPieces;
@@ -214,7 +216,9 @@ internal sealed class Catalog {
         fates.Rules.Add(new LateTabBundleRule(fates));
 
         var island = Cat("Island Sanctuary", 14);
-        island.Discriminator.LateCostCurrencyItemIds.AddRange([37549, 37550]); // cowries
+        island.Discriminator.LateCostCurrencyItemIds.AddRange([37549, 37550, 41668]); // seafarer's/islander's cowries, felicitous token
+        island.Discriminator.TerritoryIntendedUseIds.Add((uint)TerritoryIntendedUseEnum.IslandSanctuary); // this does nothing since the vendors aren't actually in the island sanctuary territory
+        island.Discriminator.QuestJournalMatches.Add(new(QuestJournalKind.JournalGenre, 107)); // Island Sanctuary Quests
         island.Rules.Add(new LateTabBundleRule(island));
 
         var eternalBonding = Cat("Eternal Bonding", 15);
@@ -230,8 +234,8 @@ internal sealed class Catalog {
         var unobtainableBucket = new OutfitCategory("Unobtainable", int.MaxValue) { IsSyntheticBucket = true };
 
         OutfitCategory[] classifiable = [
-            goldSaucer, pvp, tribes, jobGear, gil, tradecraft, eureka, occultCrescent,
-            dungeons, raids, trials, vcDungeons, deepDungeons, fates, island, eternalBonding, mogstation,
+            goldSaucer, pvp, tribes, jobGear, island, gil, tradecraft, forays,
+            dungeons, raids, trials, vcDungeons, deepDungeons, fates, eternalBonding, mogstation,
         ];
 
         var uiTabs = new List<OutfitCategory> { uncategorized };
