@@ -1,3 +1,4 @@
+using AllaganLib.GameSheets.ItemSources;
 using AllaganLib.GameSheets.Sheets.Helpers;
 using Dalamud.Hooking;
 using FFXIVClientStructs.FFXIV.Client.Game;
@@ -76,7 +77,7 @@ internal sealed class RepurchaseListing {
     public required uint AchievementId { get; init; }
     public required ImmutableArray<FestivalRef> FestivalRefs { get; init; }
 
-    public bool HasGates => QuestIds.Length > 0 || AchievementId != 0;
+    public bool HasGates => QuestIds.Length > 0 || AchievementId != 0 || FestivalRefs.Length > 0;
 
     public unsafe bool IsUnlocked(bool achievementsLoaded, out bool deferredAchievement) {
         deferredAchievement = false;
@@ -84,13 +85,15 @@ internal sealed class RepurchaseListing {
             if (!QuestManager.IsQuestComplete(questId))
                 return false;
         }
-        if (AchievementId == 0)
-            return true;
-        if (!achievementsLoaded) {
-            deferredAchievement = true;
-            return false;
+        if (AchievementId != 0) {
+            if (!achievementsLoaded) {
+                deferredAchievement = true;
+                return false;
+            }
+            return CSAchievement.Instance()->IsComplete((int)AchievementId);
         }
-        return CSAchievement.Instance()->IsComplete((int)AchievementId);
+        // festival-only (e.g. event-currency shop costs): not unlocked via quest completion
+        return QuestIds.Length != 0 || FestivalRefs.Length != 0;
     }
 }
 
@@ -127,28 +130,44 @@ internal sealed class RepurchaseIndex {
         var sawListing = false;
         var deferred = false;
         var locked = false;
+        var sawSeasonalShop = false;
+        var seasonalShopLocked = false;
         var achievementsLoaded = CSAchievement.Instance()->IsLoaded();
 
         foreach (var itemId in itemIds) {
-            if (!_byItemId.TryGetValue(itemId, out var listings) || listings.Length == 0)
-                continue;
+            if (_byItemId.TryGetValue(itemId, out var listings) && listings.Length > 0) {
+                sawListing = true;
+                switch (EvaluatePiece(listings, achievementsLoaded)) {
+                    case PieceResult.Obtainable:
+                        break;
+                    case PieceResult.Deferred:
+                        deferred = true;
+                        break;
+                    case PieceResult.Unobtainable:
+                        locked = true;
+                        break;
+                }
+            }
 
-            sawListing = true;
-            switch (EvaluatePiece(listings, achievementsLoaded)) {
+            // event vendors (e.g. Dreamer) aren't on recompense; gate via shop festival / seasonal cost currencies
+            switch (EvaluateSeasonalShopSources(itemId)) {
                 case PieceResult.Obtainable:
-                    break;
-                case PieceResult.Deferred:
-                    deferred = true;
+                    sawSeasonalShop = true;
                     break;
                 case PieceResult.Unobtainable:
-                    locked = true;
+                    sawSeasonalShop = true;
+                    seasonalShopLocked = true;
                     break;
             }
         }
 
-        if (!sawListing || deferred)
+        if (deferred)
             return null;
-        return locked;
+        if (sawListing)
+            return locked;
+        if (sawSeasonalShop)
+            return seasonalShopLocked;
+        return null;
     }
 
     private enum PieceResult : byte { Obtainable, Unobtainable, Deferred }
@@ -191,6 +210,52 @@ internal sealed class RepurchaseIndex {
         if (anyFestivalActive || hasAlwaysAvailableQuest)
             return PieceResult.Obtainable;
         return hasLockedSeasonalOrAchievement ? PieceResult.Unobtainable : PieceResult.Obtainable;
+    }
+
+    // items that themselves are not quest-gated, but are sold for seasonal currencies
+    private static PieceResult? EvaluateSeasonalShopSources(uint itemId) {
+        if (Svc.SheetManager.ItemInfoCache.GetItemSources(itemId) is not { Count: > 0 } sources)
+            return null;
+
+        var sawSeasonal = false;
+        var anyActive = false;
+        foreach (var src in sources) {
+            if (src is not ItemSpecialShopSource shopSrc)
+                continue;
+            var festivals = CollectSeasonalFestivalRefs(shopSrc);
+            if (festivals.Length == 0)
+                continue;
+            sawSeasonal = true;
+            if (IsAnyFestivalActive(festivals))
+                anyActive = true;
+        }
+
+        if (!sawSeasonal)
+            return null;
+        return anyActive ? PieceResult.Obtainable : PieceResult.Unobtainable;
+    }
+
+    private static ImmutableArray<FestivalRef> CollectSeasonalFestivalRefs(ItemSpecialShopSource shopSrc) {
+        var seen = new HashSet<(ushort, byte, byte)>();
+        var result = new List<FestivalRef>();
+
+        void Add(FestivalRef f) {
+            if (f.FestivalId == 0 || !seen.Add((f.FestivalId, f.Begin, f.End)))
+                return;
+            result.Add(f);
+        }
+
+        foreach (var f in ResolveShopFestivalRefs(shopSrc.SpecialShop.Base))
+            Add(f);
+
+        foreach (var cost in shopSrc.CostItems) {
+            if (cost.ItemId == 0)
+                continue;
+            foreach (var f in ResolveFestivalRefsFromCurrencyItem(cost.ItemId))
+                Add(f);
+        }
+
+        return [.. result];
     }
 
     private static unsafe bool IsAnyFestivalActive(ImmutableArray<FestivalRef> refs) {
@@ -245,15 +310,25 @@ internal sealed class RepurchaseIndex {
             return;
 
         var shop = SpecialShop.GetRow(shopId);
+        var shopFestivals = ResolveShopFestivalRefs(shop);
         foreach (var entry in shop.Item) {
             var questId = entry.Quest.RowId;
             var achievementId = entry.AchievementUnlock.RowId;
-            // empty SpecialShop gates (e.g. Seasonal Event currency prizes) must not drive obtainability
-            if (questId == 0 && achievementId == 0)
-                continue;
+            ImmutableArray<uint> questIds;
+            ImmutableArray<FestivalRef> festivals;
 
-            var questIds = questId == 0 ? [] : ImmutableArray.Create(questId);
-            var festivals = ResolveFestivalRefs(questIds, achievementId);
+            if (questId == 0 && achievementId == 0) {
+                // empty entry gates: still index when the shop/cost currency is seasonal
+                // (skips true ungated currency-prize rows with no festival links)
+                festivals = MergeFestivalRefs(shopFestivals, ResolveFestivalRefsFromEntryCosts(entry));
+                if (festivals.Length == 0)
+                    continue;
+                questIds = [];
+            }
+            else {
+                questIds = questId == 0 ? [] : [questId];
+                festivals = MergeFestivalRefs(ResolveFestivalRefs(questIds, achievementId), shopFestivals);
+            }
 
             foreach (var recv in entry.ReceiveItems) {
                 var itemId = recv.Item.RowId;
@@ -277,6 +352,59 @@ internal sealed class RepurchaseIndex {
         if (list.Exists(x => x.ShopKind == listing.ShopKind && x.ShopId == listing.ShopId && x.AchievementId == listing.AchievementId && x.QuestIds.SequenceEqual(listing.QuestIds)))
             return;
         list.Add(listing);
+    }
+
+    private static ImmutableArray<FestivalRef> ResolveShopFestivalRefs(SpecialShop shop) {
+        var festivalId = (ushort)shop.RequiredFestival.RowId;
+        if (festivalId == 0)
+            return [];
+        var begin = shop.RequiredFestivalPhase > byte.MaxValue ? byte.MaxValue : (byte)shop.RequiredFestivalPhase;
+        return [new FestivalRef(festivalId, begin, byte.MaxValue)];
+    }
+
+    private static ImmutableArray<FestivalRef> ResolveFestivalRefsFromEntryCosts(in SpecialShop.ItemStruct entry) {
+        var questIds = new List<uint>();
+        var seenCost = new HashSet<uint>();
+        foreach (var cost in entry.ItemCosts) {
+            var costId = cost.ItemCost.RowId;
+            if (costId == 0 || !seenCost.Add(costId))
+                continue;
+            CollectQuestIdsFromCurrencyItem(costId, questIds);
+        }
+        return ResolveFestivalRefs(questIds, 0);
+    }
+
+    private static ImmutableArray<FestivalRef> ResolveFestivalRefsFromCurrencyItem(uint costItemId) {
+        var questIds = new List<uint>();
+        CollectQuestIdsFromCurrencyItem(costItemId, questIds);
+        return ResolveFestivalRefs(questIds, 0);
+    }
+
+    private static void CollectQuestIdsFromCurrencyItem(uint costItemId, List<uint> questIds) {
+        if (Svc.SheetManager.ItemInfoCache.GetItemSources(costItemId) is not { Count: > 0 } sources)
+            return;
+        var seen = new HashSet<uint>(questIds);
+        foreach (var src in sources) {
+            if (src is not ItemQuestSource { Quest.RowId: var questId and not 0 })
+                continue;
+            if (seen.Add(questId))
+                questIds.Add(questId);
+        }
+    }
+
+    private static ImmutableArray<FestivalRef> MergeFestivalRefs(ImmutableArray<FestivalRef> a, ImmutableArray<FestivalRef> b) {
+        if (a.Length == 0)
+            return b;
+        if (b.Length == 0)
+            return a;
+        var seen = new HashSet<(ushort, byte, byte)>();
+        var result = new List<FestivalRef>(a.Length + b.Length);
+        foreach (var f in a.Concat(b)) {
+            if (f.FestivalId == 0 || !seen.Add((f.FestivalId, f.Begin, f.End)))
+                continue;
+            result.Add(f);
+        }
+        return [.. result];
     }
 
     private static ImmutableArray<FestivalRef> ResolveFestivalRefs(IReadOnlyList<uint> questIds, uint achievementId) {
