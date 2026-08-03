@@ -1,3 +1,4 @@
+using AllaganLib.GameSheets.Caches;
 using AllaganLib.GameSheets.ItemSources;
 
 namespace GlamourLog;
@@ -91,12 +92,26 @@ internal sealed class LateTabBundleRule(OutfitCategory owner) : IGlamourCategory
         foreach (var src in list) {
             if (checkQuest && src is ItemQuestSource qs && !IsOptionalQuestReward(qs, itemId) && MatchesQuestJournal(qs, d.QuestJournalMatches))
                 return true;
+            // gear comes from coffer, check the coffer's quest source e.g. welkin attire -> welkin attire coffer -> from job quest
+            // sometimes allagan lib has the source as loot. I have no idea why
+            if (checkQuest && src is ItemSupplementSource { Type: ItemInfoType.Loot or ItemInfoType.Coffer, CostItem.RowId: var cofferId and not 0 } && MatchesQuestSourcesOnItem(cofferId, d.QuestJournalMatches))
+                return true;
             if (checkTerritory && src.MapIds is { Count: > 0 } mapIds) {
                 foreach (var mapId in mapIds) {
                     if (TryTerritoryIntendedUse(mapId) is { } use && d.TerritoryIntendedUseIds.Contains(use))
                         return true;
                 }
             }
+        }
+        return false;
+    }
+
+    private static bool MatchesQuestSourcesOnItem(uint itemId, List<QuestJournalMatch> matches) {
+        if (Svc.SheetManager.ItemInfoCache.GetItemSources(itemId) is not { Count: > 0 } list)
+            return false;
+        foreach (var src in list) {
+            if (src is ItemQuestSource qs && !IsOptionalQuestReward(qs, itemId) && MatchesQuestJournal(qs, matches))
+                return true;
         }
         return false;
     }
