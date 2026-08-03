@@ -84,7 +84,7 @@ internal static class SetListFilterSort {
         => set.CategoryName == "Mogstation" || set.Items.Any(IsMogstationItem);
 
     internal static bool IsMogstationItem(uint itemId)
-        => FittingShopItemSet.Any(s => s.Items.Any(i => i.RowId == itemId));
+        => FittingShopItemSet.Any(s => s.Items.Any(i => i.RowId == itemId)) || FittingShopCategoryItem.Any(s => s.Item.RowId == itemId);
 
     private static bool PassesTradeableFilter(GlamourSet set) {
         if (set.NonSetCabinetPiece && set.Items.Count == 1)

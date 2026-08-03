@@ -227,7 +227,7 @@ internal sealed class Catalog {
         eternalBonding.Rules.Add(new LateTabBundleRule(eternalBonding));
 
         var mogstation = Cat("Mogstation", 16);
-        mogstation.Discriminator.ItemPredicate = item => FittingShopItemSet.Any(s => s.Items.Any(i => i.RowId == item.RowId));
+        mogstation.Discriminator.ItemPredicate = item => FittingShopItemSet.Any(s => s.Items.Any(i => i.RowId == item.RowId)) || FittingShopCategoryItem.Any(s => s.Item.RowId == item.RowId);
         mogstation.Rules.Add(new LateTabBundleRule(mogstation));
 
         var uncategorized = new OutfitCategory("Unsorted", int.MinValue) { IsSyntheticBucket = true };
