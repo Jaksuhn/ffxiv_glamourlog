@@ -1,3 +1,4 @@
+using KamiToolKit.Enums;
 using Lumina.Text.ReadOnly;
 
 namespace GlamourLog.Windows.GuideWindow;
@@ -7,6 +8,7 @@ internal abstract record ContentBlock;
 internal sealed record GuideTextBlock(ReadOnlySeString Text, float TextLeftInset = 0f) : ContentBlock;
 internal sealed record GuideHeadingBlock(string Title) : ContentBlock;
 internal sealed record IconExampleBlock(IconExampleKind Kind, ReadOnlySeString Description) : ContentBlock;
+internal sealed record CircleButtonExampleBlock(CircleButtonIcon Icon, ReadOnlySeString Description) : ContentBlock;
 internal sealed record CircleButtonGalleryBlock : ContentBlock;
 
 internal sealed record CheckboxSettingBlock : ContentBlock {
