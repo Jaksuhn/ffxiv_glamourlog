@@ -4,7 +4,7 @@ public partial class GuideWindow {
     private static CategoryNav[] NavCategories
         => [
             new("Guide", [Icons, GuideCounters, Integrations]),
-            new("Tweaks", [TweaksArmoire, TweaksDresser, TweaksChatAlerts]),
+            new("Tweaks", [TweaksArmoire, TweaksDresser, TweaksChatAlerts, TweaksLootWindow]),
             new("Settings", [SettingsLogWindow]),
             #if DEBUG
             new("Debug", [DebugCircleButtons]),
