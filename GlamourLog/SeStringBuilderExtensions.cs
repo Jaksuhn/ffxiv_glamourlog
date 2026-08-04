@@ -9,5 +9,8 @@ internal static class SeStringBuilderExtensions {
 
         public SeStringBuilder Emphasis(string text)
             => sb.AddUiForeground(500).AddUiGlow(501).Append(text).AddUiGlowOff().AddUiForegroundOff();
+
+        public SeStringBuilder Footnote(string text)
+            => sb.Emphasis($"※{text}");
     }
 }

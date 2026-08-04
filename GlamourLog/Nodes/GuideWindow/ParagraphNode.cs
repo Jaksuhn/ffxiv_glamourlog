@@ -46,7 +46,6 @@ internal sealed class ParagraphNode : ResNode {
         var h = textH + Constants.RowPadTop + Constants.RowPadBottom;
 
         _text.Position = new Vector2(_textLeftInset, Constants.RowPadTop + Constants.TextTopInset);
-        _text.Size = new Vector2(textW, textH);
         Size = new Vector2(width, h);
     }
 }

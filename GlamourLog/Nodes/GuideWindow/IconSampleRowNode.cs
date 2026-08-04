@@ -105,7 +105,6 @@ internal sealed class IconSampleRowNode : ResNode {
         var rowH = Constants.RowPadTop + contentH + Constants.RowPadBottom;
 
         _text.Position = new Vector2(textX, Constants.RowPadTop + Constants.TextTopInset);
-        _text.Size = new Vector2(textW, textH);
         Size = new Vector2(width, rowH);
 
         LayoutSamples();
