@@ -33,4 +33,5 @@ internal enum IconExampleKind {
     Dresser,
     Armoire,
     WarningDresser,
+    Unobtainable,
 }

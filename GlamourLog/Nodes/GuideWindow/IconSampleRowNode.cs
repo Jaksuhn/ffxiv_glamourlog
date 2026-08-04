@@ -54,6 +54,15 @@ internal sealed class IconSampleRowNode : ResNode {
                 });
                 AttachSample(new CheckMarkBadgeNode());
                 break;
+            case IconExampleKind.Unobtainable: {
+                    AttachSample(new FramedItemIconNode(SetListIconSize, SampleItemId) {
+                        Size = new Vector2(SetListIconSize, SetListIconSize),
+                    });
+                    var badge = new UnobtainableBadgeNode { IsVisible = true };
+                    badge.LayoutOverIcon(Vector2.Zero, new Vector2(SetListIconSize, SetListIconSize));
+                    AttachSample(badge);
+                    break;
+                }
             case IconExampleKind.FadedDresser:
                 AttachSample(CreateStorageBadge(GlamourIconNode.IconPart.DresserFaded));
                 break;
@@ -64,8 +73,8 @@ internal sealed class IconSampleRowNode : ResNode {
                 AttachSample(CreateStorageBadge(GlamourIconNode.IconPart.Armoire));
                 break;
             case IconExampleKind.WarningDresser:
-                var badge = CreateStorageBadge(GlamourIconNode.IconPart.Dresser);
-                AttachSample(badge);
+                var warnBadge = CreateStorageBadge(GlamourIconNode.IconPart.Dresser);
+                AttachSample(warnBadge);
                 AttachSample(new ArmoireWarningBadgeNode());
                 break;
             default:
@@ -104,7 +113,7 @@ internal sealed class IconSampleRowNode : ResNode {
 
     private float SampleIconHeight()
         => _kind switch {
-            IconExampleKind.Checkmark => SetListIconSize + Constants.FramedItemFrameBleed,
+            IconExampleKind.Checkmark or IconExampleKind.Unobtainable => SetListIconSize + Constants.FramedItemFrameBleed,
             _ => _sampleNodes.Count > 0 ? _sampleNodes[0].Size.Y : 12f,
         };
 
@@ -122,6 +131,14 @@ internal sealed class IconSampleRowNode : ResNode {
                     check.Position = new Vector2(
                         iconX + SetListIconSize - check.Size.X - 4f,
                         iconY + SetListIconSize - check.Size.Y);
+                    break;
+                }
+            case IconExampleKind.Unobtainable: {
+                    var iconX = 0f;
+                    var iconY = Constants.RowPadTop + Constants.FramedItemFrameBleed;
+                    _sampleNodes[0].Position = new Vector2(iconX, iconY);
+                    if (_sampleNodes[1] is UnobtainableBadgeNode badge)
+                        badge.LayoutOverIcon(new Vector2(iconX, iconY), new Vector2(SetListIconSize, SetListIconSize));
                     break;
                 }
             default:
