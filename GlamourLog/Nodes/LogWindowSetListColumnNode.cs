@@ -9,7 +9,6 @@ internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
     private const float FilterCogSize = 28f;
     private const float LeftPad = 3f;
 
-    public SetListExportControlNode ExportControl { get; }
     public SetListSortControlNode SortControl { get; }
     public CircleButtonNode FilterButton { get; }
     public GlamourSetListNode List { get; }
@@ -27,12 +26,6 @@ internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
             Size = new Vector2(midHeaderWidth, headerHeight),
         };
         header.AttachNode(this);
-
-        ExportControl = new SetListExportControlNode {
-            Position = new Vector2(sortRelX - 2f - SetListExportControlNode.LayoutWidth, 0f),
-        };
-        ExportControl.AttachNode(header);
-        ExportControl.ExportDropDown.SelectedOption = GlamourDataExportFormat.LalaAchievements;
 
         SortControl = new SetListSortControlNode(C.SetListSortDirection) {
             Position = new Vector2(sortRelX, 0f),

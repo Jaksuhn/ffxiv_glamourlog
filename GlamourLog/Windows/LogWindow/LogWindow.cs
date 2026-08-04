@@ -127,7 +127,6 @@ internal unsafe partial class LogWindow : NativeAddon {
         };
         _setListColumn.AttachNode(this);
 
-        _setListColumn.ExportControl.ExportDropDown.OnOptionSelected = OnDataExportFormatSelected;
         _setListColumn.SortControl.SortDropDown.OnOptionSelected = OnSetListSortModeSelected;
         _setListColumn.SortControl.SortDirectionButton.OnClick = OnSetListSortDirectionToggle;
         _setListColumn.SyncSortDirectionChrome();

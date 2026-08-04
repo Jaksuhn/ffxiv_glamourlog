@@ -5,6 +5,7 @@ public partial class GuideWindow {
         => [
             new("Guide", [Icons, GuideCounters, Integrations]),
             new("Tweaks", [TweaksArmoire, TweaksDresser, TweaksChatAlerts, TweaksLootWindow]),
+            new("Export", [ExportData]),
             new("Settings", [SettingsLogWindow]),
             #if DEBUG
             new("Debug", [DebugCircleButtons]),

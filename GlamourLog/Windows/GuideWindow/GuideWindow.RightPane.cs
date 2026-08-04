@@ -39,6 +39,7 @@ public partial class GuideWindow {
         CircleButtonExampleBlock circle => new CircleButtonSampleRowNode(_rightTextWidth, circle.Icon, circle.Description),
         CheckboxSettingBlock setting => new ConfigCheckboxRowNode(_rightTextWidth, setting),
         CircleButtonGalleryBlock => new CircleButtonGalleryNode(_rightTextWidth),
+        DataExportActionBlock export => new DataExportRowNode(_rightTextWidth, export.Format, () => CopyDataExportToClipboard(export.Format)),
         _ => throw new ArgumentOutOfRangeException(nameof(block)),
     };
 
@@ -74,6 +75,9 @@ public partial class GuideWindow {
                     break;
                 case CircleButtonGalleryNode gallery:
                     gallery.Relayout(layoutWidth);
+                    break;
+                case DataExportRowNode export:
+                    export.Relayout(layoutWidth);
                     break;
             }
         }
