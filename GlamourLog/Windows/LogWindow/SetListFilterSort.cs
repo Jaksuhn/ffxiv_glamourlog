@@ -5,76 +5,51 @@ namespace GlamourLog.Windows.LogWindow;
 
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {
-    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0) {
-        var rows = categoryRows;
+    public static List<GlamourSet> Apply(string searchTrimmed, IReadOnlyList<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0) {
+        IEnumerable<GlamourSet> rows = categoryRows;
 
         if (C.HideCompleted)
-            rows = [.. rows.Where(r => !q.For(r).IsComplete)];
+            rows = rows.Where(r => !q.For(r).IsComplete);
 
         if (C.ShowOnlyCompleted)
-            rows = [.. rows.Where(r => q.For(r).IsComplete)];
+            rows = rows.Where(r => q.For(r).IsComplete);
 
         if (C.HideIncompatible)
-            rows = [.. rows.Where(r => !r.IsIncompatible)];
+            rows = rows.Where(r => !r.IsIncompatible);
 
         if (C.HideUnobtainable)
-            rows = [.. rows.Where(r => !r.IsUnobtainable || q.For(r).IsComplete)];
+            rows = rows.Where(r => !r.IsUnobtainable || q.For(r).IsComplete);
 
         if (C.HideMogstation)
-            rows = [.. rows.Where(r => !IsMogstationSet(r))];
+            rows = rows.Where(r => !r.IsMogstation);
 
         if (C.HideSharedModels)
-            rows = HideSharedModelSets(rows, q);
+            rows = HideSharedModelSets([.. rows], q);
 
         // Hide* are really"show only"
         var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
         if (hasPositiveFilters) {
-            rows = [.. rows.Where(r => {
+            rows = rows.Where(r => {
                 var s = q.For(r);
                 return (!C.HideNonPartials || s.IsPartial)
                     && (!C.HideUnaffordable || s.CanAffordMissing)
                     && (!C.HideUnready || s.HasContributableInventoryPiece)
                     && (!C.HideNoMarketboard || PassesTradeableFilter(r));
-            })];
+            });
         }
 
         if (C.ShowOnlyMisplaced)
-            rows = [.. rows.Where(r => q.For(r).ArmoireMisplaced)];
+            rows = rows.Where(r => q.For(r).ArmoireMisplaced);
 
-        if (currencyFilterItemId != 0)
-            rows = [.. rows.Where(r => SetUsesCurrency(r, currencyFilterItemId))];
+        if (currencyFilterItemId != 0) {
+            var catalog = CatalogService.Get();
+            rows = rows.Where(r => catalog.SetUsesCurrencyFilter(r, currencyFilterItemId));
+        }
 
         if (searchTrimmed.Length > 0)
-            rows = [.. rows.Where(r => MatchesSearch(r, searchTrimmed))];
+            rows = rows.Where(r => MatchesSearch(r, searchTrimmed));
 
         return ApplySort(rows);
-    }
-
-    internal static List<uint> CollectCurrencyItemIds(IEnumerable<GlamourSet> sets) {
-        var catalog = CatalogService.Get();
-        var ids = new HashSet<uint>();
-        foreach (var set in sets) {
-            var cat = catalog.GetCategoryForPreferredCost(set);
-            foreach (var pieceId in set.Items) {
-                foreach (var (costId, amount) in catalog.GetPrimaryItemCosts(pieceId, cat)) {
-                    // amount == 1 is usually a gear->gear trades and there's way too many of those to give a shit about displaying
-                    if (costId != 0 && amount > 1)
-                        ids.Add(costId);
-                }
-            }
-        }
-
-        return [.. ids.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal)];
-    }
-
-    internal static bool SetUsesCurrency(GlamourSet set, uint currencyItemId) {
-        var catalog = CatalogService.Get();
-        var cat = catalog.GetCategoryForPreferredCost(set);
-        foreach (var pieceId in set.Items) {
-            if (catalog.GetPrimaryItemCosts(pieceId, cat).Any(c => c.ItemId == currencyItemId && c.Amount > 1))
-                return true;
-        }
-        return false;
     }
 
     private static List<GlamourSet> HideSharedModelSets(List<GlamourSet> rows, OwnershipQuery q) {
@@ -107,11 +82,10 @@ internal static class SetListFilterSort {
         return [.. rows.Where(keep.Contains)];
     }
 
-    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0)
+    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, IReadOnlyList<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0)
         => Apply(searchTrimmed, categoryRows, q, currencyFilterItemId).Contains(set);
 
-    internal static bool IsMogstationSet(GlamourSet set)
-        => set.CategoryName == "Mogstation" || set.Items.Any(IsMogstationItem);
+    internal static bool IsMogstationSet(GlamourSet set) => set.IsMogstation;
 
     internal static bool IsMogstationItem(uint itemId)
         => FittingShopItemSet.Any(s => s.Items.Any(i => i.RowId == itemId)) || FittingShopCategoryItem.Any(s => s.Item.RowId == itemId);
@@ -126,7 +100,7 @@ internal static class SetListFilterSort {
         => set.Name.Contains(searchTrimmed, StringComparison.OrdinalIgnoreCase)
             || set.Items.Any(id => Item.GetRowRef(id) is { IsValid: true, Value.Name: var name } && name.ToString().Contains(searchTrimmed, StringComparison.OrdinalIgnoreCase));
 
-    private static List<GlamourSet> ApplySort(List<GlamourSet> rows) {
+    private static List<GlamourSet> ApplySort(IEnumerable<GlamourSet> rows) {
         var asc = C.SetListSortDirection == ListSortDirection.Ascending;
         return C.SetListSortMode switch {
             GlamourSetSortMode.Alphabetical => asc
@@ -138,7 +112,7 @@ internal static class SetListFilterSort {
             GlamourSetSortMode.Patch => asc
                 ? [.. rows.OrderBy(s => s.PatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)]
                 : [.. rows.OrderByDescending(s => s.PatchNo).ThenBy(s => s.Name, StringComparer.Ordinal).ThenBy(s => s.ItemId)],
-            _ => rows,
+            _ => rows as List<GlamourSet> ?? [.. rows],
         };
     }
 }

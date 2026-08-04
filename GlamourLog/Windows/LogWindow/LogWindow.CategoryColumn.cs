@@ -15,10 +15,8 @@ internal partial class LogWindow {
         _categoryColumn?.RebuildFromPaneOrder(_categoryPaneOrder, _selectedCategoryId);
     }
 
-    private List<GlamourSet> CategoryRows(string categoryId)
-        => categoryId == AllCategoryId
-            ? [.. CatalogService.Get().GlamourSets]
-            : CatalogService.Get().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
+    private IReadOnlyList<GlamourSet> CategoryRows(string categoryId)
+        => categoryId == AllCategoryId ? CatalogService.Get().GlamourSets : CatalogService.Get().GlamourSetsByCategory.TryGetValue(categoryId, out var list) ? list : [];
 
     private void SyncCategoryPaneToDataVersion() {
         if (_categoryColumn is null)

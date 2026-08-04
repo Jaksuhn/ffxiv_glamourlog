@@ -31,10 +31,12 @@ internal unsafe partial class LogWindow : NativeAddon {
     private string _selectedCategoryId = "";
     private string _persistedSearch = string.Empty;
     private uint _currencyFilterItemId;
-    private List<uint>? _lastCurrencyFilterOptions;
+    private IReadOnlyList<uint>? _lastCurrencyFilterOptions;
     private GlamourSet? _selectedSet;
     private uint? _selectedSourcePieceItemId; // when set, costs/sources/lookalikes are narrowed to this piece
     private bool _pendingRefreshListsAndDetails; // queue ui work for the next safe update instead of mutating lists mid-click
+    private bool _pendingCategorySwitch; // light refresh: set list (+ selection), skip global stats/tab counts
+    private bool _pendingCategoryCounts; // footer/tab counts on the frame after a full list paint
     private bool _pendingRebuildSetListOrderOnly;
     private bool _pendingPaintDetailsOnly;
     private bool _pendingResetSetScroll;
@@ -65,21 +67,57 @@ internal unsafe partial class LogWindow : NativeAddon {
         _pendingRefreshListsAndDetails = true;
     }
 
+    // doesn't recount every badge/counter
+    private void QueueSetListRefresh() {
+        if (!IsOpen || !CanPaintLists())
+            return;
+        if (_pendingRefreshListsAndDetails)
+            return;
+        _pendingCategorySwitch = true;
+    }
+
     private void RefreshListsAndDetailsNow() {
         if (!IsOpen || !CanPaintLists())
             return;
         try {
             SyncCategoryPaneToDataVersion();
-            PaintListsCore();
+            PaintListsCore(refreshCategoryCounts: false); // paint set list first, badge/recounts next frame
+            _pendingCategoryCounts = true;
         }
         catch (Exception ex) {
             Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshListsAndDetails)}");
         }
     }
 
-    private void PaintListsCore() {
+    private void RefreshCategoryCountsNow() {
+        if (!IsOpen || !CanPaintLists())
+            return;
+        try {
+            var q = OwnershipService.Get().Query();
+            RefreshCategoryCounts(q);
+        }
+        catch (Exception ex) {
+            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshCategoryCountsNow)}");
+        }
+    }
+
+    private void ApplyCategorySwitchNow() {
+        if (!IsOpen || !CanPaintLists())
+            return;
+        try {
+            var q = OwnershipService.Get().Query();
+            _categoryColumn?.SyncSelectionOnly(_selectedCategoryId);
+            RepopulateSetListFromFilteredRows(q);
+            RefreshDetails(q);
+        }
+        catch (Exception ex) {
+            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(ApplyCategorySwitchNow)}");
+        }
+    }
+
+    private void PaintListsCore(bool refreshCategoryCounts) {
         var q = OwnershipService.Get().Query();
-        RefreshRows(q);
+        RefreshRows(q, refreshCategoryCounts);
         RefreshDetails(q);
     }
 
@@ -111,7 +149,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             onSearchChanged: () => {
                 _persistedSearch = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
                 _pendingResetSetScroll = true;
-                RefreshListsAndDetails();
+                QueueSetListRefresh();
             },
             onCategorySelected: OnCategorySelected) {
             Position = new Vector2(contentStart.X, alignTop),
@@ -230,7 +268,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _selectedSet = null;
         _selectedSourcePieceItemId = null;
         _pendingClearSetSelection = true;
-        _pendingRefreshListsAndDetails = true;
+        _pendingCategorySwitch = true;
         _pendingResetSetScroll = true;
         _pendingResetDetailScroll = true;
     }
@@ -272,13 +310,24 @@ internal unsafe partial class LogWindow : NativeAddon {
 
             if (_pendingRefreshListsAndDetails) {
                 _pendingRefreshListsAndDetails = false;
+                _pendingCategorySwitch = false;
+                _pendingCategoryCounts = false;
                 _pendingPaintDetailsOnly = false;
                 _pendingRebuildSetListOrderOnly = false;
                 RefreshListsAndDetailsNow();
             }
+            else if (_pendingCategorySwitch) {
+                _pendingCategorySwitch = false;
+                _pendingPaintDetailsOnly = false;
+                ApplyCategorySwitchNow();
+            }
             else if (_pendingRebuildSetListOrderOnly) {
                 _pendingRebuildSetListOrderOnly = false;
                 RebuildSetListOrderOnly();
+            }
+            else if (_pendingCategoryCounts) {
+                _pendingCategoryCounts = false;
+                RefreshCategoryCountsNow();
             }
 
             if (_pendingPaintDetailsOnly) {
@@ -341,6 +390,8 @@ internal unsafe partial class LogWindow : NativeAddon {
     private void CancelPendingListWork() {
         _pendingCategoryPaneRebuild = false;
         _pendingRefreshListsAndDetails = false;
+        _pendingCategorySwitch = false;
+        _pendingCategoryCounts = false;
         _pendingRebuildSetListOrderOnly = false;
         _pendingPaintDetailsOnly = false;
         _pendingResetSetScroll = false;

@@ -10,7 +10,11 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     internal Dictionary<string, List<GlamourSet>> GlamourSetsByCategory { get; } = [];
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
     internal HashSet<uint> MirageOutfitPieceIds { get; private set; } = [];
+    internal HashSet<uint> MirageSetTokenIds { get; private set; } = [];
     private HashSet<uint> _costCurrencyItemIds = [];
+    private IReadOnlyList<uint> _currencyFilterAll = [];
+    private Dictionary<string, IReadOnlyList<uint>> _currencyFilterByDisplayCategory = [];
+    private Dictionary<uint, HashSet<uint>> _setFilterCurrencyIdsBySetId = [];
     private Dictionary<SetModelSignature, List<GlamourSet>> _sharedModelGroups = [];
     private Dictionary<ItemModelInfo, List<uint>> _sharedModelItemGroups = [];
 
@@ -43,6 +47,9 @@ internal sealed class CatalogService : IPluginService, IDisposable {
         lock (_glamourDataLock) {
             _catalogBuilt = false;
             _costCurrencyItemIds = [];
+            _currencyFilterAll = [];
+            _currencyFilterByDisplayCategory = [];
+            _setFilterCurrencyIdsBySetId = [];
         }
     }
 
@@ -92,6 +99,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
                 ArmoireItemIds = built.ArmoireItemIds;
                 GlamourSets = built.Sets;
                 MirageOutfitPieceIds = [.. GlamourSets.Where(s => !s.NonSetCabinetPiece).SelectMany(s => s.Items)];
+                MirageSetTokenIds = [.. GlamourSets.Where(s => !s.NonSetCabinetPiece).Select(s => s.ItemId)];
                 RebuildCategoryMapUnlocked();
                 _sharedModelGroups = GlamourSets.GroupBy(s => s.ModelSignature).ToDictionary(g => g.Key, g => g.OrderBy(s => s.ItemId).ToList());
                 _sharedModelItemGroups = CatalogBuilder.BuildSharedModelItemGroups(GlamourSets.SelectMany(s => s.Items));
@@ -99,7 +107,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
                 DataVersion++;
                 _catalogBuilt = true;
             }
-            _costCurrencyItemIds = BuildAllPrimaryCostCurrencyIds();
+            RebuildCostCurrencyIndexes();
             Interlocked.Exchange(ref _pendingListRefresh, 1);
             WindowsService.Get().RefreshLogWindow();
         }
@@ -133,6 +141,17 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     internal bool CatalogReady => _catalogBuilt;
 
     internal bool IsKnownCostCurrency(uint itemId) => itemId != 0 && _catalogBuilt && _costCurrencyItemIds.Contains(itemId);
+
+    // currencies w/ cost > 1, null = all
+    internal IReadOnlyList<uint> GetCurrencyFilterItemIds(string? displayCategoryName) {
+        if (!_catalogBuilt)
+            return [];
+        if (displayCategoryName is null)
+            return _currencyFilterAll;
+        return _currencyFilterByDisplayCategory.TryGetValue(displayCategoryName, out var list) ? list : [];
+    }
+
+    internal bool SetUsesCurrencyFilter(GlamourSet set, uint currencyItemId) => currencyItemId != 0 && _setFilterCurrencyIdsBySetId.TryGetValue(set.ItemId, out var ids) && ids.Contains(currencyItemId);
     internal bool IsMirageOutfitPiece(uint itemId) => itemId != 0 && _catalogBuilt && MirageOutfitPieceIds.Contains(itemId);
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
     internal void NotifyOwnershipChanged() => WindowsService.Get().RefreshLogWindow();
@@ -259,18 +278,41 @@ internal sealed class CatalogService : IPluginService, IDisposable {
             return _catalog.GetDisplayCategoryName(set.CategoryName);
     }
 
-    private HashSet<uint> BuildAllPrimaryCostCurrencyIds() {
-        var ids = new HashSet<uint>();
+    private void RebuildCostCurrencyIndexes() {
+        var allKnown = new HashSet<uint>();
+        var allFilter = new HashSet<uint>();
+        var byDisplay = new Dictionary<string, HashSet<uint>>();
+        var bySetId = new Dictionary<uint, HashSet<uint>>();
+
         foreach (var set in GlamourSets) {
-            var cat = GetCategoryForPreferredCost(set);
+            var preferred = GetCategoryForPreferredCost(set);
+            var display = GetCategoryBucketKey(set);
+            var setFilterIds = new HashSet<uint>();
             foreach (var pieceId in set.Items) {
-                foreach (var c in GetPrimaryItemCosts(pieceId, cat)) {
-                    if (c.ItemId != 0)
-                        ids.Add(c.ItemId);
+                foreach (var (costId, amount) in GetPrimaryItemCosts(pieceId, preferred)) {
+                    if (costId == 0)
+                        continue;
+                    allKnown.Add(costId);
+                    if (amount <= 1)
+                        continue;
+                    setFilterIds.Add(costId);
+                    allFilter.Add(costId);
+                    if (!byDisplay.TryGetValue(display, out var catIds))
+                        byDisplay[display] = catIds = [];
+                    catIds.Add(costId);
                 }
             }
+            if (setFilterIds.Count > 0)
+                bySetId[set.ItemId] = setFilterIds;
         }
-        return ids;
+
+        static List<uint> SortedByName(HashSet<uint> ids)
+            => [.. ids.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal)];
+
+        _costCurrencyItemIds = allKnown;
+        _currencyFilterAll = SortedByName(allFilter);
+        _currencyFilterByDisplayCategory = byDisplay.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<uint>)SortedByName(kv.Value));
+        _setFilterCurrencyIdsBySetId = bySetId;
     }
 
     // in case I somehow miss a set

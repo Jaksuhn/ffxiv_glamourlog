@@ -13,6 +13,7 @@ internal sealed class GlamourSet {
     public required decimal PatchNo { get; init; } // for sorting
     public bool NonSetCabinetPiece { get; init; } // standalone armoire item, not a mirage outfit
     public required bool IsIncompatible { get; init; } // race/sex restricted items
+    public required bool IsMogstation { get; init; } // category Mogstation and/or FittingShop piece
     public required SetModelSignature ModelSignature { get; init; } // visual fingerprint of the whole outfit
     public required int SharedModelGroupSize { get; init; } // how many other sets share this set's full model signature
     public required bool HasPartialSharedModels { get; init; } // for the detail panel when filtering a specific item. Not all sets are full model matches

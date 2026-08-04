@@ -18,7 +18,7 @@ internal static unsafe class CatalogBuilder {
     internal static HashSet<uint> LoadArmoireItemIds()
         => [.. Cabinet.Where(x => x.RowId > 0 && x.Item.RowId > 0).Select(x => x.Item.RowId)];
 
-    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog) {
+    internal static ReadOnlyCollection<GlamourSet> BuildClassifiedSets(Catalog catalog, HashSet<uint> mogstationItemIds) {
         var pvpSeries = FFXIVClientStructs.FFXIV.Client.Game.UI.PvPProfile.Instance()->Series;
         var itemSheet = Svc.SheetManager.GetSheet<ItemSheet>();
         var specialShopByItemId = Catalog.BuildSpecialShopByReceiveItemId();
@@ -51,6 +51,7 @@ internal static unsafe class CatalogBuilder {
                 PatchNo = sortPatch,
                 NonSetCabinetPiece = false,
                 IsIncompatible = x.Items.None(i => i.Value.EquipRestriction.Value.CanEquip),
+                IsMogstation = r.CategoryName == "Mogstation" || items.Any(mogstationItemIds.Contains),
                 ModelSignature = modelSignature,
                 SharedModelGroupSize = 1,
                 HasPartialSharedModels = false,
@@ -63,7 +64,22 @@ internal static unsafe class CatalogBuilder {
         .AsReadOnly();
     }
 
-    internal static List<GlamourSet> BuildMiscArmoireEntries(Catalog catalog, HashSet<uint> armoireItemIds, IReadOnlyCollection<GlamourSet> mirageSets) {
+    private static HashSet<uint> GetMogstationIds() {
+        HashSet<uint> ids = [];
+        foreach (var set in FittingShopItemSet.Where(s => s.RowId > 0)) {
+            foreach (var item in set.Items) {
+                if (item.RowId != 0)
+                    ids.Add(item.RowId);
+            }
+        }
+        foreach (var row in FittingShopCategoryItem.Where(s => s.RowId > 0)) {
+            if (row.Item.RowId != 0)
+                ids.Add(row.Item.RowId);
+        }
+        return ids;
+    }
+
+    internal static List<GlamourSet> BuildMiscArmoireEntries(Catalog catalog, HashSet<uint> armoireItemIds, IReadOnlyCollection<GlamourSet> mirageSets, HashSet<uint> mogstationItemIds) {
         var setPieceIds = mirageSets.SelectMany(s => s.Items).ToHashSet();
         var itemSheet = Svc.SheetManager.GetSheet<ItemSheet>();
         var bucketName = catalog.MiscArmoireBucket.Name;
@@ -91,6 +107,7 @@ internal static unsafe class CatalogBuilder {
                 PatchNo = itemSheet.GetItemPatch(itemId),
                 NonSetCabinetPiece = true,
                 IsIncompatible = !row.EquipRestriction.Value.CanEquip,
+                IsMogstation = mogstationItemIds.Contains(itemId),
                 ModelSignature = SetModelSignature.ForMiscSingle(itemId),
                 SharedModelGroupSize = 1,
                 HasPartialSharedModels = false,
@@ -103,8 +120,9 @@ internal static unsafe class CatalogBuilder {
     internal static CatalogBuildResult Run() {
         var catalog = Catalog.Build(GetTradecraftDiscriminators());
         var armoireItemIds = LoadArmoireItemIds();
-        var mirageSets = BuildClassifiedSets(catalog);
-        var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets);
+        var mogstationItemIds = GetMogstationIds();
+        var mirageSets = BuildClassifiedSets(catalog, mogstationItemIds);
+        var miscArmoireEntries = BuildMiscArmoireEntries(catalog, armoireItemIds, mirageSets, mogstationItemIds);
         var allSets = ApplySharedModelMetadata([.. mirageSets, .. miscArmoireEntries]).AsReadOnly();
         return new CatalogBuildResult(catalog, allSets, armoireItemIds);
     }
@@ -124,6 +142,7 @@ internal static unsafe class CatalogBuilder {
                 PatchNo = s.PatchNo,
                 NonSetCabinetPiece = s.NonSetCabinetPiece,
                 IsIncompatible = s.IsIncompatible,
+                IsMogstation = s.IsMogstation,
                 ModelSignature = s.ModelSignature,
                 SharedModelGroupSize = s.SharedModelGroupSize,
                 HasPartialSharedModels = s.HasPartialSharedModels,
@@ -162,6 +181,7 @@ internal static unsafe class CatalogBuilder {
                 PatchNo = s.PatchNo,
                 NonSetCabinetPiece = s.NonSetCabinetPiece,
                 IsIncompatible = s.IsIncompatible,
+                IsMogstation = s.IsMogstation,
                 ModelSignature = s.ModelSignature,
                 SharedModelGroupSize = sharedModelGroupSize,
                 HasPartialSharedModels = hasPartialSharedModels,

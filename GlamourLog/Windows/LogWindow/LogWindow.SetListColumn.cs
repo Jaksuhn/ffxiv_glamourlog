@@ -7,12 +7,27 @@ using GlamourLog.Windows.LogWindow;
 namespace GlamourLog;
 
 internal unsafe partial class LogWindow {
-    private void RefreshRows(OwnershipQuery q) {
+    private void RefreshRows(OwnershipQuery q, bool refreshCategoryCounts) {
         if (SetList is null || _statsSetsLine is null || _statsSpaceLine is null)
             return;
 
-        var agent = ItemFinderModule.Instance();
-        if (agent is null) {
+        if (ItemFinderModule.Instance() is null) {
+            _statsSetsLine.String = "\u2014 / \u2014";
+            _statsSpaceLine.String = string.Empty;
+            return;
+        }
+
+        if (refreshCategoryCounts)
+            RefreshCategoryCounts(q);
+
+        RepopulateSetListFromFilteredRows(q);
+    }
+
+    private void RefreshCategoryCounts(OwnershipQuery q) {
+        if (_statsSetsLine is null || _statsSpaceLine is null)
+            return;
+
+        if (ItemFinderModule.Instance() is null) {
             _statsSetsLine.String = "\u2014 / \u2014";
             _statsSpaceLine.String = string.Empty;
             return;
@@ -23,10 +38,7 @@ internal unsafe partial class LogWindow {
         _statsSetsLine.String = $"{counts.OwnedObtainable} / {counts.TotalObtainable}";
         // dresser space saved still includes every complete outfit (obtainable or not)
         _statsSpaceLine.String = $"{mirageCatalogSets.Where(s => q.For(s).IsComplete).Sum(x => x.Items.Count - 1)}";
-
-        _categoryColumn?.UpdateButtonStates(_selectedCategoryId, CategoryRows, q);
-
-        RepopulateSetListFromFilteredRows(q);
+        _categoryColumn?.UpdateButtonStates(_selectedCategoryId, CategoryRows, q, refreshCounts: true);
     }
 
     private void RebuildSetListOrderOnly() {
@@ -43,7 +55,7 @@ internal unsafe partial class LogWindow {
             return;
 
         var categoryRows = CategoryRows(_selectedCategoryId);
-        SyncCurrencyFilterOptions(categoryRows);
+        SyncCurrencyFilterOptions();
 
         var searchRaw = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
         var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
@@ -79,11 +91,12 @@ internal unsafe partial class LogWindow {
         }
     }
 
-    private void SyncCurrencyFilterOptions(List<GlamourSet> categoryRows) {
+    private void SyncCurrencyFilterOptions() {
         if (_setListColumn is null)
             return;
 
-        var currencies = SetListFilterSort.CollectCurrencyItemIds(categoryRows);
+        var catalog = CatalogService.Get();
+        var currencies = catalog.GetCurrencyFilterItemIds(_selectedCategoryId == AllCategoryId ? null : _selectedCategoryId);
         if (_currencyFilterItemId != SetListCurrencyFilterNode.NoneCurrencyId && !currencies.Contains(_currencyFilterItemId))
             _currencyFilterItemId = SetListCurrencyFilterNode.NoneCurrencyId;
 
@@ -105,7 +118,7 @@ internal unsafe partial class LogWindow {
             return;
         _currencyFilterItemId = currencyItemId;
         _pendingResetSetScroll = true;
-        RefreshListsAndDetails();
+        QueueSetListRefresh();
     }
 
     private void SyncSetListSelectionHighlight() {
@@ -165,7 +178,7 @@ internal unsafe partial class LogWindow {
             Subtitle = subtitle,
             IsOwned = status.IsComplete,
             IsUnobtainable = set.IsUnobtainable,
-            IsMogstation = SetListFilterSort.IsMogstationSet(set),
+            IsMogstation = set.IsMogstation,
             ShowStorage = status.Storage is SetStorageState.Dresser or SetStorageState.Armoire,
             ShowArmoireWarning = status.ArmoireMisplaced,
             StorageIconPart = status.Storage == SetStorageState.Armoire ? GlamourIconNode.IconPart.Armoire : GlamourIconNode.IconPart.Dresser,
@@ -187,6 +200,7 @@ internal unsafe partial class LogWindow {
                 PatchNo = 0m,
                 NonSetCabinetPiece = true,
                 IsIncompatible = false,
+                IsMogstation = SetListFilterSort.IsMogstationItem(itemId),
                 ModelSignature = SetModelSignature.ForMiscSingle(itemId),
                 SharedModelGroupSize = 1,
                 HasPartialSharedModels = false,
@@ -218,7 +232,7 @@ internal unsafe partial class LogWindow {
             Subtitle = subtitle,
             IsOwned = ownedInStorage,
             IsUnobtainable = set.IsUnobtainable,
-            IsMogstation = SetListFilterSort.IsMogstationSet(set) || SetListFilterSort.IsMogstationItem(itemId),
+            IsMogstation = set.IsMogstation,
             ShowStorage = storageState is ItemStorageState.DresserSet or ItemStorageState.DresserLoose or ItemStorageState.Armoire,
             ShowArmoireWarning = piece?.ShowArmoireWarning ?? false,
             StorageIconPart = iconPart,
@@ -233,7 +247,7 @@ internal unsafe partial class LogWindow {
         C.SetListSortDirection = mode.DefaultDirection();
         C.Save();
         _setListColumn?.SyncSortDirectionChrome();
-        RefreshListsAndDetails();
+        QueueSetListRefresh();
     }
 
     private void OnSetListSortDirectionToggle() {

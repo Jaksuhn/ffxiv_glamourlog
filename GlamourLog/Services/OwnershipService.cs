@@ -16,7 +16,7 @@ internal sealed class OwnershipQuery {
         var catalog = CatalogService.Get();
         var dresser = ownership.GetDresserItemIds();
         var armoire = ownership.GetArmoireItemIds();
-        var setTokens = catalog.GlamourSets.Where(s => !s.NonSetCabinetPiece).Select(s => s.ItemId).ToHashSet();
+        var setTokens = catalog.MirageSetTokenIds;
         HashSet<uint> storage = [.. dresser.Where(id => !setTokens.Contains(id))]; // set tokens aren't "owned pieces", only loose dresser + armoire items belong here
         storage.UnionWith(armoire);
         var inventory = Svc.Items.GetInventoryItemIds();
@@ -112,17 +112,16 @@ internal sealed class OwnershipQuery {
             Storage = storage,
             ArmoireMisplaced = storage is SetStorageState.Dresser && set.Items.Any(_snap.ArmoireCatalogItemIds.Contains) || pieces.Any(p => p.ShowArmoireWarning),
             HasContributableInventoryPiece = pieces.Any(p => p.Location is PieceLocation.Inventory),
-            CanAffordMissing = ComputeCanAffordMissing(set),
+            CanAffordMissing = C.HideUnaffordable && ComputeCanAffordMissing(set),
         };
     }
 
     private bool ComputeIsComplete(GlamourSet set, List<PieceStatus> pieces) {
         if (set.NonSetCabinetPiece)
             return pieces.Count > 0 && pieces.All(p => p.IsStored);
-        // completed saved outfit counts no matter what
-        if (_snap.DresserItemIds.Contains(set.ItemId) && IsFullMirageOutfit(set))
+        if (pieces.Count == set.Items.Count && pieces.All(p => p.IsStored)) // already resolved via Locate
             return true;
-        return pieces.Count == set.Items.Count && pieces.All(p => p.IsStored);
+        return _snap.DresserItemIds.Contains(set.ItemId) && IsFullMirageOutfit(set);
     }
 
     private static SetStorageState ComputeSetStorage(bool isComplete, List<PieceStatus> pieces) {

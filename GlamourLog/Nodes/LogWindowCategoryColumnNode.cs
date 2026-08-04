@@ -107,20 +107,28 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
         ResetScrollToTop();
     }
 
-    public void UpdateButtonStates(string selectedCategoryId, Func<string, List<GlamourSet>> categoryRows, OwnershipQuery q) {
+    public void UpdateButtonStates(string selectedCategoryId, Func<string, IReadOnlyList<GlamourSet>> categoryRows, OwnershipQuery q, bool refreshCounts) {
         foreach (var btn in buttons) {
             if (!buttonCategoryMap.TryGetValue(btn, out var categoryId))
                 continue;
 
             btn.LabelNode.String = categoryId;
             btn.Selected = categoryId == selectedCategoryId;
-            if (countByButton.TryGetValue(btn, out var countNode)) {
+            if (refreshCounts && countByButton.TryGetValue(btn, out var countNode)) {
                 var cr = categoryRows(categoryId);
                 var counts = q.CountCompletions(cr);
                 countNode.String = $"{counts.OwnedObtainable}/{counts.TotalObtainable}";
             }
         }
         SyncCountLayouts();
+    }
+
+    public void SyncSelectionOnly(string selectedCategoryId) {
+        foreach (var btn in buttons) {
+            if (!buttonCategoryMap.TryGetValue(btn, out var categoryId))
+                continue;
+            btn.Selected = categoryId == selectedCategoryId;
+        }
     }
 
     public void SyncCountLayouts() {
