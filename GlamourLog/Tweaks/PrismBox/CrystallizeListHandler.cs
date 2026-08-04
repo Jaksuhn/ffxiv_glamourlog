@@ -15,7 +15,6 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
     private PrismBoxCrystallizeItem[] _categoryRows = []; // full native rows; restored before each native refresh
     private int[] _displayToSource = []; // source indices of visible rows when filtering
     private int _trackedCategory = int.MinValue;
-    private bool _disposed;
     private byte _filterFlagsSnapshot = byte.MaxValue; // native ui filter flags (outfit type etc)
     private int _refreshRecursionDepth;
     private int _emptyCategoryRefreshPasses;
@@ -78,13 +77,13 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
     }
 
     private unsafe void QueueListResync(string reason) {
-        if (!IsFilteringActive || _deferredRefreshDepth > 0 || _disposed || _resyncScheduled)
+        if (!IsFilteringActive || _deferredRefreshDepth > 0 || _resyncScheduled)
             return;
 
         _resyncScheduled = true;
         Svc.Framework.RunOnTick(() => {
             _resyncScheduled = false;
-            if (_disposed || !IsFilteringActive || _deferredRefreshDepth > 0)
+            if (!IsFilteringActive || _deferredRefreshDepth > 0)
                 return;
 
             var addon = GetAddon();
@@ -759,8 +758,6 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         _refreshScheduled = true;
         Svc.Framework.RunOnTick(() => {
             _refreshScheduled = false;
-            if (_disposed)
-                return;
             var current = GetAddon();
             if (current is null || !current->IsVisible)
                 return;
@@ -850,10 +847,6 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
     }
 
     public async ValueTask DisposeAsync() {
-        if (_disposed)
-            return;
-
-        _disposed = true;
         await Svc.Framework.RunOnFrameworkThread(() => {
             Svc.GameInventory.InventoryChanged -= OnInventoryChanged;
             _addonController.Dispose();

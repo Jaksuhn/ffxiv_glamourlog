@@ -13,7 +13,6 @@ namespace GlamourLog.Tweaks.Cabinet;
 internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginService, IAsyncDisposable {
     public int InitOrder => 10; // after ownership
 
-    private bool _disposed;
     private const string AddonName = "Cabinet";
 
     private readonly AddonController<AddonCabinet> _addonController;
@@ -492,9 +491,6 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginServi
     }
 
     public async ValueTask DisposeAsync() {
-        if (_disposed)
-            return;
-        _disposed = true;
         await Svc.Framework.RunOnFrameworkThread(() => {
             OwnershipService.Get().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
             _addonController.Dispose();

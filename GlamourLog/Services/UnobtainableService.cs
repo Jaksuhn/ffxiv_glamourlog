@@ -13,7 +13,6 @@ namespace GlamourLog.Services;
 internal sealed unsafe class UnobtainableService : IPluginService, IDisposable {
     public int InitOrder => -10; // before CatalogService
 
-    private bool _disposed;
     private readonly Hook<PacketDispatcher.Delegates.HandleAchievementsPacket>? _achievementsPacketHook;
 
     internal event System.Action? Changed;
@@ -30,9 +29,6 @@ internal sealed unsafe class UnobtainableService : IPluginService, IDisposable {
     }
 
     public void Dispose() {
-        if (_disposed)
-            return;
-        _disposed = true;
         Svc.ClientState.Logout -= OnLogout;
         Svc.ClientState.Login -= OnLogin;
         _achievementsPacketHook?.Dispose();

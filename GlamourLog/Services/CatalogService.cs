@@ -6,8 +6,6 @@ using System.Threading.Tasks;
 namespace GlamourLog.Services;
 
 internal sealed class CatalogService : IPluginService, IDisposable {
-    private bool _disposed;
-
     internal ReadOnlyCollection<GlamourSet> GlamourSets { get; private set; } = new ReadOnlyCollection<GlamourSet>([]);
     internal Dictionary<string, List<GlamourSet>> GlamourSetsByCategory { get; } = [];
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
@@ -37,9 +35,6 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     }
 
     public void Dispose() {
-        if (_disposed)
-            return;
-        _disposed = true;
         Svc.ClientState.Login -= OnClientLogin;
         _unobtainable.Changed -= OnUnobtainableChanged;
         _catalogCts?.Cancel();

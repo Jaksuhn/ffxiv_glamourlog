@@ -26,8 +26,6 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
     private CircleButtonNode? _crystallizeFilterButton;
     private CircleButtonNode? _crystallizeStoreButton;
 
-    private bool _disposed;
-
     public unsafe ExtraAddonButtons() {
         _cabinetController = new AddonController {
             AddonName = "Cabinet",
@@ -205,10 +203,6 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
     }
 
     public async ValueTask DisposeAsync() {
-        if (_disposed)
-            return;
-        _disposed = true;
-
         await Svc.Framework.RunOnFrameworkThread(() => {
             _cabinetController.Dispose();
             _crystallizeController.Dispose();
