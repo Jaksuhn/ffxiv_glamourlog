@@ -42,9 +42,12 @@ internal unsafe partial class LogWindow {
         if (SetList is null)
             return;
 
+        var categoryRows = CategoryRows(_selectedCategoryId);
+        SyncCurrencyFilterOptions(categoryRows);
+
         var searchRaw = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
         var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
-        var rows = SetListFilterSort.Apply(searchTrimmed, CategoryRows(_selectedCategoryId), q);
+        var rows = SetListFilterSort.Apply(searchTrimmed, categoryRows, q, _currencyFilterItemId);
 
         _setListOptions.Clear();
         foreach (var set in rows) {
@@ -74,6 +77,35 @@ internal unsafe partial class LogWindow {
             _pendingSelectSet = null;
             ScrollSetListToSet(pendingSet);
         }
+    }
+
+    private void SyncCurrencyFilterOptions(List<GlamourSet> categoryRows) {
+        if (_setListColumn is null)
+            return;
+
+        var currencies = SetListFilterSort.CollectCurrencyItemIds(categoryRows);
+        if (_currencyFilterItemId != SetListCurrencyFilterNode.NoneCurrencyId && !currencies.Contains(_currencyFilterItemId))
+            _currencyFilterItemId = SetListCurrencyFilterNode.NoneCurrencyId;
+
+        var dropDown = _setListColumn.CurrencyFilter.DropDown;
+        var expectedOptionCount = currencies.Count + 1;
+        if (_lastCurrencyFilterOptions is not null
+            && _lastCurrencyFilterOptions.Count == currencies.Count
+            && _lastCurrencyFilterOptions.SequenceEqual(currencies)
+            && dropDown.SelectedOption == _currencyFilterItemId
+            && dropDown.Options.Count == expectedOptionCount) // must match count too, because the dropdown rebuilds its options on open and may have only "All" if the category changed
+            return;
+
+        _lastCurrencyFilterOptions = currencies;
+        _setListColumn.CurrencyFilter.SyncOptions(currencies, _currencyFilterItemId);
+    }
+
+    private void OnCurrencyFilterSelected(uint currencyItemId) {
+        if (_currencyFilterItemId == currencyItemId)
+            return;
+        _currencyFilterItemId = currencyItemId;
+        _pendingResetSetScroll = true;
+        RefreshListsAndDetails();
     }
 
     private void SyncSetListSelectionHighlight() {
@@ -123,7 +155,7 @@ internal unsafe partial class LogWindow {
         if (appendNotInListSuffix) {
             var searchRaw = _categoryColumn?.Search.Input.String.ToString() ?? string.Empty;
             var searchTrimmed = string.IsNullOrWhiteSpace(searchRaw) ? string.Empty : searchRaw.Trim();
-            if (C.HideSharedModels && !SetListFilterSort.IsVisibleInSetList(set, searchTrimmed, CategoryRows(_selectedCategoryId), q))
+            if (C.HideSharedModels && !SetListFilterSort.IsVisibleInSetList(set, searchTrimmed, CategoryRows(_selectedCategoryId), q, _currencyFilterItemId))
                 subtitle += " · Not in list";
         }
 

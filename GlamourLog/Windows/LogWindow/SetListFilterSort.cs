@@ -5,7 +5,7 @@ namespace GlamourLog.Windows.LogWindow;
 
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {
-    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q) {
+    public static List<GlamourSet> Apply(string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0) {
         var rows = categoryRows;
 
         if (C.HideCompleted)
@@ -41,10 +41,40 @@ internal static class SetListFilterSort {
         if (C.ShowOnlyMisplaced)
             rows = [.. rows.Where(r => q.For(r).ArmoireMisplaced)];
 
+        if (currencyFilterItemId != 0)
+            rows = [.. rows.Where(r => SetUsesCurrency(r, currencyFilterItemId))];
+
         if (searchTrimmed.Length > 0)
             rows = [.. rows.Where(r => MatchesSearch(r, searchTrimmed))];
 
         return ApplySort(rows);
+    }
+
+    internal static List<uint> CollectCurrencyItemIds(IEnumerable<GlamourSet> sets) {
+        var catalog = CatalogService.Get();
+        var ids = new HashSet<uint>();
+        foreach (var set in sets) {
+            var cat = catalog.GetCategoryForPreferredCost(set);
+            foreach (var pieceId in set.Items) {
+                foreach (var (costId, amount) in catalog.GetPrimaryItemCosts(pieceId, cat)) {
+                    // amount == 1 is usually a gear->gear trades and there's way too many of those to give a shit about displaying
+                    if (costId != 0 && amount > 1)
+                        ids.Add(costId);
+                }
+            }
+        }
+
+        return [.. ids.OrderBy(id => Item.GetRow(id).Name.ToString(), StringComparer.Ordinal)];
+    }
+
+    internal static bool SetUsesCurrency(GlamourSet set, uint currencyItemId) {
+        var catalog = CatalogService.Get();
+        var cat = catalog.GetCategoryForPreferredCost(set);
+        foreach (var pieceId in set.Items) {
+            if (catalog.GetPrimaryItemCosts(pieceId, cat).Any(c => c.ItemId == currencyItemId && c.Amount > 1))
+                return true;
+        }
+        return false;
     }
 
     private static List<GlamourSet> HideSharedModelSets(List<GlamourSet> rows, OwnershipQuery q) {
@@ -77,8 +107,8 @@ internal static class SetListFilterSort {
         return [.. rows.Where(keep.Contains)];
     }
 
-    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q)
-        => Apply(searchTrimmed, categoryRows, q).Contains(set);
+    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, List<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0)
+        => Apply(searchTrimmed, categoryRows, q, currencyFilterItemId).Contains(set);
 
     internal static bool IsMogstationSet(GlamourSet set)
         => set.CategoryName == "Mogstation" || set.Items.Any(IsMogstationItem);

@@ -61,7 +61,7 @@ internal sealed class WindowsService : IPluginService, IAsyncDisposable {
         Svc.Interface.UiBuilder.OpenMainUi -= ToggleMainWindow;
         Svc.Interface.UiBuilder.OpenConfigUi -= ToggleMainMenu;
 
-        // NativeAddon Dispose must run on the framework thread.
+        // all native disposals must be done on game thread
         await Svc.Framework.RunOnFrameworkThread(() => {
             DisposeWindow(_logWindow, nameof(LogWindow));
             DisposeWindow(_filterWindow, nameof(FilterWindow));

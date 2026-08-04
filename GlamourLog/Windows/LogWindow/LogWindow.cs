@@ -30,6 +30,8 @@ internal unsafe partial class LogWindow : NativeAddon {
 
     private string _selectedCategoryId = "";
     private string _persistedSearch = string.Empty;
+    private uint _currencyFilterItemId;
+    private List<uint>? _lastCurrencyFilterOptions;
     private GlamourSet? _selectedSet;
     private uint? _selectedSourcePieceItemId; // when set, costs/sources/lookalikes are narrowed to this piece
     private bool _pendingRefreshListsAndDetails; // queue ui work for the next safe update instead of mutating lists mid-click
@@ -127,6 +129,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         };
         _setListColumn.AttachNode(this);
 
+        _setListColumn.CurrencyFilter.DropDown.OnOptionSelected = OnCurrencyFilterSelected;
         _setListColumn.SortControl.SortDropDown.OnOptionSelected = OnSetListSortModeSelected;
         _setListColumn.SortControl.SortDirectionButton.OnClick = OnSetListSortDirectionToggle;
         _setListColumn.SyncSortDirectionChrome();
@@ -222,6 +225,8 @@ internal unsafe partial class LogWindow : NativeAddon {
         if (_selectedCategoryId == categoryId)
             return;
         _selectedCategoryId = categoryId;
+        _currencyFilterItemId = SetListCurrencyFilterNode.NoneCurrencyId;
+        _lastCurrencyFilterOptions = null;
         _selectedSet = null;
         _selectedSourcePieceItemId = null;
         _pendingClearSetSelection = true;
@@ -324,6 +329,11 @@ internal unsafe partial class LogWindow : NativeAddon {
         => SetList is not null && _statsSetsLine is not null && _statsSpaceLine is not null && _categoryColumn is not null && DetailList is not null;
 
     protected override void OnFinalize(AtkUnitBase* addon) {
+        try {
+            _setListColumn?.DisposeDropDowns(); // do this before the base.OnFinalize() call, because the base will destroy the native nodes and then the DropDownNodes will try to access them
+        }
+        catch { }
+
         base.OnFinalize(addon);
         ClearNodeReferences();
     }
@@ -345,6 +355,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _detailColumn = null;
         _setListOptions.Clear();
         _categoryPaneOrder.Clear();
+        _lastCurrencyFilterOptions = null;
         _columnSeparatorLeft = null;
         _columnSeparatorRight = null;
         _columnSeparatorBottom = null;
