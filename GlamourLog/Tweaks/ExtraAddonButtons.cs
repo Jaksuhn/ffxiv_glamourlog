@@ -154,10 +154,11 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
         => Math.Min(arrow->Width, arrow->Height);
 
     private static unsafe Vector2 ToRootLocal(AtkUnitBase* addon, AtkResNode* node) {
-        var root = addon->RootNode;
-        if (root is null)
-            return new Vector2(node->X, node->Y);
-        return new Vector2(node->ScreenX - root->ScreenX, node->ScreenY - root->ScreenY);
+        var scale = addon->Scale;
+        if (scale <= 0f)
+            scale = 1f;
+        // screen coords are scaled, pos is unscaled
+        return new Vector2((node->ScreenX - addon->X) / scale, (node->ScreenY - addon->Y) / scale);
     }
 
     private static CircleButtonNode CreateFilterButton(Vector2 position, float size, System.Action onClick, string tooltip)
