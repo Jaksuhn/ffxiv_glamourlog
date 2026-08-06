@@ -6,30 +6,21 @@ namespace GlamourLog.Windows.GuideWindow;
 public partial class GuideWindow {
     private const float RightBlockSpacing = Constants.BlockSpacing;
 
-    private readonly Dictionary<Page, List<NodeBase>> _pageBlocks = [];
+    // only the active page's nodes live in the scroll list — hiding siblings leaves the child component collisions steals clicks
+    private readonly List<NodeBase> _rightPaneBlocks = [];
 
-    private void BuildAllRightPanePages() {
+    private void RebuildRightPanePage(Page page) {
         if (_rightScroll is null)
             return;
 
-        _pageBlocks.Clear();
-        foreach (var category in NavCategories) {
-            foreach (var page in category.Pages)
-                _pageBlocks[page] = AddPageBlocks(page);
-        }
-    }
+        _rightScroll.ContentNode.Clear();
+        _rightPaneBlocks.Clear();
 
-    private List<NodeBase> AddPageBlocks(Page page) {
-        var scroll = _rightScroll!;
-        var blocks = new List<NodeBase>();
         foreach (var block in page.EnumerateBlocks()) {
             var node = CreateRightPaneBlock(block);
-            node.IsVisible = false;
-            scroll.ContentNode.AddNode(node);
-            blocks.Add(node);
+            _rightScroll.ContentNode.AddNode(node);
+            _rightPaneBlocks.Add(node);
         }
-
-        return blocks;
     }
 
     private NodeBase CreateRightPaneBlock(ContentBlock block) => block switch {
@@ -43,23 +34,12 @@ public partial class GuideWindow {
         _ => throw new ArgumentOutOfRangeException(nameof(block)),
     };
 
-    private void ShowRightPanePage(Page page) {
-        foreach (var (knownPage, nodes) in _pageBlocks) {
-            var visible = ReferenceEquals(knownPage, page);
-            foreach (var node in nodes)
-                node.IsVisible = visible;
-        }
-    }
-
-    private void RelayoutVisibleRightPaneBlocks() {
-        if (_rightScroll is null || !_pageBlocks.TryGetValue(_selectedPage, out var nodes))
+    private void RelayoutRightPaneBlocks() {
+        if (_rightScroll is null)
             return;
 
         var layoutWidth = Math.Min(_rightTextWidth, _rightScroll.ContentNode.Width);
-        foreach (var node in nodes) {
-            if (!node.IsVisible)
-                continue;
-
+        foreach (var node in _rightPaneBlocks) {
             switch (node) {
                 case ParagraphNode text:
                     text.Relayout(layoutWidth);

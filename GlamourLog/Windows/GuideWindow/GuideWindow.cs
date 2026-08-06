@@ -80,7 +80,7 @@ public unsafe partial class GuideWindow : NativeAddon {
             _hasPendingScreenOrigin = false;
         }
 
-        _pageBlocks.Clear();
+        _rightPaneBlocks.Clear();
         DisposeLeftNav();
         _rightScroll?.Dispose();
         _rightHeaderRow?.Dispose();
@@ -95,7 +95,6 @@ public unsafe partial class GuideWindow : NativeAddon {
         BuildChrome();
 
         SyncLeftNav();
-        BuildAllRightPanePages();
         PaintRight();
     }
 
@@ -254,9 +253,9 @@ public unsafe partial class GuideWindow : NativeAddon {
             return;
 
         _rightTitle.String = _selectedPage.SubCategoryTitle;
-        ShowRightPanePage(_selectedPage);
+        RebuildRightPanePage(_selectedPage);
         _rightScroll.RecalculateSizes();
-        RelayoutVisibleRightPaneBlocks();
+        RelayoutRightPaneBlocks();
         _rightScroll.RecalculateSizes();
         _rightScroll.ScrollBarNode.ScrollPosition = 0;
     }
@@ -265,7 +264,7 @@ public unsafe partial class GuideWindow : NativeAddon {
         base.OnFinalize(addon);
 
         DisposeLeftNav();
-        _pageBlocks.Clear();
+        _rightPaneBlocks.Clear();
         _categoryHeading = null;
         _rightHeaderRow = null;
         _rightScroll = null;
