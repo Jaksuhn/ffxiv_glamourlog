@@ -57,8 +57,8 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
         _cabinetFilterButton = CreateFilterButton(filterPos, size, () => {
             var windows = WindowsService.Get();
             var origin = FilterOriginNearButton(_cabinetFilterButton, AddonFilterWindow.WindowWidth);
-            windows.AddonFilterWindow.OpenOrToggleNear(AddonFilterKind.Armoire, "Armoire filters", AddonFilterWindow.ArmoireOptions, origin);
-        }, "Armoire list filters");
+            windows.AddonFilterWindow.OpenOrToggleNear(AddonFilterKind.Armoire, Addon.GetRow(7542).Text.ToString(), AddonFilterWindow.ArmoireOptions, origin);
+        }, Addon.GetRow(7542).Text.ToString());
 
         _cabinetStoreButton = CreateStoreButton(storePos, size, () => {
             if (AtkUnitBase.IsAddonReady("Cabinet"))
@@ -80,8 +80,8 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
         _crystallizeFilterButton = CreateFilterButton(filterPos, size, () => {
             var windows = WindowsService.Get();
             var origin = FilterOriginNearButton(_crystallizeFilterButton, AddonFilterWindow.WindowWidth);
-            windows.AddonFilterWindow.OpenOrToggleNear(AddonFilterKind.Dresser, "Dresser filters", AddonFilterWindow.DresserOptions, origin);
-        }, "Dresser list filters");
+            windows.AddonFilterWindow.OpenOrToggleNear(AddonFilterKind.Dresser, Addon.GetRow(7542).Text.ToString(), AddonFilterWindow.DresserOptions, origin);
+        }, Addon.GetRow(7542).Text.ToString());
 
         _crystallizeStoreButton = CreateStoreButton(storePos, size, () => {
             if (AtkUnitBase.IsAddonReady(CrystallizeNativeTree.AddonName))
