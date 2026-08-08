@@ -291,9 +291,10 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
         var dresserIds = GetDresserItemIds();
         var outfitsBuilder = new Dictionary<string, HashSet<uint>>();
         foreach (var set in CatalogService.Get().GlamourSets) {
-            if (set.ItemId == 0 || !dresserIds.Contains(set.ItemId))
+            if (set.NonSetCabinetPiece || set.ItemId == 0 || !dresserIds.Contains(set.ItemId))
                 continue;
-            var setRow = MirageStoreSetItem.GetRow(set.ItemId);
+            if (!MirageStoreSetItem.TryGetRow(set.ItemId, out var setRow))
+                continue;
             var pieces = new HashSet<uint>();
             foreach (var pieceId in set.Items) {
                 if (pieceId != 0 && Svc.Items.IsPieceInMirageOutfitSlot(setRow, pieceId))
