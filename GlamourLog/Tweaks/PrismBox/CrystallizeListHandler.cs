@@ -81,6 +81,19 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
             return;
 
         _resyncScheduled = true;
+        // deposit can same-frame PreRefresh before the delayed tick runs, and restoring a pre-deposit snapshot desyncs leaf indices which I think can CTD
+        ClearTransientState();
+        _deferCategoryRestore = true;
+        _applyWhenReady = true;
+        _snapshotCapturePasses = 0;
+        _nativeTree.InvalidateAll();
+        _logNextApply = true;
+        LogFilterDebug(nameof(QueueListResync), reason);
+
+        var data = GetData();
+        if (data is not null)
+            ClearCrystallizeSelection(data);
+
         Svc.Framework.RunOnTick(() => {
             _resyncScheduled = false;
             if (!IsFilteringActive || _deferredRefreshDepth > 0)
@@ -89,19 +102,6 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
             var addon = GetAddon();
             if (addon is null || !addon->IsVisible)
                 return;
-
-            // drop snapshot so PreRefresh cannot restore a deposited item back into the agent
-            ClearTransientState();
-            _deferCategoryRestore = true;
-            _applyWhenReady = true;
-            _snapshotCapturePasses = 0;
-            _nativeTree.InvalidateAll();
-            _logNextApply = true;
-            LogFilterDebug(nameof(QueueListResync), reason);
-
-            var data = GetData();
-            if (data is not null)
-                ClearCrystallizeSelection(data);
 
             // rebuild crystallize candidates from inventory; OnRefresh alone keeps our projected rows
             var agent = AgentMiragePrismPrismBox.Instance();
@@ -140,8 +140,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
 
         if (!IsFilteringActive) {
             // Un-project the open category from the kept snapshot
-            if (HasSnapshotFor(data->CrystallizeCategory) && _nativeTree.HasBaseline) {
-                RestoreFullCategory(data);
+            if (HasSnapshotFor(data->CrystallizeCategory) && _nativeTree.HasBaseline && TryRestoreFullCategory(data)) {
                 _needsUnfilteredRepopulate = true;
                 _applyWhenReady = false;
                 _logNextApply = true;
@@ -182,9 +181,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
 
         // need a fresh capture
         _applyWhenReady = true;
-        if (_categoryRows.Length > 0 && data->CrystallizeCategory == _trackedCategory)
-            RestoreFullCategory(data); // undo projection so refresh/capture sees the full list
-        else
+        if (!(_categoryRows.Length > 0 && data->CrystallizeCategory == _trackedCategory && TryRestoreFullCategory(data)))
             _nativeTree.InvalidateAtkCache();
 
         addon->OnRefresh(0, null);
@@ -335,8 +332,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         }
 
         // prefer un-projecting from snapshot
-        if (HasSnapshotFor(data->CrystallizeCategory) && _nativeTree.HasBaseline) {
-            RestoreFullCategory(data);
+        if (HasSnapshotFor(data->CrystallizeCategory) && _nativeTree.HasBaseline && TryRestoreFullCategory(data)) {
             if (!TryRepopulateTree(addon, data, isFilteringActive: false)) {
                 _applyWhenReady = true;
                 RequestAddonRefresh();
@@ -685,13 +681,23 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         ClampCrystallizeSelection(data, selectedItemId);
     }
 
-    private unsafe void RestoreFullCategory(MiragePrismPrismBoxData* data) {
+    private unsafe bool TryRestoreFullCategory(MiragePrismPrismBoxData* data) {
+        if (!IsSnapshotInventoryLive()) {
+            LogFilterDebug(nameof(TryRestoreFullCategory), $"snapshot inventory stale ({_categoryRows.Length} rows)");
+            ClearTransientState();
+            _deferCategoryRestore = true;
+            _nativeTree.InvalidateBaseline();
+            ClearCrystallizeSelection(data);
+            return false;
+        }
+
         var count = _categoryRows.Length;
         for (var i = 0; i < count; i++)
             data->CrystallizeItems[i] = _categoryRows[i];
         data->CrystallizeItemCount = (ushort)count;
         for (var i = count; i < data->CrystallizeItems.Length; i++)
             data->CrystallizeItems[i] = default;
+        return true;
     }
 
     private unsafe void PrepareForNativeRefresh(MiragePrismPrismBoxData* data) {
@@ -701,10 +707,24 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         if (_categoryRows.Length == 0 || data->CrystallizeCategory != _trackedCategory)
             return;
 
-        // always un-project before a native refresh. a smaller CrystallizeItemCount at this point is my projection, not an actual shrink
-        // if it was an actual shrink, it would wipe the snapshot so filter-off had nothing to restore. real deposit/withdraw paths set _deferCategoryRestore via QueueListResync.
-        RestoreFullCategory(data);
+        // InventoryChanged can lag a same-frame native refresh, so don't write deposited Inventory/Slot back into the agent
+        // Projected CrystallizeItemCount < snapshot length is normal while filtering?
+        if (!TryRestoreFullCategory(data))
+            return;
     }
+
+    // false when any snapshot row's Inventory+Slot no longer holds that ItemId (it might lag a frame)
+    private unsafe bool IsSnapshotInventoryLive() => _categoryRows.All(static row => {
+        if (row.ItemId == 0)
+            return true;
+
+        var item = new ItemLocation(row.Inventory, (ushort)row.Slot).GetInventoryItem();
+        if (item is null || item->ItemId == 0)
+            return false;
+
+        var expected = ItemUtil.GetBaseId(row.ItemId).ItemId;
+        return expected != 0 && ItemUtil.GetBaseId(item->ItemId).ItemId == expected;
+    });
 
     private unsafe void ApplyEmptyCategory(MiragePrismPrismBoxData* data) {
         data->CrystallizeItemCount = 0;
