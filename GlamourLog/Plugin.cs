@@ -10,6 +10,7 @@ namespace GlamourLog;
  * TODO
  * setting: ignore armoire warning if item in dresser is dyed (can't really do as dyed info isn't cached in itemfinder
  * rename glam plates tweak
+ * mark on vendor listings to know if something is an outfit piece
  */
 public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugin {
     public async Task LoadAsync(CancellationToken cancellationToken) {

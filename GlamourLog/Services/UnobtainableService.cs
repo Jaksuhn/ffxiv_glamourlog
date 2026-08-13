@@ -178,18 +178,20 @@ internal sealed class RepurchaseIndex {
             if (listing.IsUnlocked(achievementsLoaded, out var deferredAch))
                 return PieceResult.Obtainable;
 
-            if (deferredAch)
-                locked |= LockedListingFlags.DeferredAchievement;
-
+            // festival refs include achievement -> quest links at this point
             if (listing.FestivalRefs.Length > 0) {
-                locked |= IsAnyFestivalActive(listing.FestivalRefs) ? LockedListingFlags.FestivalActive : LockedListingFlags.Locked;
+                if (IsAnyFestivalActive(listing.FestivalRefs)) {
+                    locked |= LockedListingFlags.FestivalActive; // has festival and is active -> obtainable
+                }
+                else if (deferredAch) {
+                    locked |= LockedListingFlags.DeferredAchievement; // out of season but may have achievement unlocked
+                }
+                else {
+                    locked |= LockedListingFlags.Locked; // incomplete gate + inactive festival
+                }
             }
-            else if (listing.AchievementId != 0) {
-                if (!deferredAch)
-                    locked |= LockedListingFlags.Locked; // achievements are loaded and they're incomplete
-            }
-            else if (listing.QuestIds.Length > 0) {
-                locked |= LockedListingFlags.AlwaysAvailableQuest; // festival == 0 should be non-seasonal quests
+            else {
+                locked |= LockedListingFlags.AlwaysAvailableQuest;
             }
         }
 
@@ -416,9 +418,10 @@ internal sealed class RepurchaseIndex {
         foreach (var questId in questIds)
             AddFromQuest(questId);
 
+        // link achievement -> quest -> festival window
         if (achievementId != 0 && Achievement.GetRowRef(achievementId).IsValid) {
             var ach = Achievement.GetRow(achievementId);
-            // type 6 / 9: Key + Data[] hold related quest ids
+            // type 6 / 9: Key + Data[] hold related quest ids. no link/festival -> treat achievement gate as obtainable
             if (ach.Type is 6 or 9) {
                 if (ach.Key.RowId != 0)
                     AddFromQuest(ach.Key.RowId);
