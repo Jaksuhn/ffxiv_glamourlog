@@ -17,6 +17,9 @@ internal abstract partial class ListHandlerBase(uint emptyListTextNodeId, IRowFi
         if (node is null)
             return;
 
+        if (node->IsVisible() == visible)
+            return;
+
         node->ToggleVisibility(visible);
         if (visible)
             node->NodeFlags |= NodeFlags.Visible;

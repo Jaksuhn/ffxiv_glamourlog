@@ -359,6 +359,8 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         _trackedCategory = data->CrystallizeCategory;
         ClearTransientState();
         ApplyUnfilteredIdle(addon, data, wipeAtkIfEmpty: true);
+        if (data->CrystallizeItemCount > 0 || ScanPopulatedCategoryItemCount(data) > 0)
+            _nativeTree.EnsureAllTreeListsVisible(addon);
 
         if (ConsumeLogNextApply()) {
             var count = (int)data->CrystallizeItemCount;
@@ -368,24 +370,20 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
 
     private unsafe void ApplyUnfilteredIdle(AtkUnitBase* addon, MiragePrismPrismBoxData* data, bool wipeAtkIfEmpty = false) {
         var categoryChanged = data->CrystallizeCategory != _trackedCategory;
-        if (categoryChanged)
+        if (categoryChanged) {
             _trackedCategory = data->CrystallizeCategory;
-
-        ClearTransientState();
+            ClearTransientState();
+        }
 
         if (!data->IsPopulatingComplete)
             return;
 
         var empty = data->CrystallizeItemCount == 0 && ScanPopulatedCategoryItemCount(data) == 0;
         SetEmptyListMessageVisible(addon, empty);
-        if (empty) {
+        // only wipe when an empty category would otherwise keep the last tab's buffer
+        if (empty && (wipeAtkIfEmpty || categoryChanged))
             // a native empty category doesn't call LoadAtkValues, so that's unreliable
-            if (wipeAtkIfEmpty || categoryChanged)
-                _nativeTree.ClearToEmpty(addon);
-        }
-        else {
-            _nativeTree.EnsureAllTreeListsVisible(addon);
-        }
+            _nativeTree.ClearToEmpty(addon);
     }
 
     private unsafe void OnAddonUpdate(AtkUnitBase* addon) {
