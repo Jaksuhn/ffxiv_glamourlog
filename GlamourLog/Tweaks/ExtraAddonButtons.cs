@@ -34,7 +34,7 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
             OnUpdate = OnCabinetUpdate,
         };
         _crystallizeController = new AddonController {
-            AddonName = CrystallizeNativeTree.AddonName,
+            AddonName = CrystallizeListHandler.AddonName,
             OnSetup = OnCrystallizeSetup,
             OnFinalize = OnCrystallizeFinalize,
             OnUpdate = OnCrystallizeUpdate,
@@ -84,7 +84,7 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
         }, Addon.GetRow(7542).Text.ToString());
 
         _crystallizeStoreButton = CreateStoreButton(storePos, size, () => {
-            if (AtkUnitBase.IsAddonReady(CrystallizeNativeTree.AddonName))
+            if (AtkUnitBase.IsAddonReady(CrystallizeListHandler.AddonName))
                 Svc.Automation.Start(new StoreAllDresserTask());
         });
 

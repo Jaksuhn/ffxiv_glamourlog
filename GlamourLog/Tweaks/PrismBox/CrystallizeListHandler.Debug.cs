@@ -1,25 +1,14 @@
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourLog.Tweaks.PrismBox;
 
 internal sealed partial class CrystallizeListHandler {
-    private unsafe void LogFilterApplied(MiragePrismPrismBoxData* data, AtkUnitBase* addon, int sourceCount, int visibleCount) {
+    private unsafe void LogFilterApplied(MiragePrismPrismBoxData* data, int sourceCount, int visibleCount) {
         LogFilterDebug(
-            nameof(TryApplyFilterPipeline),
+            nameof(ApplyFiltersToCrystallizeItems),
             $"category={data->CrystallizeCategory} flags=0x{data->CrystallizeFilterFlags:X2} " +
             $"source={sourceCount} visible={visibleCount} hidden={sourceCount - visibleCount} " +
-            $"filters=[{DescribeEnabledFilters()}] {DescribeTreeState(addon, data)}");
-    }
-
-    private unsafe string DescribeTreeState(AtkUnitBase* addon, MiragePrismPrismBoxData* data) {
-        _nativeTree.Resolve(addon);
-        var tree = _nativeTree.TreeList;
-        var nativeVisible = tree is not null && ((AtkResNode*)tree)->IsVisible();
-        return
-            $"reported={data->CrystallizeItemCount} nativeVisible={nativeVisible} " +
-            $"slots={_nativeTree.NativeSlotCount}->{_nativeTree.FilteredSlotCount} " +
-            $"hasBufferLayout={_nativeTree.HasBufferLayout} hasLayout={_nativeTree.HasLayout}";
+            $"filters=[{DescribeEnabledFilters()}]");
     }
 
     protected override string FilterDebugLabel(IRowFilter filter) => filter switch {
