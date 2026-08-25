@@ -40,6 +40,8 @@ internal sealed class DetailListRowData {
     public SourceNavigateTarget? NavigateTarget { get; init; }
     public string CostVendorTextTooltip { get; init; } = string.Empty;
     public string CostMapFlagLabel { get; init; } = string.Empty;
+    public int? CostOwnedCount { get; init; }
+    public int? CostRequiredCount { get; init; }
     public bool SourceIconsOnly { get; init; }
     public int SourceIconOverflow { get; init; } // # icons not shown when SourceItemIds exceeds space
     public IReadOnlyList<uint>? SourceFlowLeftIds { get; init; } // left strip ids for SourceArrowFlow, right is SourceItemIds
@@ -391,7 +393,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
             case DetailRowKind.Cost:
                 _pieceIcon.SetItemId(itemData.ItemId);
                 _pieceIcon.IsVisible = true;
-                ApplyIconTwoLineTextLayout(itemData.PrimaryText, itemData.SecondaryText);
+                ApplyIconTwoLineTextLayout(itemData.PrimaryText, FormatCosts(itemData));
                 _inputCollision.ShowClickableCursor = true;
                 _inputCollision.ItemTooltip = itemData.ItemId;
                 if (itemData.CostVendorTextTooltip.Length > 0)
@@ -515,6 +517,18 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
         _secondary.FontSize = 12;
         _secondary.LineSpacing = 12;
         _secondary.TextColor = ColourPalette.SubtitleBrown;
+    }
+
+    private string FormatCosts(DetailListRowData data) {
+        if (data.CostOwnedCount is not { } owned || data.CostRequiredCount is not { } required)
+            return data.SecondaryText;
+
+        string FormatNumber(int number) {
+            _secondary.SetNumber(number, showCommas: true);
+            return _secondary.String.ToString();
+        }
+
+        return $"Obt. {FormatNumber(owned)}/{FormatNumber(required)}";
     }
 
     // atk caches ellipsis metrics until string is toggled after a native draw pass
