@@ -5,8 +5,6 @@ using GlamourLog.Tweaks.PrismBox;
 namespace GlamourLog.Services;
 
 internal sealed class CommandService : IPluginCommands {
-    public int InitOrder => 20;
-
     public string[] Commands { get; } = ["/glamourlog", "/gl"];
     public string HelpMessage => $"Toggle the {nameof(GlamourLog)} window";
 

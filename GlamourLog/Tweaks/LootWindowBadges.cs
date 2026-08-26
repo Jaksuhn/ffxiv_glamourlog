@@ -13,8 +13,6 @@ namespace GlamourLog.Tweaks;
 // https://github.com/MidoriKami/VanillaPlus/blob/7d5490ffc59f4ccc56ef9ab22c99430941b97302/VanillaPlus/Features/EnhancedLootWindow/EnhancedLootWindow.cs
 // basically the same as vp but with different icons and rules
 internal sealed class LootWindowBadges : IPluginService, IAsyncDisposable {
-    public int InitOrder => 15;
-
     private readonly AddonController<AddonNeedGreed> _addonController;
     private readonly List<GlamourIconNode> _badges = [];
     private readonly List<nint> _attachedIconNodes = [];

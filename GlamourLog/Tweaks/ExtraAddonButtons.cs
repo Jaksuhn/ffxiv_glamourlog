@@ -11,8 +11,6 @@ using System.Threading.Tasks;
 namespace GlamourLog.Tweaks;
 
 internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
-    public int InitOrder => 15;
-
     private const uint CabinetPrevArrowId = 3;
     private const uint CabinetNextArrowId = 4;
     private const uint CrystallizePrevArrowId = 6;

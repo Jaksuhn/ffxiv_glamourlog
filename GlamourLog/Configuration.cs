@@ -6,7 +6,6 @@ namespace GlamourLog;
 
 [Serializable]
 public class Configuration : IPluginConfiguration, IPluginService {
-    [JsonIgnore] public int InitOrder => -100;
     [JsonIgnore] public static Configuration C => Configuration.Get();
 
     public int Version { get; set; } = 0;

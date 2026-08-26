@@ -4,8 +4,6 @@ using AllaganLib.GameSheets.ItemSources;
 namespace GlamourLog.Services;
 
 internal sealed class ItemAcquisitionService : IPluginService {
-    public int InitOrder => -15; // before UnobtainableService
-
     internal IReadOnlyList<ItemSource> GetSources(uint itemId)
         => Svc.SheetManager.ItemInfoCache.GetItemSources(itemId) is { Count: > 0 } list ? list : [];
 

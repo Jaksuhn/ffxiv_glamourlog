@@ -11,8 +11,6 @@ using CSAchievement = FFXIVClientStructs.FFXIV.Client.Game.UI.Achievement;
 namespace GlamourLog.Services;
 
 internal sealed unsafe class UnobtainableService : IPluginService, IDisposable {
-    public int InitOrder => -10; // before CatalogService
-
     private readonly Hook<PacketDispatcher.Delegates.HandleAchievementsPacket>? _achievementsPacketHook;
 
     internal event System.Action? Changed;

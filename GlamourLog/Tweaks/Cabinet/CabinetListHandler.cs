@@ -11,8 +11,6 @@ using static FFXIVClientStructs.FFXIV.Client.UI.RaptureAtkModule;
 namespace GlamourLog.Tweaks.Cabinet;
 
 internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginService, IAsyncDisposable {
-    public int InitOrder => 10; // after ownership
-
     private const string AddonName = "Cabinet";
 
     private readonly AddonController<AddonCabinet> _addonController;
