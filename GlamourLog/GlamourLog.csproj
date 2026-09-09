@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 	<PropertyGroup>
-		<Version>15.67</Version>
+		<Version>15.68</Version>
 		<LangVersion>preview</LangVersion>
 		<Author>croizat</Author>
 		<Name>Glamour Log</Name>
@@ -12,7 +12,7 @@
 		<IconUrl>https://puni.sh/api/plugins/icon/136</IconUrl>
 		<Tags>glamour</Tags>
 
-		<LocalCS>true</LocalCS>
+		<LocalCS>false</LocalCS>
 	</PropertyGroup>
 
     <ItemGroup>

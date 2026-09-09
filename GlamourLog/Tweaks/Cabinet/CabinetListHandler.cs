@@ -337,9 +337,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginServi
             return 0;
 
         var itemsIndex = addon->ItemSlots[index].ItemsArrayIndex;
-        return itemsIndex < agent->ItemCount
-            ? OwnershipService.Get().GetItemIdFromLookups(agent->Items[itemsIndex].Id)
-            : 0;
+        return itemsIndex < agent->ItemCount ? OwnershipService.Get().GetItemIdFromLookups(agent->Items[itemsIndex].Id) : 0;
     }
 
     private static unsafe void ApplyListCount(AddonCabinet* addon, int count) {
