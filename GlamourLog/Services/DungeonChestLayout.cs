@@ -46,7 +46,7 @@ internal sealed class DungeonChestLayout {
             if (!HasMapMarker || AgentMap.Instance() is not (not null and var agent))
                 return;
             var name = string.IsNullOrWhiteSpace(title) ? SecondaryLabel.Length > 0 ? $"{SecondaryLabel} Chest" : "Chest" : title;
-            Svc.Log.Info($"Opening map (m:{MapId};t:{TerritoryTypeId}) with coords: {MapPosition}");
+            IPluginLog.Get().Info($"Opening map (m:{MapId};t:{TerritoryTypeId}) with coords: {MapPosition}");
             agent->OpenMap(MapId, TerritoryTypeId, name);
             agent->ResetMapMarkers();
             agent->SetFlagMapMarker(TerritoryTypeId, MapId, Position, IconId); // TODO: AddMapMarker?
@@ -66,8 +66,9 @@ internal sealed class DungeonChestLayout {
             return ids;
 
         // mapid only ever increases through a dungeon (I think), so floors are a hard outer sort
+        // TODO: this assumption was wrong: matoya's relict starts on the final map id and you branch out/come back repeatedly
         var mapGroups = ids
-            .Where(id => _byRowId.ContainsKey(id))
+            .Where(_byRowId.ContainsKey)
             .GroupBy(id => _byRowId[id].MapId)
             .OrderBy(g => g.Key)
             .Select(g => g.Select(id => _byRowId[id]).ToList())
@@ -265,10 +266,10 @@ internal sealed class DungeonChestLayout {
     }
 
     private static DungeonChestLayout Build() {
-        var sheetChests = Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName).Where(c => c.RowId != 0).ToDictionary(c => c.RowId);
+        var sheetChests = IDataManager.Get().GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName).Where(c => c.RowId != 0).ToDictionary(c => c.RowId);
         var fightNoByBossRowId = new Dictionary<uint, uint>();
         var maxFightNoByCfcId = new Dictionary<uint, uint>();
-        foreach (var boss in Svc.Data.GetSupplemental<DungeonBoss>(CsvLoader.DungeonBossResourceName)) {
+        foreach (var boss in IDataManager.Get().GetSupplemental<DungeonBoss>(CsvLoader.DungeonBossResourceName)) {
             if (boss.RowId == 0)
                 continue;
             fightNoByBossRowId[boss.RowId] = boss.FightNo;

@@ -201,11 +201,11 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
     public OwnershipService() {
         Svc.Items.ArmoireChanged += OnArmoireChanged;
         Svc.Items.DresserChanged += OnDresserChanged;
-        Svc.GameInventory.InventoryChanged += OnInventoryChanged;
+        IGameInventory.Get().InventoryChanged += OnInventoryChanged;
     }
 
     public void Dispose() {
-        Svc.GameInventory.InventoryChanged -= OnInventoryChanged;
+        IGameInventory.Get().InventoryChanged -= OnInventoryChanged;
         Svc.Items.DresserChanged -= OnDresserChanged;
         Svc.Items.ArmoireChanged -= OnArmoireChanged;
     }
@@ -224,7 +224,7 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
     }
 
     private void OnInventoryChanged(IReadOnlyCollection<InventoryEventArgs> events) {
-        if (!Svc.ClientState.IsLoggedIn)
+        if (!IClientState.Get().IsLoggedIn)
             return;
 
         foreach (var eventData in events) {

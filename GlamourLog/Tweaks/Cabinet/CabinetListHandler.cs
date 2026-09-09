@@ -40,13 +40,13 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginServi
     private bool HasCaptureFor(uint categoryIndex) => _categoryIndex == categoryIndex && _projectedVisible >= 0;
 
     internal void OnConfigChanged() {
-        Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
+        IFramework.Get().RunOnFrameworkThread(ApplyConfigChange);
     }
 
     private unsafe void ApplyConfigChange() {
         CabinetGearsetLookup.Invalidate();
 
-        var addon = Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName);
+        var addon = IGameGui.Get().GetAddonByName<AddonCabinet>(AddonName);
         if (addon is null) {
             ClearFilterState();
             return;
@@ -89,8 +89,8 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginServi
 
     private unsafe void OnArmoireOwnershipChanged() {
         // run after update so list isn't reprojected w/ a pre-deposit capture
-        Svc.Framework.RunOnTick(() => {
-            var addon = Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName);
+        IFramework.Get().RunOnTick(() => {
+            var addon = IGameGui.Get().GetAddonByName<AddonCabinet>(AddonName);
             if (addon is null) {
                 ReleaseRows();
                 LogFilterDebug(nameof(OnArmoireOwnershipChanged), "cabinet addon not open");
@@ -487,7 +487,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginServi
     }
 
     public async ValueTask DisposeAsync() {
-        await Svc.Framework.RunOnFrameworkThread(() => {
+        await IFramework.Get().RunOnFrameworkThread(() => {
             OwnershipService.Get().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
             _addonController.Dispose();
             ClearFilterState();

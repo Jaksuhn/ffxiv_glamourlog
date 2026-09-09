@@ -21,7 +21,7 @@ internal unsafe partial class LogWindow {
             RefreshDetails(OwnershipService.Get().Query());
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
+            IPluginLog.Get().Error(ex, $"[{nameof(LogWindow)}] {nameof(PaintDetailsOnly)}");
         }
     }
 

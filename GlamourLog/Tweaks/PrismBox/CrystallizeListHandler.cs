@@ -21,15 +21,15 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
     private bool _repopulateScheduled;
 
     public unsafe CrystallizeListHandler() : base(12, PrismBoxFilters.Create()) {
-        _populateHook = Svc.Hook.HookFromAddress<AgentMiragePrismPrismBox.Delegates.PopulateCrystallizeAndFireRefresh>(
+        _populateHook = IGameInteropProvider.Get().HookFromAddress<AgentMiragePrismPrismBox.Delegates.PopulateCrystallizeAndFireRefresh>(
             (nint)AgentMiragePrismPrismBox.MemberFunctionPointers.PopulateCrystallizeAndFireRefresh,
             PopulateCrystallizeAndFireRefreshDetour);
         _populateHook.Enable();
 
-        Svc.GameInventory.InventoryChanged += OnInventoryChanged;
+        IGameInventory.Get().InventoryChanged += OnInventoryChanged;
     }
 
-    internal void OnConfigChanged() => Svc.Framework.RunOnFrameworkThread(ApplyConfigChange);
+    internal void OnConfigChanged() => IFramework.Get().RunOnFrameworkThread(ApplyConfigChange);
 
     internal IDisposable DeferRefresh() {
         _deferredRefreshDepth++;
@@ -76,7 +76,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         _repopulateScheduled = true;
         LogFilterDebug(nameof(QueueNativeRepopulate), reason);
 
-        Svc.Framework.RunOnTick(() => {
+        IFramework.Get().RunOnTick(() => {
             _repopulateScheduled = false;
             if (_deferredRefreshDepth > 0)
                 return;
@@ -93,7 +93,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         if (--_deferredRefreshDepth > 0)
             return;
 
-        Svc.Framework.RunOnFrameworkThread(() => QueueNativeRepopulate("deferred store-all flush"));
+        IFramework.Get().RunOnFrameworkThread(() => QueueNativeRepopulate("deferred store-all flush"));
     }
 
     private sealed class DeferredRefreshScope(CrystallizeListHandler owner) : IDisposable {
@@ -173,8 +173,8 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
     }
 
     public async ValueTask DisposeAsync() {
-        await Svc.Framework.RunOnFrameworkThread(() => {
-            Svc.GameInventory.InventoryChanged -= OnInventoryChanged;
+        await IFramework.Get().RunOnFrameworkThread(() => {
+            IGameInventory.Get().InventoryChanged -= OnInventoryChanged;
             _populateHook?.Dispose();
         });
     }

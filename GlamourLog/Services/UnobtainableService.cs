@@ -16,19 +16,19 @@ internal sealed unsafe class UnobtainableService : IPluginService, IDisposable {
     internal event System.Action? Changed;
 
     public UnobtainableService() {
-        _achievementsPacketHook = Svc.Hook.HookFromAddress<PacketDispatcher.Delegates.HandleAchievementsPacket>((nint)PacketDispatcher.MemberFunctionPointers.HandleAchievementsPacket, HandleAchievementsPacketDetour);
+        _achievementsPacketHook = IGameInteropProvider.Get().HookFromAddress<PacketDispatcher.Delegates.HandleAchievementsPacket>((nint)PacketDispatcher.MemberFunctionPointers.HandleAchievementsPacket, HandleAchievementsPacketDetour);
         _achievementsPacketHook.Enable();
 
-        Svc.ClientState.Login += OnLogin;
-        Svc.ClientState.Logout += OnLogout;
+        IClientState.Get().Login += OnLogin;
+        IClientState.Get().Logout += OnLogout;
 
-        if (Svc.ClientState.IsLoggedIn)
+        if (IClientState.Get().IsLoggedIn)
             RequestAchievements();
     }
 
     public void Dispose() {
-        Svc.ClientState.Logout -= OnLogout;
-        Svc.ClientState.Login -= OnLogin;
+        IClientState.Get().Logout -= OnLogout;
+        IClientState.Get().Login -= OnLogin;
         _achievementsPacketHook?.Dispose();
         Index = null;
     }
@@ -55,7 +55,7 @@ internal sealed unsafe class UnobtainableService : IPluginService, IDisposable {
             Changed?.Invoke();
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"{nameof(UnobtainableService)} achievements packet");
+            IPluginLog.Get().Error(ex, $"{nameof(UnobtainableService)} achievements packet");
         }
     }
 }
@@ -267,7 +267,7 @@ internal sealed class RepurchaseIndex {
     }
 
     private static void IndexGilShop(uint shopId, Dictionary<uint, List<RepurchaseListing>> acc) {
-        if (!Svc.Data.TryGetSubrows<GilShopItem>(shopId, out var rows))
+        if (!IDataManager.Get().TryGetSubrows<GilShopItem>(shopId, out var rows))
             return;
 
         foreach (var row in rows) {

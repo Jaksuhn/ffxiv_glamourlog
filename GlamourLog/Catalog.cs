@@ -33,7 +33,7 @@ internal sealed class Catalog {
     }
 
     internal static HashSet<uint> BuildCurrencyIdsFromCfcSupplemental<T>(string resourceName, Func<T, uint> itemIdSelector, Func<T, uint> cfcIdSelector, Func<T, bool>? rowFilter, params uint[] allowedContentTypes) where T : ICsv, new()
-        => [.. Svc.Data.GetSupplemental<T>(resourceName)
+        => [.. IDataManager.Get().GetSupplemental<T>(resourceName)
             .Where(r => (rowFilter?.Invoke(r) ?? true) && itemIdSelector(r) != 0
             && cfcIdSelector(r) is not 0 and var cfcId && ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true } cfc
             && allowedContentTypes.Contains(cfc.Value.ContentType.RowId)).Select(r => itemIdSelector(r))];
@@ -42,12 +42,12 @@ internal sealed class Catalog {
     // raids use DungeonBossDrop for currencies
     internal static HashSet<uint> BuildDungeonChestPieceIdsFromSupplemental() {
         var chestByRowId = new Dictionary<uint, DungeonChest>();
-        foreach (var chest in Svc.Data.GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName))
+        foreach (var chest in IDataManager.Get().GetSupplemental<DungeonChest>(CsvLoader.DungeonChestResourceName))
             chestByRowId[chest.RowId] = chest;
 
         var dungeonPieces = new HashSet<uint>();
 
-        foreach (var itemRow in Svc.Data.GetSupplemental<DungeonChestItem>(CsvLoader.DungeonChestItemResourceName)) {
+        foreach (var itemRow in IDataManager.Get().GetSupplemental<DungeonChestItem>(CsvLoader.DungeonChestItemResourceName)) {
             if (itemRow.ItemId == 0) continue;
             if (!chestByRowId.TryGetValue(itemRow.ChestId, out _))
                 continue;
@@ -84,7 +84,7 @@ internal sealed class Catalog {
 
     public ClassifyResult ClassifySet(MirageStoreSetItem mirageRow, ReadOnlyCollection<uint> itemIds, SpecialShop? specialShopRow, byte clientPvpSeries) {
         var ctx = new ClassifyContext(mirageRow, itemIds, specialShopRow);
-        foreach (var row in Svc.Data.GetSheet<PvPSeries>().Skip(1)) {
+        foreach (var row in IDataManager.Get().GetSheet<PvPSeries>().Skip(1)) {
             if (!row.AttireItems.ContainsAll(itemIds)) continue;
             if (row.RowId == clientPvpSeries)
                 return new ClassifyResult(PvpSeriesAttire.Name, false);

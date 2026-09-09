@@ -7,18 +7,18 @@ namespace GlamourLog.Tweaks;
 
 internal class ChatAlerts : IPluginService, IDisposable {
     public ChatAlerts() {
-        Svc.Chat.ChatMessage += OnChatMessage;
+        IChatGui.Get().ChatMessage += OnChatMessage;
     }
 
     public void Dispose() {
-        Svc.Chat.ChatMessage -= OnChatMessage;
+        IChatGui.Get().ChatMessage -= OnChatMessage;
     }
 
     private void OnChatMessage(IHandleableChatMessage message) {
         if (message.LogKind is not Dalamud.Game.Text.XivChatType.LootNotice)
             return;
 
-        if (message.Message.Payloads.FirstOrDefault(p => p is PlayerPayload) is PlayerPayload { PlayerName: var n } && n != Svc.PlayerState.CharacterName)
+        if (message.Message.Payloads.FirstOrDefault(p => p is PlayerPayload) is PlayerPayload { PlayerName: var n } && n != IPlayerState.Get().CharacterName)
             return; // ignore other players
 
         if (message.Message.Payloads.FirstOrDefault(p => p is ItemPayload) is not ItemPayload { Item: var row })

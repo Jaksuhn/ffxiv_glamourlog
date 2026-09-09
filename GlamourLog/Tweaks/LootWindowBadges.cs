@@ -144,7 +144,7 @@ internal sealed class LootWindowBadges : IPluginService, IAsyncDisposable {
     }
 
     public async ValueTask DisposeAsync() {
-        await Svc.Framework.RunOnFrameworkThread(() => {
+        await IFramework.Get().RunOnFrameworkThread(() => {
             _addonController.Dispose();
             DisposeBadges();
         });

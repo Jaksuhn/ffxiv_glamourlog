@@ -17,7 +17,7 @@ internal sealed class IpcProvider : IPluginService, IDisposable {
         RegisterFunc("IsSetComplete", (uint setItemId) => IsSetComplete(setItemId));
         RegisterFunc("GetItemsFromContent", (uint cfcId) => GetItemsFromContent(cfcId));
         RegisterFunc("IsContentComplete", (uint cfcId) => OwnershipService.Get().IsContentComplete(cfcId));
-        RegisterFunc("EntrustAll", () => Svc.Commands.ProcessCommand("/glamourlog store"));
+        RegisterFunc("EntrustAll", () => ICommandManager.Get().ProcessCommand("/glamourlog store"));
         RegisterFunc("IsBusy", () => Svc.Automation.CurrentTask is not null);
         RegisterFunc("ReadyToStore", IsReadyToStore);
         RegisterFunc("IsItemStorable", (uint itemId) => OwnershipService.Get().IsItemStorable(itemId));

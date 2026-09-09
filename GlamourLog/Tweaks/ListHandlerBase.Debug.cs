@@ -2,7 +2,7 @@ namespace GlamourLog.Tweaks;
 
 internal abstract partial class ListHandlerBase {
     protected void LogFilterDebug(string phase, string message)
-        => Svc.Log.Debug($"[{GetType().Name}.{phase}] {message}");
+        => IPluginLog.Get().Debug($"[{GetType().Name}.{phase}] {message}");
 
     protected string DescribeEnabledFilters() {
         var enabled = Filters.Where(f => f.IsEnabled).Select(FilterDebugLabel).ToArray();

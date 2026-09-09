@@ -44,7 +44,7 @@ internal sealed class StoreAllArmoireTask : AutoTask {
         => UIState.Instance()->Cabinet.IsCabinetLoaded();
 
     private static unsafe bool TrySelectCategory(int categoryIndex) {
-        var addon = Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName);
+        var addon = IGameGui.Get().GetAddonByName<AddonCabinet>(AddonName);
         var agent = AgentCabinet.Instance();
         if (addon is null || agent is null)
             return false;
@@ -63,12 +63,12 @@ internal sealed class StoreAllArmoireTask : AutoTask {
         agent->SelectedCategoryIndex = agentCategory;
         agent->PendingUpdate = true;
 
-        Svc.Log.Debug($"Requested category {categoryIndex}: dropdown={dropDown->GetSelectedItemIndex()}, agent={agent->SelectedCategoryIndex}, addon={addon->CategoryIndex}, pending={agent->PendingUpdate}");
+        IPluginLog.Get().Debug($"Requested category {categoryIndex}: dropdown={dropDown->GetSelectedItemIndex()}, agent={agent->SelectedCategoryIndex}, addon={addon->CategoryIndex}, pending={agent->PendingUpdate}");
         return true;
     }
 
     private static unsafe bool IsCategoryReady(int categoryIndex) {
-        var addon = Svc.GameGui.GetAddonByName<AddonCabinet>(AddonName);
+        var addon = IGameGui.Get().GetAddonByName<AddonCabinet>(AddonName);
         var agent = AgentCabinet.Instance();
         if (addon is null || agent is null)
             return false;

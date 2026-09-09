@@ -16,7 +16,7 @@ internal static unsafe class PieceContextMenu {
 
         menu.AddItem(Addon.GetRow(4379).Text, () => ItemFinderModule.Instance()->SearchForItem(itemId));
         menu.AddItem(Addon.GetRow(4697).Text, () => {
-            Svc.Chat.Print(SeString.CreateItemLink(itemId));
+            IChatGui.Get().Print(SeString.CreateItemLink(itemId));
             AgentChatLog.Instance()->LinkItem(itemId);
         });
         menu.AddItem(Addon.GetRow(159).Text, () => ImGui.SetClipboardText(itemName));

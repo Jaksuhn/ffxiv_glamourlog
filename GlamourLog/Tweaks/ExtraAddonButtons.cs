@@ -202,7 +202,7 @@ internal sealed class ExtraAddonButtons : IPluginService, IAsyncDisposable {
     }
 
     public async ValueTask DisposeAsync() {
-        await Svc.Framework.RunOnFrameworkThread(() => {
+        await IFramework.Get().RunOnFrameworkThread(() => {
             _cabinetController.Dispose();
             _crystallizeController.Dispose();
             DisposeCabinetButtons();

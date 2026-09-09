@@ -43,8 +43,8 @@ internal sealed class WindowsService : IPluginService, IAsyncDisposable {
         RememberClosePosition = false,
     };
 
-    internal void ToggleMainWindow() => Svc.Framework.Run(LogWindow.Toggle);
-    internal void ToggleMainMenu() => Svc.Framework.Run(MainMenuWindow.OpenOrToggleCentered);
+    internal void ToggleMainWindow() => IFramework.Get().Run(LogWindow.Toggle);
+    internal void ToggleMainMenu() => IFramework.Get().Run(MainMenuWindow.OpenOrToggleCentered);
 
     internal void ToggleMainMenuNearLogWindow() {
         if (LogWindow.IsOpen)
@@ -60,7 +60,7 @@ internal sealed class WindowsService : IPluginService, IAsyncDisposable {
         Svc.Interface.UiBuilder.OpenConfigUi -= ToggleMainMenu;
 
         // all native disposals must be done on game thread
-        await Svc.Framework.RunOnFrameworkThread(() => {
+        await IFramework.Get().RunOnFrameworkThread(() => {
             DisposeWindow(_logWindow, nameof(LogWindow));
             DisposeWindow(_filterWindow, nameof(FilterWindow));
             DisposeWindow(_addonFilterWindow, nameof(AddonFilterWindow));
@@ -80,7 +80,7 @@ internal sealed class WindowsService : IPluginService, IAsyncDisposable {
             window.Dispose();
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(WindowsService)}] Failed to dispose {name}");
+            IPluginLog.Get().Error(ex, $"[{nameof(WindowsService)}] Failed to dispose {name}");
         }
     }
 }

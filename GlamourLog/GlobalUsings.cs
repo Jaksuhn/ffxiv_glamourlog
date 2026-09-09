@@ -1,6 +1,7 @@
 global using clib.Extensions;
 global using clib.Services;
 global using clib.Utils;
+global using Dalamud.Plugin.Services;
 global using Dalamud.Utility;
 global using Lumina.Excel.Sheets;
 global using System;

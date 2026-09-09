@@ -73,7 +73,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
             return;
 
         if (rows.Count > GlamourPrismCount) {
-            Svc.Chat.EchoError($"Unable to store items. Insufficient glamour prisms");
+            IChatGui.Get().EchoError($"Unable to store items. Insufficient glamour prisms");
             throw new InvalidOperationException($"Insufficent glamour prisms");
         }
 
@@ -90,7 +90,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
             .AddUiForeground(549).AddUiGlow(550)
             .Append($"{setName}")
             .AddUiGlowOff().AddUiForegroundOff();
-        Svc.Toasts.ShowQuest(builder.BuiltString);
+        IToastGui.Get().ShowQuest(builder.BuiltString);
         await NextFrame(2);
     }
 
@@ -270,7 +270,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
         var filledCount = 0;
         List<PrismBoxCrystallizeItem>? sentPieces = null;
-        var sheetSlotLimit = Math.Min(setRow.Items.Count, Svc.Data.GetSheet<MirageStoreSetItem>().Columns.Count);
+        var sheetSlotLimit = Math.Min(setRow.Items.Count, IDataManager.Get().GetSheet<MirageStoreSetItem>().Columns.Count);
         for (var sheetSlot = 0; sheetSlot < sheetSlotLimit; sheetSlot++) {
             if (filledCount >= MaxStoreSlots)
                 break;
@@ -323,7 +323,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
     // add into an existing outfit when one already has a missing selected piece
     private static unsafe bool TryFindPrismBoxIndexForStore(MirageManager* mirage, MirageStoreSetItem setRow, Dictionary<uint, PrismBoxCrystallizeItem> pieceByBaseId, IReadOnlyList<uint> outfitIndices, out uint index) {
         index = 0;
-        var sheetSlotLimit = Math.Min(setRow.Items.Count, Svc.Data.GetSheet<MirageStoreSetItem>().Columns.Count);
+        var sheetSlotLimit = Math.Min(setRow.Items.Count, IDataManager.Get().GetSheet<MirageStoreSetItem>().Columns.Count);
 
         foreach (var outfitIndex in outfitIndices) {
             for (var sheetSlot = 0; sheetSlot < sheetSlotLimit; sheetSlot++) {

@@ -29,23 +29,23 @@ internal sealed class AutoDutyIpc : IPluginService {
 
     internal void FarmOutfit(uint cfcId) {
         if (cfcId == 0 || ContentFinderCondition.GetRowRef(cfcId) is not { IsValid: true, Value.TerritoryType.RowId: > 0 and var territory }) {
-            Svc.Chat.EchoMessage("GlamourLog: invalid duty.");
+            IChatGui.Get().EchoMessage("GlamourLog: invalid duty.");
             return;
         }
 
         if (OwnershipService.Get().IsContentComplete(cfcId)) {
-            Svc.Chat.EchoMessage("All outfit pieces from this duty collected.");
+            IChatGui.Get().EchoMessage("All outfit pieces from this duty collected.");
             return;
         }
 
         if (!_run.HasFunction || !_contentHasPath.HasFunction || !_contentHasPath.InvokeFunc(territory)) {
-            Svc.Chat.EchoMessage("AutoDuty has no path for this duty.");
+            IChatGui.Get().EchoMessage("AutoDuty has no path for this duty.");
             return;
         }
 
         var overrides = GetConfigOverrides();
         if (!_pushOverrides.HasFunction || !_pushOverrides.InvokeFunc(overrides)) {
-            Svc.Chat.EchoError("Failed to setup AutoDuty for farming.");
+            IChatGui.Get().EchoError("Failed to setup AutoDuty for farming.");
             return;
         }
 

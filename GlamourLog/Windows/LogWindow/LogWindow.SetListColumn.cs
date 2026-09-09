@@ -67,7 +67,7 @@ internal unsafe partial class LogWindow {
                 _setListOptions.Add(BuildSetListRowData(set, q));
             }
             catch (Exception ex) {
-                Svc.Log.Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
+                IPluginLog.Get().Error(ex, $"[{nameof(LogWindow)}] Build virtual set row failed");
             }
         }
 

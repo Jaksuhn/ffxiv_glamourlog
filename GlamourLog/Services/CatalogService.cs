@@ -31,15 +31,15 @@ internal sealed class CatalogService : IPluginService, IDisposable {
 
     public CatalogService() {
         _unobtainable = UnobtainableService.Get();
-        Svc.ClientState.Login += OnClientLogin;
+        IClientState.Get().Login += OnClientLogin;
         _unobtainable.Changed += OnUnobtainableChanged;
 
-        if (Svc.ClientState.IsLoggedIn)
+        if (IClientState.Get().IsLoggedIn)
             InvalidateCatalog();
     }
 
     public void Dispose() {
-        Svc.ClientState.Login -= OnClientLogin;
+        IClientState.Get().Login -= OnClientLogin;
         _unobtainable.Changed -= OnUnobtainableChanged;
         _catalogCts?.Cancel();
         _catalogCts?.Dispose();
@@ -115,7 +115,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
             // cancelled by logout / disable / superseded build
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"{nameof(CatalogService)} catalog build");
+            IPluginLog.Get().Error(ex, $"{nameof(CatalogService)} catalog build");
         }
     }
 
@@ -327,10 +327,10 @@ internal sealed class CatalogService : IPluginService, IDisposable {
             var missing = sourceRowIds.Where(id => !classifiedRowIds.Contains(id)).OrderBy(id => id).ToList();
             var preview = string.Join(", ", missing.Take(80));
             var suffix = missing.Count > 80 ? " ..." : string.Empty;
-            Svc.Log.Warning($"[{nameof(CatalogService)}] Coverage gap: source={sourceRowIds.Count}, classified={classifiedRowIds.Count}, missing={missing.Count}. Missing MirageStoreSetItem rowIds: {preview}{suffix}");
+            IPluginLog.Get().Warning($"[{nameof(CatalogService)}] Coverage gap: source={sourceRowIds.Count}, classified={classifiedRowIds.Count}, missing={missing.Count}. Missing MirageStoreSetItem rowIds: {preview}{suffix}");
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(CatalogService)}] mirage coverage diagnostics");
+            IPluginLog.Get().Error(ex, $"[{nameof(CatalogService)}] mirage coverage diagnostics");
         }
     }
 }

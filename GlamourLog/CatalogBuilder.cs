@@ -9,7 +9,7 @@ internal readonly record struct CatalogBuildResult(Catalog Catalog, ReadOnlyColl
 internal static unsafe class CatalogBuilder {
     internal static uint[] GetTradecraftDiscriminators() {
         if (CurrencyManager.Instance() == null) {
-            Svc.Log.Warning($"CurrencyManager was somehow null. Tradecraft categories will probably be incorrect.");
+            IPluginLog.Get().Warning($"CurrencyManager was somehow null. Tradecraft categories will probably be incorrect.");
             return [];
         }
         return [.. new byte[] { 1, 2, 3, 4, 6, 7 }.Select(sid => CurrencyManager.Instance()->GetItemIdBySpecialId(sid)).Where(id => id != 0).Distinct()];

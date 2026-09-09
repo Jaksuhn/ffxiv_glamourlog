@@ -85,7 +85,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             _pendingCategoryCounts = true;
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshListsAndDetails)}");
+            IPluginLog.Get().Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshListsAndDetails)}");
         }
     }
 
@@ -97,7 +97,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             RefreshCategoryCounts(q);
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshCategoryCountsNow)}");
+            IPluginLog.Get().Error(ex, $"[{nameof(LogWindow)}] {nameof(RefreshCategoryCountsNow)}");
         }
     }
 
@@ -111,7 +111,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             RefreshDetails(q);
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] {nameof(ApplyCategorySwitchNow)}");
+            IPluginLog.Get().Error(ex, $"[{nameof(LogWindow)}] {nameof(ApplyCategorySwitchNow)}");
         }
     }
 
@@ -346,7 +346,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             }
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] OnUpdate (pre-native)");
+            IPluginLog.Get().Error(ex, $"[{nameof(LogWindow)}] OnUpdate (pre-native)");
         }
 
         base.OnUpdate(addon);
@@ -369,7 +369,7 @@ internal unsafe partial class LogWindow : NativeAddon {
             _setListColumn?.FilterButton.Icon = _filterWindow.IsOpen ? CircleButtonIcon.ActiveGearCog : CircleButtonIcon.GearCog;
         }
         catch (Exception ex) {
-            Svc.Log.Error(ex, $"[{nameof(LogWindow)}] OnUpdate");
+            IPluginLog.Get().Error(ex, $"[{nameof(LogWindow)}] OnUpdate");
         }
     }
 
