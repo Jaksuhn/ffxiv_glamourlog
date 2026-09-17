@@ -1,4 +1,3 @@
-#if DEBUG
 using GlamourLog.Nodes.GuideWindow;
 
 namespace GlamourLog.Windows.GuideWindow;
@@ -17,4 +16,3 @@ internal sealed class CircleButtonsDebugGuidePage : IGuidePage {
         protected override void Relayout(CircleButtonGalleryNode node, float width) => node.Relayout(width);
     }
 }
-#endif

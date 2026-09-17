@@ -1,4 +1,3 @@
-#if DEBUG
 using Dalamud.Bindings.ImGui;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes.GuideWindow;
@@ -203,4 +202,3 @@ internal sealed class PcSearchSelectClassDebugGuidePage : IGuidePage {
         protected override void Relayout(JobPickerDebugRowNode node, float width) => node.Relayout(width);
     }
 }
-#endif

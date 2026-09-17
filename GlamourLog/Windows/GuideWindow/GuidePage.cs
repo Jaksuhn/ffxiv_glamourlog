@@ -14,9 +14,7 @@ internal enum GuideCategory {
     Tweaks,
     Export,
     Settings,
-#if DEBUG
     Debug,
-#endif
 }
 
 internal static class GuideCategoryExtensions {
@@ -26,9 +24,7 @@ internal static class GuideCategoryExtensions {
             GuideCategory.Tweaks => "Tweaks",
             GuideCategory.Export => "Export",
             GuideCategory.Settings => "Settings",
-#if DEBUG
             GuideCategory.Debug => "Debug",
-#endif
             _ => throw new ArgumentOutOfRangeException(nameof(category), category, null),
         };
 
@@ -38,9 +34,7 @@ internal static class GuideCategoryExtensions {
             GuideCategory.Tweaks => 1,
             GuideCategory.Export => 2,
             GuideCategory.Settings => 3,
-#if DEBUG
             GuideCategory.Debug => 4,
-#endif
             _ => throw new ArgumentOutOfRangeException(nameof(category), category, null),
         };
 }
@@ -54,6 +48,12 @@ internal sealed class GuidePageContext {
 internal sealed record GuideCategoryPages(string Title, IReadOnlyList<IGuidePage> Pages);
 
 internal static class GuidePageCatalog {
+#if DEBUG
+    private const bool IncludeDebugPages = true;
+#else
+    private const bool IncludeDebugPages = false;
+#endif
+
     internal static IReadOnlyList<GuideCategoryPages> Categories { get; } = Discover();
 
     private static IReadOnlyList<GuideCategoryPages> Discover() {
@@ -61,6 +61,7 @@ internal static class GuidePageCatalog {
             .GetTypes()
             .Where(type => !type.IsAbstract && !type.IsInterface && typeof(IGuidePage).IsAssignableFrom(type))
             .Select(type => (IGuidePage?)Activator.CreateInstance(type, nonPublic: true) ?? throw new InvalidOperationException($"Could not create guide page {type.FullName}."))
+            .Where(page => IncludeDebugPages || page.Category != GuideCategory.Debug)
             .ToArray();
 
         var duplicateIds = pages.GroupBy(page => page.Id, StringComparer.Ordinal).Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
