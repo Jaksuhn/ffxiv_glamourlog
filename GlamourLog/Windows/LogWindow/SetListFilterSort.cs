@@ -5,45 +5,43 @@ namespace GlamourLog.Windows.LogWindow;
 
 // filter/sorting for the middle column. 
 internal static class SetListFilterSort {
-    public static List<GlamourSet> Apply(string searchTrimmed, IReadOnlyList<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0) {
+    public static List<GlamourSet> Apply(string searchTrimmed, IReadOnlyList<GlamourSet> categoryRows, OwnershipQuery q, SetListFilterState filters) {
         IEnumerable<GlamourSet> rows = categoryRows;
 
-        if (C.HideCompleted)
-            rows = rows.Where(r => !q.For(r).IsComplete);
+        rows = rows.Where(r =>
+            Passes(C.FilterCompleted, q.For(r).IsComplete) &&
+            Passes(C.FilterIncompatible, r.IsIncompatible) &&
+            Passes(C.FilterUnobtainable, r.IsUnobtainable) &&
+            Passes(C.FilterMogstation, r.IsMogstation));
 
-        if (C.ShowOnlyCompleted)
-            rows = rows.Where(r => q.For(r).IsComplete);
+        if (filters.UseCustomPatches)
+            rows = rows.Where(r => filters.PatchNumbers.Contains(r.PatchNo));
+        else if (filters.ExpansionRowIds.Count > 0)
+            rows = rows.Where(r => r.PatchNo >= 2m && filters.ExpansionRowIds.Contains((uint)decimal.Truncate(r.PatchNo) - 2));
 
-        if (C.HideIncompatible)
-            rows = rows.Where(r => !r.IsIncompatible);
+        if (filters.ClassJobIds.Count > 0)
+            rows = rows.Where(set => PassesClassJobFilter(set, filters.ClassJobIds, filters.PartialClassJobMatch));
 
-        if (C.HideUnobtainable)
-            rows = rows.Where(r => !r.IsUnobtainable || q.For(r).IsComplete);
-
-        if (C.HideMogstation)
-            rows = rows.Where(r => !r.IsMogstation);
-
-        if (C.HideSharedModels)
-            rows = HideSharedModelSets([.. rows], q);
-
-        // Hide* are really"show only"
-        var hasPositiveFilters = C.HideNonPartials || C.HideUnaffordable || C.HideUnready || C.HideNoMarketboard;
-        if (hasPositiveFilters) {
-            rows = rows.Where(r => {
-                var s = q.For(r);
-                return (!C.HideNonPartials || s.IsPartial)
-                    && (!C.HideUnaffordable || s.CanAffordMissing)
-                    && (!C.HideUnready || s.HasContributableInventoryPiece)
-                    && (!C.HideNoMarketboard || PassesTradeableFilter(r));
-            });
+        if (filters.Source is { } source) {
+            var catalog = CatalogService.Get();
+            rows = rows.Where(set => catalog.SetMatchesSourceFilter(set, source, filters.SubSource));
         }
 
-        if (C.ShowOnlyMisplaced)
-            rows = rows.Where(r => q.For(r).ArmoireMisplaced);
+        rows = rows.Where(r => Passes(C.FilterSharedModels, r.SharedModelGroupSize > 1));
 
-        if (currencyFilterItemId != 0) {
+        rows = rows.Where(r => {
+            var s = q.For(r);
+            return Passes(C.FilterStarted, s.IsPartial)
+                && Passes(C.FilterAffordable, s.CanAffordMissing)
+                && Passes(C.FilterContributable, s.HasContributableInventoryPiece)
+                && Passes(C.FilterTradeable, PassesTradeableFilter(r))
+                && Passes(C.FilterArmoire, s.IsArmoireEligible)
+                && Passes(C.FilterMisplaced, s.ArmoireMisplaced);
+        });
+
+        if (filters.CurrencyItemId != 0) {
             var catalog = CatalogService.Get();
-            rows = rows.Where(r => catalog.SetUsesCurrencyFilter(r, currencyFilterItemId));
+            rows = rows.Where(r => catalog.SetUsesCurrencyFilter(r, filters.CurrencyItemId));
         }
 
         if (searchTrimmed.Length > 0)
@@ -52,38 +50,8 @@ internal static class SetListFilterSort {
         return ApplySort(rows);
     }
 
-    private static List<GlamourSet> HideSharedModelSets(List<GlamourSet> rows, OwnershipQuery q) {
-        if (rows.Count == 0)
-            return rows;
-
-        var keep = new HashSet<GlamourSet>();
-        foreach (var group in rows.GroupBy(r => r.ModelSignature)) {
-            var members = group.ToList();
-            if (members[0].SharedModelGroupSize <= 1) {
-                foreach (var set in members)
-                    keep.Add(set);
-                continue;
-            }
-
-            var active = members.Where(s => {
-                var status = q.For(s);
-                return status.IsComplete || status.IsPartial;
-            }).ToList();
-            if (active.Count > 0) {
-                foreach (var set in active)
-                    keep.Add(set);
-            }
-            else {
-                // none started -> keep the most dyeable version
-                keep.Add(members.OrderByDescending(s => s.Items.Max(id => Item.GetRow(id).DyeCount)).ThenBy(s => s.ItemId).First());
-            }
-        }
-
-        return [.. rows.Where(keep.Contains)];
-    }
-
-    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, IReadOnlyList<GlamourSet> categoryRows, OwnershipQuery q, uint currencyFilterItemId = 0)
-        => Apply(searchTrimmed, categoryRows, q, currencyFilterItemId).Contains(set);
+    internal static bool IsVisibleInSetList(GlamourSet set, string searchTrimmed, IReadOnlyList<GlamourSet> categoryRows, OwnershipQuery q, SetListFilterState filters)
+        => Apply(searchTrimmed, categoryRows, q, filters).Contains(set);
 
     internal static bool IsMogstationSet(GlamourSet set) => set.IsMogstation;
 
@@ -95,6 +63,73 @@ internal static class SetListFilterSort {
             return !Item.GetRow(set.Items[0]).IsUntradable;
         return set.Items.Any(itemId => !Item.GetRow(itemId).IsUntradable);
     }
+
+    private static bool Passes(FilterType filter, bool matches)
+        => filter switch {
+            FilterType.Only => matches,
+            FilterType.Exclude => !matches,
+            _ => true,
+        };
+
+    private static bool PassesClassJobFilter(GlamourSet set, IReadOnlyCollection<uint> classJobIds, bool partialMatch) {
+        if (partialMatch)
+            return classJobIds.Any(classJobId =>
+                set.Items.All(itemId => ClassJobCategoryContains(Item.GetRow(itemId).ClassJobCategory.Value, classJobId)));
+
+        var selected = classJobIds.ToHashSet();
+        return set.Items.All(itemId => {
+            var category = Item.GetRow(itemId).ClassJobCategory.Value;
+            return Enumerable.Range(1, 42)
+                .All(classJobId => selected.Contains((uint)classJobId) == ClassJobCategoryContains(category, (uint)classJobId));
+        });
+    }
+
+    private static bool ClassJobCategoryContains(ClassJobCategory category, uint classJobId)
+        => classJobId switch {
+            1 => category.GLA,
+            2 => category.PGL,
+            3 => category.MRD,
+            4 => category.LNC,
+            5 => category.ARC,
+            6 => category.CNJ,
+            7 => category.THM,
+            8 => category.CRP,
+            9 => category.BSM,
+            10 => category.ARM,
+            11 => category.GSM,
+            12 => category.LTW,
+            13 => category.WVR,
+            14 => category.ALC,
+            15 => category.CUL,
+            16 => category.MIN,
+            17 => category.BTN,
+            18 => category.FSH,
+            19 => category.PLD,
+            20 => category.MNK,
+            21 => category.WAR,
+            22 => category.DRG,
+            23 => category.BRD,
+            24 => category.WHM,
+            25 => category.BLM,
+            26 => category.ACN,
+            27 => category.SMN,
+            28 => category.SCH,
+            29 => category.ROG,
+            30 => category.NIN,
+            31 => category.MCH,
+            32 => category.DRK,
+            33 => category.AST,
+            34 => category.SAM,
+            35 => category.RDM,
+            36 => category.BLU,
+            37 => category.GNB,
+            38 => category.DNC,
+            39 => category.RPR,
+            40 => category.SGE,
+            41 => category.VPR,
+            42 => category.PCT,
+            _ => false,
+        };
 
     private static bool MatchesSearch(GlamourSet set, string searchTrimmed)
         => set.Name.Contains(searchTrimmed, StringComparison.OrdinalIgnoreCase)

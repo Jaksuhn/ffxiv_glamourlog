@@ -39,9 +39,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginServi
     private bool ShouldExcludeItem(uint itemId) => itemId == 0 || Filters.Any(f => f.IsEnabled && f.ShouldHide(itemId));
     private bool HasCaptureFor(uint categoryIndex) => _categoryIndex == categoryIndex && _projectedVisible >= 0;
 
-    internal void OnConfigChanged() {
-        IFramework.Get().RunOnFrameworkThread(ApplyConfigChange);
-    }
+    internal void OnConfigChanged() => IFramework.Get().Run(ApplyConfigChange);
 
     private unsafe void ApplyConfigChange() {
         CabinetGearsetLookup.Invalidate();
@@ -487,7 +485,7 @@ internal sealed partial class CabinetListHandler : ListHandlerBase, IPluginServi
     }
 
     public async ValueTask DisposeAsync() {
-        await IFramework.Get().RunOnFrameworkThread(() => {
+        await IFramework.Get().Run(() => {
             OwnershipService.Get().ArmoireOwnershipChanged -= OnArmoireOwnershipChanged;
             _addonController.Dispose();
             ClearFilterState();

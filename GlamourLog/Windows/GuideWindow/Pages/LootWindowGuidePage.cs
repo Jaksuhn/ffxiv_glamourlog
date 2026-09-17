@@ -2,12 +2,14 @@ using Dalamud.Game.Text.SeStringHandling;
 
 namespace GlamourLog.Windows.GuideWindow;
 
-public partial class GuideWindow {
-    private static readonly Page TweaksLootWindow = new() {
-        CategoryTitle = "Tweaks",
-        SubCategoryTitle = "Loot Window",
-        Blocks =
-        [
+internal sealed class LootWindowGuidePage : IGuidePage {
+    public string Id => "tweaks.loot-window";
+    public GuideCategory Category => GuideCategory.Tweaks;
+    public int Order => 3;
+    public string Title => "Loot Window";
+
+    public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
+        => [
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
@@ -27,6 +29,5 @@ public partial class GuideWindow {
                         .Highlight("Dresser badge")
                         .Append(" is shown on unowned, non-armoire outfit pieces.")
                         .Encode())),
-        ],
-    };
+        ];
 }

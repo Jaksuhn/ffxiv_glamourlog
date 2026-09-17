@@ -8,9 +8,7 @@ namespace GlamourLog.Nodes;
 internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
     private const float FilterCogSize = 28f;
     private const float LeftPad = 3f;
-    private const float HeaderControlGap = 4f;
 
-    public SetListCurrencyFilterNode CurrencyFilter { get; }
     public SetListSortControlNode SortControl { get; }
     public CircleButtonNode FilterButton { get; }
     public GlamourSetListNode List { get; }
@@ -22,18 +20,12 @@ internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
         var midHeaderWidth = middleWidth - 8f;
         var filterRelX = middleWidth - FilterCogSize - LeftPad - 4f;
         var sortRelX = filterRelX - 2f - SetListSortControlNode.LayoutWidth;
-        var currencyWidth = Math.Max(96f, sortRelX - LeftPad - HeaderControlGap);
 
         var header = new ResNode {
             Position = Vector2.Zero,
             Size = new Vector2(midHeaderWidth, headerHeight),
         };
         header.AttachNode(this);
-
-        CurrencyFilter = new SetListCurrencyFilterNode(currencyWidth) {
-            Position = new Vector2(LeftPad, (headerHeight - SetListCurrencyFilterNode.LayoutHeight) * 0.5f),
-        };
-        CurrencyFilter.AttachNode(header);
 
         SortControl = new SetListSortControlNode(C.SetListSortDirection) {
             Position = new Vector2(sortRelX, 0f),
@@ -87,12 +79,10 @@ internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
     // dispose before base finalizer runs
     public void DisposeDropDowns() {
         CollapseDropDowns();
-        CurrencyFilter.DropDown.Dispose();
         SortControl.SortDropDown.Dispose();
     }
 
     private void CollapseDropDowns() {
-        CurrencyFilter.CollapseIfOpen();
         if (!SortControl.SortDropDown.IsCollapsed)
             SortControl.SortDropDown.Collapse(playSoundEffect: false);
     }

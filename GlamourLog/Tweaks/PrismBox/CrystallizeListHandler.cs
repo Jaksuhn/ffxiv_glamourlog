@@ -29,7 +29,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         IGameInventory.Get().InventoryChanged += OnInventoryChanged;
     }
 
-    internal void OnConfigChanged() => IFramework.Get().RunOnFrameworkThread(ApplyConfigChange);
+    internal void OnConfigChanged() => IFramework.Get().Run(ApplyConfigChange);
 
     internal IDisposable DeferRefresh() {
         _deferredRefreshDepth++;
@@ -93,7 +93,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
         if (--_deferredRefreshDepth > 0)
             return;
 
-        IFramework.Get().RunOnFrameworkThread(() => QueueNativeRepopulate("deferred store-all flush"));
+        IFramework.Get().Run(() => QueueNativeRepopulate("deferred store-all flush"));
     }
 
     private sealed class DeferredRefreshScope(CrystallizeListHandler owner) : IDisposable {
@@ -173,7 +173,7 @@ internal sealed partial class CrystallizeListHandler : ListHandlerBase, IPluginS
     }
 
     public async ValueTask DisposeAsync() {
-        await IFramework.Get().RunOnFrameworkThread(() => {
+        await IFramework.Get().Run(() => {
             IGameInventory.Get().InventoryChanged -= OnInventoryChanged;
             _populateHook?.Dispose();
         });

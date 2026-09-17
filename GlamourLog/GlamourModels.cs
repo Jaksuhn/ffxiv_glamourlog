@@ -64,6 +64,7 @@ internal sealed class SetStatus {
     internal required bool IsComplete { get; init; }
     internal required int OwnedCount { get; init; }
     internal required SetStorageState Storage { get; init; }
+    internal required bool IsArmoireEligible { get; init; }
     internal required bool ArmoireMisplaced { get; init; } // armoire-eligible gear sitting in the dresser
     internal required bool HasContributableInventoryPiece { get; init; } // has something in bags that could be stored
     internal required bool CanAffordMissing { get; init; } // can pay the preferred costs for every missing piece

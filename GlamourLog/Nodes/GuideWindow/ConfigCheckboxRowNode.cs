@@ -1,4 +1,3 @@
-using GlamourLog.Windows.GuideWindow;
 using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
 
@@ -11,18 +10,18 @@ internal sealed class ConfigCheckboxRowNode : ResNode {
 
     private readonly CheckboxNode _checkbox;
     private readonly CircleButtonNode _infoButton;
-    private readonly CheckboxSettingBlock _setting;
+    private readonly Func<bool> _read;
 
-    public ConfigCheckboxRowNode(float width, CheckboxSettingBlock setting) {
-        _setting = setting;
+    public ConfigCheckboxRowNode(float width, string label, string infoTooltip, Func<bool> read, Action<bool> write) {
+        _read = read;
 
         var checkboxWidth = CheckboxWidth(width);
 
         _checkbox = new CheckboxNode {
             Size = new Vector2(checkboxWidth, RowHeight),
-            String = setting.Label,
-            IsChecked = setting.Read(),
-            OnClick = _setting.Write,
+            String = label,
+            IsChecked = read(),
+            OnClick = write,
         };
         _checkbox.AttachNode(this);
 
@@ -30,7 +29,7 @@ internal sealed class ConfigCheckboxRowNode : ResNode {
             Icon = CircleButtonIcon.Exclamation,
             Size = new Vector2(InfoButtonSize, InfoButtonSize),
             Position = new Vector2(width - InfoButtonSize, 0f),
-            TextTooltip = setting.InfoTooltip,
+            TextTooltip = infoTooltip,
         };
         _infoButton.AttachNode(this);
 
@@ -42,7 +41,7 @@ internal sealed class ConfigCheckboxRowNode : ResNode {
         _checkbox.Size = new Vector2(checkboxWidth, RowHeight);
         _infoButton.Position = new Vector2(width - InfoButtonSize, 0f);
         Size = new Vector2(width, RowHeight);
-        _checkbox.IsChecked = _setting.Read();
+        _checkbox.IsChecked = _read();
     }
 
     private static float CheckboxWidth(float width)

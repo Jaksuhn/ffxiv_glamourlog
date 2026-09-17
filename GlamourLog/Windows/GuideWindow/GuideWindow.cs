@@ -10,6 +10,8 @@ public unsafe partial class GuideWindow : NativeAddon {
     public const float WindowWidth = 944f;
     public const float WindowHeight = 600f;
 
+    private static IReadOnlyList<GuideCategoryPages> Categories => GuidePageCatalog.Categories;
+
     private const float LeftColumnWidth = 316f;
     private const float ContentPad = 8f;
     private const float ColumnGap = 6f;
@@ -20,8 +22,7 @@ public unsafe partial class GuideWindow : NativeAddon {
     private const float CategoryHeadingGap = 4f;
     private const float RightHeaderHeight = 68f;
 
-    private static readonly TextFlags HeaderTextFlags =
-        TextFlags.Emboss | TextFlags.WordWrap | TextFlags.MultiLine | unchecked((TextFlags)0x8000);
+    private static readonly TextFlags HeaderTextFlags = TextFlags.Emboss | TextFlags.WordWrap | TextFlags.MultiLine | unchecked((TextFlags)0x8000);
 
     private bool _hasPendingScreenOrigin;
     private Vector2 _pendingScreenOrigin;
@@ -34,10 +35,11 @@ public unsafe partial class GuideWindow : NativeAddon {
     private TextNode? _rightTitle;
     private float _rightTextWidth;
 
+    private readonly GuidePageContext _pageContext = new();
     private readonly List<SidebarSection> _categorySections = [];
 
     private int _expandedCategoryIndex;
-    private Page _selectedPage = null!;
+    private IGuidePage _selectedPage = null!;
 
     public void OpenOrToggleNear(Vector2 screenTopLeft) {
         if (IsOpen) {
@@ -99,7 +101,7 @@ public unsafe partial class GuideWindow : NativeAddon {
     }
 
     private void BuildChrome() {
-        _selectedPage = NavCategories[0].Pages[0];
+        _selectedPage = Categories[0].Pages[0];
         _expandedCategoryIndex = 0;
 
         var start = ContentStartPosition;
@@ -175,15 +177,15 @@ public unsafe partial class GuideWindow : NativeAddon {
         _rightScroll.ContentNode.ItemSpacing = RightBlockSpacing;
         _rightScroll.AttachNode(this);
 
-        for (var c = 0; c < NavCategories.Length; c++) {
+        for (var c = 0; c < Categories.Count; c++) {
             var catIndex = c;
-            var category = NavCategories[c];
+            var category = Categories[c];
 
             var categoryRow = new SidebarCategoryRowNode(category.Title, () => OnParentCategoryClicked(catIndex));
-            var pages = new List<(SidebarPageRowNode Btn, Page Page)>();
+            var pages = new List<(SidebarPageRowNode Btn, IGuidePage Page)>();
             foreach (var page in category.Pages) {
                 var captured = page;
-                pages.Add((new SidebarPageRowNode(page.SubCategoryTitle, () => OnSubClicked(captured)), page));
+                pages.Add((new SidebarPageRowNode(page.Title, () => OnSubClicked(captured)), page));
             }
 
             _categorySections.Add(new SidebarSection {
@@ -237,12 +239,12 @@ public unsafe partial class GuideWindow : NativeAddon {
 
     private void OnParentCategoryClicked(int catIndex) {
         _expandedCategoryIndex = catIndex;
-        _selectedPage = NavCategories[catIndex].Pages[0];
+        _selectedPage = Categories[catIndex].Pages[0];
         SyncLeftNav();
         PaintRight();
     }
 
-    private void OnSubClicked(Page page) {
+    private void OnSubClicked(IGuidePage page) {
         _selectedPage = page;
         SyncLeftNav();
         PaintRight();
@@ -252,7 +254,7 @@ public unsafe partial class GuideWindow : NativeAddon {
         if (_rightTitle is null || _rightScroll is null)
             return;
 
-        _rightTitle.String = _selectedPage.SubCategoryTitle;
+        _rightTitle.String = _selectedPage.Title;
         RebuildRightPanePage(_selectedPage);
         _rightScroll.RecalculateSizes();
         RelayoutRightPaneBlocks();

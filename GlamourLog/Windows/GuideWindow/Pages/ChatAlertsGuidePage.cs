@@ -2,12 +2,14 @@ using Dalamud.Game.Text.SeStringHandling;
 
 namespace GlamourLog.Windows.GuideWindow;
 
-public partial class GuideWindow {
-    private static readonly Page TweaksChatAlerts = new() {
-        CategoryTitle = "Tweaks",
-        SubCategoryTitle = "Chat Alerts",
-        Blocks =
-        [
+internal sealed class ChatAlertsGuidePage : IGuidePage {
+    public string Id => "tweaks.chat-alerts";
+    public GuideCategory Category => GuideCategory.Tweaks;
+    public int Order => 2;
+    public string Title => "Chat Alerts";
+
+    public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
+        => [
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
@@ -35,6 +37,5 @@ public partial class GuideWindow {
                     new SeStringBuilder()
                         .Append("If you already own the item in storage, the loot notice is left unchanged.")
                         .Encode())),
-        ],
-    };
+        ];
 }

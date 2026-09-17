@@ -2,12 +2,14 @@ using Dalamud.Game.Text.SeStringHandling;
 
 namespace GlamourLog.Windows.GuideWindow;
 
-public partial class GuideWindow {
-    private static readonly Page Icons = new() {
-        CategoryTitle = "Guide",
-        SubCategoryTitle = "Icons",
-        Blocks =
-        [
+internal sealed class IconsGuidePage : IGuidePage {
+    public string Id => "guide.icons";
+    public GuideCategory Category => GuideCategory.Guide;
+    public int Order => 0;
+    public string Title => "Icons";
+
+    public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
+        => [
             new IconExampleBlock(
                 IconExampleKind.Checkmark,
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
@@ -40,6 +42,5 @@ public partial class GuideWindow {
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder().Highlight("Dresser warning")
                     .Append(" is shown if the item is currently stored in the dresser but could be stored in the armoire. Also applies to sets.").Encode())),
-        ],
-    };
+        ];
 }

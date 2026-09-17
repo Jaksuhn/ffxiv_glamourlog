@@ -2,12 +2,14 @@ using Dalamud.Game.Text.SeStringHandling;
 
 namespace GlamourLog.Windows.GuideWindow;
 
-public partial class GuideWindow {
-    private static readonly Page Integrations = new() {
-        CategoryTitle = "Guide",
-        SubCategoryTitle = "Plugin Integrations",
-        Blocks =
-        [
+internal sealed class IntegrationsGuidePage : IGuidePage {
+    public string Id => "guide.integrations";
+    public GuideCategory Category => GuideCategory.Guide;
+    public int Order => 2;
+    public string Title => "Plugin Integrations";
+
+    public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
+        => [
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
@@ -34,6 +36,5 @@ public partial class GuideWindow {
                         .Append(" is used in the context menu of duty ").Highlight("Sources.")
                         .Append(" If installed, this context menu entry will start an AutoDuty loop where your character will run the relevant dungeon until all missing outfit pieces are acquired.")
                         .Encode())),
-        ],
-    };
+        ];
 }

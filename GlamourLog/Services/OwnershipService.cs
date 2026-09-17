@@ -110,9 +110,10 @@ internal sealed class OwnershipQuery {
             IsComplete = isComplete,
             OwnedCount = ownedCount,
             Storage = storage,
+            IsArmoireEligible = set.Items.Any(_snap.ArmoireCatalogItemIds.Contains),
             ArmoireMisplaced = storage is SetStorageState.Dresser && set.Items.Any(_snap.ArmoireCatalogItemIds.Contains) || pieces.Any(p => p.ShowArmoireWarning),
             HasContributableInventoryPiece = pieces.Any(p => p.Location is PieceLocation.Inventory),
-            CanAffordMissing = C.HideUnaffordable && ComputeCanAffordMissing(set),
+            CanAffordMissing = C.FilterAffordable != FilterType.Include && ComputeCanAffordMissing(set),
         };
     }
 

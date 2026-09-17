@@ -1,3 +1,7 @@
+using AllaganLib.GameSheets.Caches;
+using AllaganLib.GameSheets.Extensions;
+using AllaganLib.GameSheets.ItemSources;
+using AllaganLib.GameSheets.Sheets.Rows;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using System.Threading;
@@ -6,6 +10,28 @@ using System.Threading.Tasks;
 namespace GlamourLog.Services;
 
 internal sealed class CatalogService : IPluginService, IDisposable {
+    private static readonly HashSet<ItemInfoType> LootboxSourceTypes = [
+        ItemInfoType.Anemos,
+        ItemInfoType.Pagos,
+        ItemInfoType.Pyros,
+        ItemInfoType.Hydatos,
+        ItemInfoType.Bozja,
+        ItemInfoType.OccultTreasure,
+        ItemInfoType.PalaceOfTheDead,
+        ItemInfoType.HeavenOnHigh,
+        ItemInfoType.EurekaOrthos,
+        ItemInfoType.Coffer,
+        ItemInfoType.Loot,
+        ItemInfoType.PagosTreasure,
+        ItemInfoType.PyrosTreasure,
+        ItemInfoType.HydatosTreasure,
+        ItemInfoType.OccultPot,
+        ItemInfoType.OccultGoldenCoffer,
+        ItemInfoType.Logogram,
+        ItemInfoType.PilgrimsTraverse,
+        ItemInfoType.Oizys,
+    ];
+
     internal ReadOnlyCollection<GlamourSet> GlamourSets { get; private set; } = new ReadOnlyCollection<GlamourSet>([]);
     internal Dictionary<string, List<GlamourSet>> GlamourSetsByCategory { get; } = [];
     internal HashSet<uint> ArmoireItemIds { get; private set; } = [];
@@ -15,6 +41,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     private IReadOnlyList<uint> _currencyFilterAll = [];
     private Dictionary<string, IReadOnlyList<uint>> _currencyFilterByDisplayCategory = [];
     private Dictionary<uint, HashSet<uint>> _setFilterCurrencyIdsBySetId = [];
+    private SourceFilterIndex _sourceFilterIndex = SourceFilterIndex.Empty;
     private Dictionary<SetModelSignature, List<GlamourSet>> _sharedModelGroups = [];
     private Dictionary<ItemModelInfo, List<uint>> _sharedModelItemGroups = [];
 
@@ -50,6 +77,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
             _currencyFilterAll = [];
             _currencyFilterByDisplayCategory = [];
             _setFilterCurrencyIdsBySetId = [];
+            _sourceFilterIndex = SourceFilterIndex.Empty;
         }
     }
 
@@ -108,6 +136,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
                 _catalogBuilt = true;
             }
             RebuildCostCurrencyIndexes();
+            RebuildSourceFilterIndexes();
             Interlocked.Exchange(ref _pendingListRefresh, 1);
             WindowsService.Get().RefreshLogWindow();
         }
@@ -152,6 +181,19 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     }
 
     internal bool SetUsesCurrencyFilter(GlamourSet set, uint currencyItemId) => currencyItemId != 0 && _setFilterCurrencyIdsBySetId.TryGetValue(set.ItemId, out var ids) && ids.Contains(currencyItemId);
+    internal bool SetMatchesSourceFilter(GlamourSet set, ItemInfoType source, string subSourceKey) {
+        var index = _sourceFilterIndex;
+        if (!index.BySetId.TryGetValue(set.ItemId, out var bySource) || !bySource.TryGetValue(source, out var keys))
+            return false;
+        var validSubSource = !string.IsNullOrEmpty(subSourceKey) && index.Options.TryGetValue(source, out var options) && options.Any(option => option.Key == subSourceKey);
+        return !validSubSource || keys.Contains(subSourceKey);
+    }
+
+    internal IReadOnlyList<SourceFilterOption> GetSourceFilterOptions()
+        => [.. _sourceFilterIndex.SourceTypes.Select(type => new SourceFilterOption(type, ToName(type)))];
+
+    internal IReadOnlyList<SourceSubFilterOption> GetSubSourceFilterOptions(ItemInfoType source)
+        => _sourceFilterIndex.Options.GetValueOrDefault(source) ?? [];
     internal bool IsMirageOutfitPiece(uint itemId) => itemId != 0 && _catalogBuilt && MirageOutfitPieceIds.Contains(itemId);
     internal bool TryConsumePendingListRefresh() => Interlocked.Exchange(ref _pendingListRefresh, 0) != 0;
     internal void NotifyOwnershipChanged() => WindowsService.Get().RefreshLogWindow();
@@ -165,11 +207,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
         if (set.CategoryName is null)
             return null;
         lock (_glamourDataLock) {
-            if (set.CategoryName == _catalog.UncategorizedBucket.Name
-                || set.CategoryName == _catalog.MiscArmoireBucket.Name
-                || set.NonSetCabinetPiece)
-                return null;
-            return set.CategoryName;
+            return set.CategoryName == _catalog.UncategorizedBucket.Name || set.CategoryName == _catalog.MiscArmoireBucket.Name || set.NonSetCabinetPiece ? null : set.CategoryName;
         }
     }
 
@@ -313,6 +351,148 @@ internal sealed class CatalogService : IPluginService, IDisposable {
         _currencyFilterAll = SortedByName(allFilter);
         _currencyFilterByDisplayCategory = byDisplay.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<uint>)SortedByName(kv.Value));
         _setFilterCurrencyIdsBySetId = bySetId;
+    }
+
+    private void RebuildSourceFilterIndexes() {
+        var bySetId = new Dictionary<uint, Dictionary<ItemInfoType, HashSet<string>>>();
+        var optionLabels = new Dictionary<ItemInfoType, Dictionary<string, string>>();
+        var acquisition = ItemAcquisitionService.Get();
+
+        foreach (var set in GlamourSets) {
+            var bySource = new Dictionary<ItemInfoType, HashSet<string>>();
+            foreach (var itemId in BuildSourceScopeItemIds(set, filterPieceId: null)) {
+                foreach (var source in acquisition.GetSources(itemId))
+                    AddSource(source, bySource, optionLabels);
+            }
+            if (bySource.Count > 0)
+                bySetId[set.ItemId] = bySource;
+        }
+
+        var options = optionLabels.ToDictionary(
+            entry => entry.Key,
+            entry => (IReadOnlyList<SourceSubFilterOption>)[.. entry.Value
+                .Select(option => new SourceSubFilterOption(option.Key, option.Value))
+                .OrderBy(option => entry.Key == ItemInfoType.PVPSeries ? NumericKeySuffix(option.Key) : 0U)
+                .ThenBy(option => option.Label, StringComparer.Ordinal)
+                .ThenBy(option => option.Key, StringComparer.Ordinal)]);
+
+        var sourceTypes = bySetId.Values
+            .SelectMany(bySource => bySource.Keys)
+            .Distinct()
+            .OrderBy(ToName, StringComparer.Ordinal)
+            .ToList();
+        _sourceFilterIndex = new SourceFilterIndex(bySetId, options, sourceTypes);
+    }
+
+    private static void AddSource(ItemSource source, Dictionary<ItemInfoType, HashSet<string>> bySource, Dictionary<ItemInfoType, Dictionary<string, string>> optionLabels) {
+        switch (source) {
+            case ItemShopSource shopSource when shopSource.Type.IsShop():
+                AddVendorSource(shopSource, bySource, optionLabels);
+                return;
+            case ItemDungeonSource dutySource:
+                AddSourceOption(source.Type, $"duty:{dutySource.ContentFinderCondition.RowId}", DutyName(dutySource.ContentFinderCondition.RowId), bySource, optionLabels);
+                return;
+            case ItemQuestSource questSource:
+                AddSourceOption(source.Type, $"quest:{questSource.Quest.RowId}", questSource.Quest.RowId == 0 ? string.Empty : questSource.Quest.Value.Name.ToString(), bySource, optionLabels);
+                return;
+            case ItemCraftResultSource craftSource:
+                AddSourceOption(source.Type, $"recipe:{craftSource.Recipe.RowId}", ItemName(craftSource.Item.RowId), bySource, optionLabels);
+                return;
+            case ItemFateSource fateSource:
+                AddSourceOption(source.Type, $"fate:{fateSource.Fate.RowId}", fateSource.Fate.RowId == 0 ? string.Empty : Fate.GetRow(fateSource.Fate.RowId).Name.ToString(), bySource, optionLabels);
+                return;
+            case ItemDesynthSource desynthSource:
+                AddSourceOption(source.Type, $"item:{desynthSource.CostItem?.RowId ?? 0}", ItemName(desynthSource.CostItem?.RowId ?? 0), bySource, optionLabels);
+                return;
+            case ItemAchievementSource achievementSource:
+                AddSourceOption(source.Type, $"achievement:{achievementSource.Achievement.RowId}", achievementSource.Achievement.RowId == 0 ? string.Empty : achievementSource.Achievement.Value.Name.ToString(), bySource, optionLabels);
+                return;
+            case ItemPVPSeriesSource seriesSource:
+                AddSourceOption(source.Type, $"pvp-series:{seriesSource.PvpSeries.RowId}", seriesSource.PvpSeries.RowId == 0 ? string.Empty : $"Series {seriesSource.PvpSeries.RowId}", bySource, optionLabels);
+                return;
+            case ItemCashShopSource:
+                EnsureSource(source.Type, bySource);
+                return;
+            case ItemSupplementSource supplementSource when LootboxSourceTypes.Contains(supplementSource.Type):
+                var costItemId = supplementSource.CostItem?.RowId ?? 0;
+                AddSourceOption(
+                    source.Type,
+                    costItemId != 0 ? $"item:{costItemId}" : $"source-type:{(uint)supplementSource.Type}",
+                    costItemId != 0 ? ItemName(costItemId) : ToName(supplementSource.Type),
+                    bySource,
+                    optionLabels);
+                return;
+            case ItemFieldOpCofferSource fieldSource:
+                AddSourceOption(source.Type, $"field-coffer:{(uint)fieldSource.Type}:{(uint)fieldSource.CofferType}", $"{ToName(fieldSource.Type)} ({fieldSource.CofferType})", bySource, optionLabels);
+                return;
+            default:
+                EnsureSource(source.Type, bySource);
+                return;
+        }
+    }
+
+    private static void AddVendorSource(ItemShopSource shopSource, Dictionary<ItemInfoType, HashSet<string>> bySource, Dictionary<ItemInfoType, Dictionary<string, string>> optionLabels) {
+        EnsureSource(shopSource.Type, bySource);
+        var npcs = shopSource.Shop.ENpcs.OfType<ENpcBaseRow>().Where(npc => npc.RowId != 0).ToList();
+        foreach (var name in npcs.Select(npc => npc.Name.Trim()).Where(name => name.Length > 0).Distinct(StringComparer.Ordinal)) {
+            AddSourceOption(shopSource.Type, $"npc-name:{name}", name, bySource, optionLabels);
+        }
+        foreach (var npc in npcs.Where(npc => string.IsNullOrWhiteSpace(npc.Name))) {
+            AddSourceOption(shopSource.Type, $"npc:{npc.RowId}", $"NPC #{npc.RowId}", bySource, optionLabels);
+        }
+
+        if (npcs.Count == 0 && shopSource.Shop.RowId != 0) {
+            var shopName = shopSource.Shop.Name.Trim();
+            AddSourceOption(shopSource.Type, $"shop:{(uint)shopSource.Type}:{shopSource.Shop.RowId}", shopName.Length == 0 ? $"Vendor shop #{shopSource.Shop.RowId}" : shopName, bySource, optionLabels);
+        }
+    }
+
+    private static void AddSourceOption(ItemInfoType source, string key, string label, Dictionary<ItemInfoType, HashSet<string>> bySource, Dictionary<ItemInfoType, Dictionary<string, string>> optionLabels) {
+        var keys = EnsureSource(source, bySource);
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(label))
+            return;
+
+        keys.Add(key);
+        if (!optionLabels.TryGetValue(source, out var labels))
+            optionLabels[source] = labels = [];
+        labels.TryAdd(key, label.Trim());
+    }
+
+    private static HashSet<string> EnsureSource(ItemInfoType source, Dictionary<ItemInfoType, HashSet<string>> bySource) {
+        if (!bySource.TryGetValue(source, out var keys))
+            bySource[source] = keys = [];
+        return keys;
+    }
+
+    private static string DutyName(uint contentFinderConditionId)
+        => ContentFinderCondition.GetRowRef(contentFinderConditionId) is { IsValid: true, Value.NameFormatted: var name } ? name.ToString().Trim() : string.Empty;
+
+    private static string ItemName(uint itemId)
+        => itemId != 0 && Item.GetRowRef(itemId) is { IsValid: true, Value.Name: var name } ? name.ToString().Trim() : string.Empty;
+
+    private static string ToName(ItemInfoType type) {
+        if (type == ItemInfoType.CashShop)
+            return "Mogstation";
+        if (type == ItemInfoType.CraftRecipe)
+            return "Crafting";
+        if (type == ItemInfoType.PVPSeries)
+            return "PvP Series";
+
+        var raw = type.ToString();
+        return string.Concat(raw.Select((character, index) => index > 0 && char.IsUpper(character) && (char.IsLower(raw[index - 1]) || index + 1 < raw.Length && char.IsLower(raw[index + 1])) ? $" {character}" : character.ToString()));
+    }
+
+    private static uint NumericKeySuffix(string key)
+        => uint.TryParse(key.AsSpan(key.LastIndexOf(':') + 1), out var value) ? value : uint.MaxValue;
+
+    private sealed record SourceFilterIndex(
+        IReadOnlyDictionary<uint, Dictionary<ItemInfoType, HashSet<string>>> BySetId,
+        IReadOnlyDictionary<ItemInfoType, IReadOnlyList<SourceSubFilterOption>> Options,
+        IReadOnlyList<ItemInfoType> SourceTypes) {
+        internal static SourceFilterIndex Empty { get; } = new(
+            new Dictionary<uint, Dictionary<ItemInfoType, HashSet<string>>>(),
+            new Dictionary<ItemInfoType, IReadOnlyList<SourceSubFilterOption>>(),
+            []);
     }
 
     // in case I somehow miss a set

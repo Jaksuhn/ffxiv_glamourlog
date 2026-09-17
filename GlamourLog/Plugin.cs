@@ -23,6 +23,6 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 
     public async ValueTask DisposeAsync() {
         await CLibMain.DisposeAsync();
-        await IFramework.Get().RunOnFrameworkThread(KamiToolKitLibrary.Dispose);
+        await IFramework.Get().Run(KamiToolKitLibrary.Dispose);
     }
 }

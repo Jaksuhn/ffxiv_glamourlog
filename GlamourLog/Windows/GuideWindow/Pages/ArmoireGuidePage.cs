@@ -4,12 +4,14 @@ using KamiToolKit.Enums;
 
 namespace GlamourLog.Windows.GuideWindow;
 
-public partial class GuideWindow {
-    private static readonly Page TweaksArmoire = new() {
-        CategoryTitle = "Tweaks",
-        SubCategoryTitle = "Armoire",
-        Blocks =
-        [
+internal sealed class ArmoireGuidePage : IGuidePage {
+    public string Id => "tweaks.armoire";
+    public GuideCategory Category => GuideCategory.Tweaks;
+    public int Order => 0;
+    public string Title => "Armoire";
+
+    public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
+        => [
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
@@ -41,6 +43,5 @@ public partial class GuideWindow {
                         .Highlight("Store all")
                         .Append(" stores all eligible items from your inventory into the armoire. Ignores items in gearsets.")
                         .Encode())),
-        ],
-    };
+        ];
 }
