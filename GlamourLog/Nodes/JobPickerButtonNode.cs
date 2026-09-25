@@ -19,7 +19,10 @@ internal sealed class JobPickerButtonNode : ButtonBase {
     internal JobPickerButtonNode(System.Action? onClick = null) {
         Size = new Vector2(ButtonSize, ButtonSize);
         TextTooltip = Addon.GetRow(294).Text.ToString();
-        OnClick = onClick ?? WindowsService.Get().OpenPcSearchSelectClassTest;
+        OnClick = () => {
+            HideTooltip();
+            (onClick ?? WindowsService.Get().OpenPcSearchSelectClassTest)();
+        };
 
         _background = new SimpleImageNode {
             Size = new Vector2(ButtonSize),
@@ -55,10 +58,14 @@ internal sealed class JobPickerButtonNode : ButtonBase {
     }
 
     private void SyncIcon() {
+        if (IsDisposed || _picker.HasOpenedAddon)
+            return;
+
         var selection = _picker.GetSelectionSnapshot();
         var roles = SelectedRoles(selection);
         var (backgroundPartId, foregroundPartId) = PartsFor(roles);
 
+        HideTooltip();
         TextTooltip = SelectionTooltip(selection);
 
         ApplyPart(_background, backgroundPartId);

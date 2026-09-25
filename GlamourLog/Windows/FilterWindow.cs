@@ -397,7 +397,7 @@ internal unsafe class FilterWindow : NativeAddon {
             return;
         _syncingExpansionControls = true;
         try {
-            _allExpansionsCheckbox!.IsChecked = !_draft.UseCustomPatches && _draft.ExpansionRowIds.Count == 0;
+            SetCheckedQuiet(_allExpansionsCheckbox!, !_draft.UseCustomPatches && _draft.ExpansionRowIds.Count == 0);
             foreach (var (rowId, checkbox) in _expansionCheckboxes) {
                 var state = _draft.UseCustomPatches
                     ? CustomExpansionState(rowId)
@@ -406,11 +406,26 @@ internal unsafe class FilterWindow : NativeAddon {
                         : CheckboxSelectionState.None;
                 checkbox.SetSelectionState(state);
             }
-            _customPatchesButton?.IsChecked = _draft.UseCustomPatches;
+            if (_customPatchesButton is not null)
+                SetCheckedQuiet(_customPatchesButton, _draft.UseCustomPatches);
         }
         finally {
             _syncingExpansionControls = false;
         }
+    }
+
+    private static void SetCheckedQuiet(CheckboxNode node, bool value) {
+        var onClick = node.OnClick;
+        node.OnClick = null;
+        node.IsChecked = value;
+        node.OnClick = onClick;
+    }
+
+    private static void SetCheckedQuiet(ButtonBase node, bool value) {
+        var onClick = node.OnClick;
+        node.OnClick = null;
+        node.IsChecked = value;
+        node.OnClick = onClick;
     }
 
     private CheckboxSelectionState CustomExpansionState(uint rowId) {
@@ -423,10 +438,15 @@ internal unsafe class FilterWindow : NativeAddon {
     }
 
     private void ToggleCustomPatches() {
-        if (_draft is null)
+        if (_draft is null || _syncingExpansionControls)
             return;
+
+        var picker = WindowsService.Get().PatchPickerWindow;
+        if (picker.IsOpen)
+            return;
+
         var patches = CatalogService.Get().GlamourSets.Select(set => set.PatchNo).Where(patch => patch > 0m).Distinct().OrderBy(patch => patch).ToList();
-        WindowsService.Get().PatchPickerWindow.Open(patches, _draft.PatchNumbers, selected => {
+        picker.Open(patches, _draft.PatchNumbers, selected => {
             if (_draft is null)
                 return;
             _draft.PatchNumbers = selected;
@@ -441,7 +461,7 @@ internal unsafe class FilterWindow : NativeAddon {
 
         _draft.Reset();
         WindowsService.Get().PcSearchSelectClassPicker.SetSelectedClassJobIds([]);
-        _partialClassJobCheckbox!.IsChecked = true;
+        SetCheckedQuiet(_partialClassJobCheckbox!, true);
         _currencyFilter!.DropDown.SelectedOption = SetListCurrencyFilterNode.NoneCurrencyId;
         _sourceDropDown!.SelectedOption = SourceFilterOption.All;
         SyncExpansionControls();
@@ -468,10 +488,17 @@ internal unsafe class FilterWindow : NativeAddon {
         Close();
     }
 
-    protected override void OnFinalize(AtkUnitBase* addon) {
+    protected override void OnHide(AtkUnitBase* addon) {
+        // close children while this addon isn't being destroyed
         WindowsService.Get().ClosePatchPickerIfOpen();
+        WindowsService.Get().PcSearchSelectClassPicker.CloseIfOpen();
+        base.OnHide(addon);
+    }
+
+    protected override void OnFinalize(AtkUnitBase* addon) {
+        var picker = WindowsService.Get().PcSearchSelectClassPicker;
         if (!_committed)
-            WindowsService.Get().PcSearchSelectClassPicker.SetSelectedClassJobIds(Filters.ClassJobIds);
+            picker.SetSelectedClassJobIds(Filters.ClassJobIds, notify: false);
 
         // don't dispose nodes here
         _nodes.Clear();
