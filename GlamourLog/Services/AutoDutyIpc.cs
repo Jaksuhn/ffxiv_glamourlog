@@ -5,13 +5,13 @@ namespace GlamourLog.Services;
 
 internal sealed class AutoDutyIpc : IPluginService {
     private static readonly string[] GlamourFarmEnable = [
-        "EnablePreLoopActions",
-        "AutoRepair",
-        "EnableBetweenLoopActions",
-        "GlamourChestEntrust",
-        "ArmoireEntrust",
-        "EnableTerminationActions",
-        "StopWhenDutyGathered",
+        "Loop.Pre.Enabled",
+        "Loop.Between.Actions.[RepairLoopActionConfig].Enabled",
+        "Loop.Between.Enabled",
+        "Loop.Between.Actions.[GlamourLoopActionConfig].Enabled",
+        "Loop.Between.Actions.[ArmoireLoopActionConfig].Enabled",
+        "Loop.Between.Enabled",
+        "Loop.Termination.StopWhenDutyGathered",
     ];
 
     private const string SectionStart = "EnablePreLoopActions";
