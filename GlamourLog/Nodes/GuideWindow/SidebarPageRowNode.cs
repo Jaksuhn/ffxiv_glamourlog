@@ -7,8 +7,6 @@ internal sealed class SidebarPageRowNode : ListButtonNode {
     public const float RowHeight = 26f;
     private const float LabelX = 30f;
 
-    private static readonly Vector4 TextColor = ColourPalette.Cream;
-
     private bool _showSelected;
 
     public SidebarPageRowNode(string title, System.Action onClick) {
@@ -21,9 +19,10 @@ internal sealed class SidebarPageRowNode : ListButtonNode {
         LabelNode.FontSize = 14;
         LabelNode.LineSpacing = 14;
         LabelNode.AlignmentType = AlignmentType.Left;
-        LabelNode.TextColor = TextColor;
         LabelNode.String = title;
         LabelNode.TextFlags = TextFlags.Emboss | TextFlags.Ellipsis;
+        LabelNode.TextColor = ThemeColours.Standard.Current;
+        ThemeColours.ApplyEmboss(LabelNode);
         SidebarListButtonClick.Wire(this, onClick);
     }
 

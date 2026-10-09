@@ -1,7 +1,6 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Tweaks.Cabinet;
 using GlamourLog.Tweaks.PrismBox;
-using GlamourLog.Nodes;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Nodes;
 
@@ -159,7 +158,7 @@ internal unsafe class AddonFilterWindow : NativeAddon {
         _okButton.LabelNode.FontType = FontType.Axis;
         _okButton.LabelNode.FontSize = 12;
         _okButton.LabelNode.LineSpacing = 12;
-        _okButton.LabelNode.TextColor = ColourPalette.PrimaryWhite;
+        _okButton.LabelNode.TextColor = ThemeColours.Text.Current;
         _okButton.AttachNode(this);
     }
 

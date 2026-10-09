@@ -5,8 +5,6 @@ using Lumina.Text.ReadOnly;
 namespace GlamourLog.Nodes.GuideWindow;
 
 internal sealed class ParagraphNode : ResNode {
-    private static readonly Vector4 TextColor = ColourPalette.BodyGrey;
-
     private readonly ReadOnlySeString _content;
     private readonly float _textLeftInset;
     private readonly TextNode _text;
@@ -21,8 +19,8 @@ internal sealed class ParagraphNode : ResNode {
             FontSize = Constants.GuideBodyFontSize,
             LineSpacing = Constants.GuideBodyLineSpacing,
             AlignmentType = AlignmentType.TopLeft,
-            TextColor = TextColor,
             TextFlags = TextFlags.WordWrap | TextFlags.MultiLine,
+            TextColor = ThemeColours.Body.Current,
         };
         _text.RemoveTextFlags(TextFlags.Emboss);
         _text.AttachNode(this);

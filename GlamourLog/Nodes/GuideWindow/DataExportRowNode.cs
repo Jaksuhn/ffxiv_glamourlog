@@ -22,10 +22,11 @@ internal sealed class DataExportRowNode : ResNode {
             FontSize = 14,
             LineSpacing = 14,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.Cream,
             String = FormatLabel(format),
             TextFlags = TextFlags.Emboss,
+            TextColor = ThemeColours.Standard.Current,
         };
+        ThemeColours.ApplyEmboss(_label);
         _label.AttachNode(this);
 
         _copyButton = new TextButtonNode {
@@ -37,7 +38,7 @@ internal sealed class DataExportRowNode : ResNode {
         _copyButton.LabelNode.FontType = FontType.Axis;
         _copyButton.LabelNode.FontSize = 12;
         _copyButton.LabelNode.LineSpacing = 12;
-        _copyButton.LabelNode.TextColor = ColourPalette.PrimaryWhite;
+        _copyButton.LabelNode.TextColor = ThemeColours.White.Current;
         _copyButton.AttachNode(this);
 
         Size = new Vector2(width, RowHeight);

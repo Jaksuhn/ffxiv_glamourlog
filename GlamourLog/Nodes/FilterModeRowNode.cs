@@ -26,7 +26,6 @@ internal sealed class FilterModeRowNode : ResNode {
             FontSize = 14,
             LineSpacing = 14,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.HeadingGrey,
             String = label,
             TextFlags = TextFlags.Emboss,
         };
@@ -61,7 +60,12 @@ internal sealed class FilterModeRowNode : ResNode {
 
     internal void Sync(bool inactive) {
         var selected = _read();
-        _label.TextColor = inactive ? ColourPalette.MutedGrey : ColourPalette.Cream;
+        _label.TextColor = (inactive ? ThemeColours.Muted : ThemeColours.Standard).Current;
+        ThemeColours.ApplyEmboss(_label);
+        foreach (var button in _buttons) {
+            button.Label.TextColor = ThemeColours.Standard.Current;
+            ThemeColours.ApplyEmboss(button.Label);
+        }
         for (var index = 0; index < _buttons.Length; index++)
             _buttons[index].Selected = (FilterType)index == selected;
     }
@@ -72,6 +76,8 @@ internal sealed class FilterModeRowNode : ResNode {
         private readonly ResNode _visual;
         private readonly SimpleImageNode _selectedImage;
         private readonly TextNode _label;
+
+        internal TextNode Label => _label;
 
         internal FilterRadioButtonNode(string label, System.Action onClick) {
             OnClick = onClick;
@@ -105,7 +111,6 @@ internal sealed class FilterModeRowNode : ResNode {
                 FontSize = 14,
                 LineSpacing = 14,
                 AlignmentType = AlignmentType.Left,
-                TextColor = ColourPalette.Cream,
                 String = label,
                 TextFlags = TextFlags.Emboss,
             };

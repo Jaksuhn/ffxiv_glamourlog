@@ -10,7 +10,6 @@ namespace GlamourLog.Nodes.GuideWindow;
 internal sealed class IconSampleRowNode : ResNode {
     private const uint SampleItemId = 13066;
     private const float SetListIconSize = 29f;
-    private static readonly Vector4 TextColor = ColourPalette.BodyGrey;
 
     private readonly IconExampleKind _kind;
     private readonly ReadOnlySeString _description;
@@ -27,8 +26,8 @@ internal sealed class IconSampleRowNode : ResNode {
             FontSize = Constants.GuideBodyFontSize,
             LineSpacing = Constants.GuideBodyLineSpacing,
             AlignmentType = AlignmentType.TopLeft,
-            TextColor = TextColor,
             TextFlags = TextFlags.WordWrap | TextFlags.MultiLine,
+            TextColor = ThemeColours.Body.Current,
         };
         _text.RemoveTextFlags(TextFlags.Emboss);
         _text.AttachNode(this);

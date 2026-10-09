@@ -9,9 +9,9 @@ public sealed class InventorySpaceCounterNode : TextNode {
         FontSize = 14;
         LineSpacing = 14;
         AlignmentType = AlignmentType.Right;
-        TextColor = 1.Vec4();
-        TextOutlineColor = ColourPalette.CounterOutline;
         String = string.Empty;
+        TextColor = ThemeColours.Counter.Current;
+        TextOutlineColor = ThemeColours.CounterEdge.Current;
         AddTextFlags(TextFlags.Edge, TextFlags.Glare);
     }
 }

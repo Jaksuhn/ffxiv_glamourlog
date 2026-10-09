@@ -1,5 +1,4 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using KamiToolKit.Classes;
 using KamiToolKit.Nodes;
 using KamiToolKit.Nodes.Simplified;
 using Lumina.Text.ReadOnly;
@@ -28,10 +27,10 @@ public sealed class TreeListSectionHeader : ResNode {
 
         LabelNode = new TextNode {
             Position = new Vector2(22f, 1f),
-            TextColor = ColorHelper.GetColor(7),
             AlignmentType = AlignmentType.Left,
             FontSize = 12,
             FontType = FontType.Axis,
+            TextColor = ThemeColours.SeparatorLabel.Current,
         };
         LabelNode.AttachNode(this);
     }

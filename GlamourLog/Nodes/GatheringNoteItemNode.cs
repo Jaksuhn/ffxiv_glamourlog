@@ -12,12 +12,12 @@ public sealed class GatheringNoteItemNode : ListButtonNode {
     public TextNode TitleNode => _chrome.Title;
     public TextNode SubtitleNode => _chrome.Subtitle;
 
-    public GatheringNoteItemNode(float rowHeight, float iconSize, Vector4? titleColor = null) {
+    public GatheringNoteItemNode(float rowHeight, float iconSize) {
         String = string.Empty;
         // ListButtonNode label unused — custom icon + title/subtitle instead
         LabelNode.IsVisible = false;
 
-        _chrome = new IconAndStackedTitlesNode(iconSize, iconLeftMargin: 0f, titleColor ?? ColourPalette.TitleWhite);
+        _chrome = new IconAndStackedTitlesNode(iconSize, iconLeftMargin: 0f, ThemeColours.Text);
         _chrome.AttachNode(this);
 
         Height = rowHeight;

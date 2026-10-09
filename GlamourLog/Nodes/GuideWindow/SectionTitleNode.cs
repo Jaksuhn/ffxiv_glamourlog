@@ -5,7 +5,6 @@ namespace GlamourLog.Nodes.GuideWindow;
 
 internal sealed class SectionTitleNode : ResNode {
     private const float HeadingHeight = 26f;
-    private static readonly Vector4 TextColor = ColourPalette.Cream;
 
     private readonly TextNode _titleText;
 
@@ -18,10 +17,11 @@ internal sealed class SectionTitleNode : ResNode {
             FontSize = 14,
             LineSpacing = 14,
             AlignmentType = AlignmentType.TopLeft,
-            TextColor = TextColor,
             String = title,
-            TextFlags = TextFlags.Emboss
+            TextFlags = TextFlags.Emboss,
+            TextColor = ThemeColours.Standard.Current,
         };
+        ThemeColours.ApplyEmboss(_titleText);
         _titleText.AttachNode(this);
     }
 }

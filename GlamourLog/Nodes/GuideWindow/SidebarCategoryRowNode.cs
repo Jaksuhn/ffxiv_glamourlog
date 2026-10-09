@@ -9,9 +9,6 @@ internal sealed class SidebarCategoryRowNode : ListButtonNode {
     public const float RowHeight = 36f;
     private const float LabelX = 12f;
 
-    private static readonly Vector4 TextColor = ColourPalette.TitleWhite;
-    private static readonly Vector4 EdgeColor = ColourPalette.SidebarEdgeGold;
-
     public SidebarCategoryRowNode(string title, System.Action onClick) {
         Height = RowHeight;
 
@@ -35,11 +32,11 @@ internal sealed class SidebarCategoryRowNode : ListButtonNode {
         LabelNode.FontSize = 14;
         LabelNode.LineSpacing = 14;
         LabelNode.AlignmentType = AlignmentType.Left;
-        LabelNode.TextColor = TextColor;
-        LabelNode.TextOutlineColor = EdgeColor;
         LabelNode.String = title;
         LabelNode.TextFlags = TextFlags.Emboss | TextFlags.Ellipsis;
         LabelNode.RemoveTextFlags(TextFlags.Emboss);
+        LabelNode.TextColor = ThemeColours.Text.Current;
+        LabelNode.TextOutlineColor = ThemeColours.GoldEdge.Current;
 
         SidebarListButtonClick.Wire(this, onClick);
     }

@@ -48,7 +48,7 @@ public sealed class SourceFlowNode : ResNode {
             FontSize = 11,
             LineSpacing = 11,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.MutedGrey,
+            TextColor = ThemeColours.Muted.Current,
         };
         // grey +N overflow; emboss off
         _overflow.RemoveTextFlags(TextFlags.Emboss);

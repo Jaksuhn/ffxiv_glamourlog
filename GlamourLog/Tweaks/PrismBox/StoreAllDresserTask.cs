@@ -87,7 +87,7 @@ internal sealed class StoreAllDresserTask : TaskBase {
 
         var builder = new SeStringBuilder()
             .Append($"Stored {result.FilledCount} item{(result.FilledCount is 1 ? string.Empty : 's')} in ")
-            .AddUiForeground(549).AddUiGlow(550)
+            .AddUiForeground(ThemeColours.LinkedName.Key).AddUiGlow(ThemeColours.LinkedNameGlow.Key)
             .Append($"{setName}")
             .AddUiGlowOff().AddUiForegroundOff();
         IToastGui.Get().ShowQuest(builder.BuiltString);

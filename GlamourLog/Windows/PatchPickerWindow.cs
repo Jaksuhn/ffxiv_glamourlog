@@ -93,16 +93,18 @@ internal sealed unsafe class PatchPickerWindow : NativeAddon {
         const float buttonWidth = 134f;
         const float buttonHeight = 28f;
         var footerY = start.Y + ContentSize.Y - buttonHeight - 2f;
-        AddNode(new TextNode {
+        var footnote = new TextNode {
             Position = new Vector2(x + 4f, footerY - 42f),
             Size = new Vector2(contentWidth - 8f, 32f),
             FontType = FontType.Axis,
             FontSize = 12,
             LineSpacing = 12,
-            TextColor = ColourPalette.Cream,
             String = new Lumina.Text.ReadOnly.ReadOnlySeString(new SeStringBuilder().Footnote("Patches are for when an item was added to the game, not necessarily when it was made available.").Encode()),
             TextFlags = TextFlags.Emboss | TextFlags.WordWrap | TextFlags.MultiLine,
-        });
+            TextColor = ThemeColours.Standard.Current,
+        };
+        ThemeColours.ApplyEmboss(footnote);
+        AddNode(footnote);
         AddNode(new HorizontalLineNode {
             Position = new Vector2(x, footerY - 8f),
             Size = new Vector2(contentWidth, 2f),

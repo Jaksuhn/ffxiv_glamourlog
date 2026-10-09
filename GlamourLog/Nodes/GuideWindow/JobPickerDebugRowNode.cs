@@ -19,10 +19,11 @@ internal sealed class JobPickerDebugRowNode : ResNode {
             FontSize = 14,
             LineSpacing = 14,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.HeadingGrey,
             String = "Class/Job",
             TextFlags = TextFlags.Emboss,
+            TextColor = ThemeColours.Heading.Current,
         };
+        ThemeColours.ApplyEmboss(_label);
         _label.AttachNode(this);
 
         _button = new JobPickerButtonNode {

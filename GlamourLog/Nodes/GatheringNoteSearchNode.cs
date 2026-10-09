@@ -13,6 +13,7 @@ public sealed class GatheringNoteSearchNode : ResNode {
     private const float LeftPad = 3f;
 
     public readonly TextInputNode Input;
+    private readonly TextNode _heading;
 
     public GatheringNoteSearchNode(float width, Action<ReadOnlySeString> onInputChanged) {
         var searchBlockHeight = SearchBlockTopLabel + 4f + SearchRowHeight + SearchInnerPad + SearchBottomPad;
@@ -30,16 +31,18 @@ public sealed class GatheringNoteSearchNode : ResNode {
             Size = new Vector2(width, searchBlockHeight),
         }.AttachNode(this);
 
-        new TextNode {
+        _heading = new TextNode {
             Position = new Vector2(6f, 8f),
             Size = new Vector2(width - LeftPad * 2f, SearchBlockTopLabel),
             FontType = FontType.Jupiter,
             FontSize = 20,
             LineSpacing = 20,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.HeadingGrey,
             String = Addon.GetRow(1470).Text, // Item Search
-        }.AttachNode(this);
+            TextColor = ThemeColours.Heading.Current,
+        };
+        ThemeColours.ApplyEmboss(_heading);
+        _heading.AttachNode(this);
 
         var inputPos = new Vector2(LeftPad + SearchInnerPad, SearchBlockTopLabel + 4f + SearchInnerPad);
         var inputSize = new Vector2(width - (LeftPad + SearchInnerPad) * 2f, SearchRowHeight);

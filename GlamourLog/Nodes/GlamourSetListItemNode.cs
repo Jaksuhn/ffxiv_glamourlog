@@ -33,7 +33,7 @@ internal sealed unsafe class GlamourSetListItemNode : ListItemWithFocusNav<SetLi
     private GlamourIconNode.IconPart _lastStorageIconPart = GlamourIconNode.IconPart.Dresser;
 
     public GlamourSetListItemNode() {
-        _chrome = new IconAndStackedTitlesNode(IconSize, IconLeftMargin, ColourPalette.TitleWhite);
+        _chrome = new IconAndStackedTitlesNode(IconSize, IconLeftMargin, ThemeColours.Text);
         _chrome.AttachNode(this);
 
         _storageBadge = new GlamourIconNode(GlamourIconNode.IconPart.Dresser);

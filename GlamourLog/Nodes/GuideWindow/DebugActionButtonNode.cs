@@ -17,7 +17,7 @@ internal sealed class DebugActionButtonNode : ResNode {
         _button.LabelNode.FontType = FontType.Axis;
         _button.LabelNode.FontSize = 12;
         _button.LabelNode.LineSpacing = 12;
-        _button.LabelNode.TextColor = ColourPalette.PrimaryWhite;
+        _button.LabelNode.TextColor = ThemeColours.Text.Current;
         _button.AttachNode(this);
 
         Size = new Vector2(width, RowHeight);

@@ -4,6 +4,7 @@ using GlamourLog.Nodes.GuideWindow;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Nodes;
 using KamiToolKit.Nodes.Simplified;
+
 namespace GlamourLog.Windows.GuideWindow;
 
 public unsafe partial class GuideWindow : NativeAddon {
@@ -128,9 +129,10 @@ public unsafe partial class GuideWindow : NativeAddon {
             FontSize = 20,
             LineSpacing = 20,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.HeadingGrey,
             String = "Category",
+            TextColor = ThemeColours.Heading.Current,
         };
+        ThemeColours.ApplyEmboss(_categoryHeading);
         _categoryHeading.RemoveTextFlags(TextFlags.Emboss);
         _categoryHeading.AddTextFlags(TextFlags.Emboss);
         _categoryHeading.AttachNode(this);
@@ -162,9 +164,10 @@ public unsafe partial class GuideWindow : NativeAddon {
             FontSize = 18,
             LineSpacing = 18,
             AlignmentType = AlignmentType.Center,
-            TextColor = ColourPalette.Cream,
             TextFlags = HeaderTextFlags,
+            TextColor = ThemeColours.Standard.Current,
         };
+        ThemeColours.ApplyEmboss(_rightTitle);
         _rightTitle.AttachNode(_rightHeaderRow);
         _rightHeaderRow.AttachNode(this);
 

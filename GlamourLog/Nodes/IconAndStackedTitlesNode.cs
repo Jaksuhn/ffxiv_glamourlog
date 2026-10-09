@@ -21,23 +21,30 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
     public TextNode Title { get; }
     public TextNode Subtitle { get; }
 
+    private readonly ThemeColour _titleColour;
+
     public float TextX => _iconLeftMargin + IconColumnWidth;
 
-    public IconAndStackedTitlesNode(float iconSize, float iconLeftMargin, Vector4 titleColor) {
+    public IconAndStackedTitlesNode(float iconSize, float iconLeftMargin, ThemeColour titleColor) {
         _iconSize = iconSize;
         _iconLeftMargin = iconLeftMargin;
+        _titleColour = titleColor;
 
         Icon = new FramedItemIconNode(iconSize);
         UnobtainableBadge = new UnobtainableBadgeNode();
         MogstationBadge = new MogstationBadgeNode();
         CheckBadge = new CheckMarkBadgeNode();
-        Title = CreateTitleNode(titleColor);
+        Title = CreateTitleNode();
         Subtitle = CreateSubtitleNode();
 
         Icon.AttachNode(this);
         UnobtainableBadge.AttachNode(this);
         MogstationBadge.AttachNode(this);
         CheckBadge.AttachNode(this);
+        Title.TextColor = _titleColour.Current;
+        Subtitle.TextColor = ThemeColours.Subtitle.Current;
+        ThemeColours.ApplyEmboss(Title);
+        ThemeColours.ApplyEmboss(Subtitle);
         Title.AttachNode(this);
         Subtitle.AttachNode(this);
     }
@@ -57,13 +64,12 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
         Subtitle.Size = new Vector2(textW, 17f);
     }
 
-    private static TextNode CreateTitleNode(Vector4 titleColor)
+    private static TextNode CreateTitleNode()
         => new() {
             FontType = FontType.Axis,
             FontSize = TitleFontSize,
             LineSpacing = TitleFontSize,
             AlignmentType = AlignmentType.BottomLeft,
-            TextColor = titleColor,
             TextFlags = TextFlags.Emboss | TextFlags.Ellipsis,
         };
 
@@ -73,7 +79,6 @@ internal sealed class IconAndStackedTitlesNode : ResNode {
             FontSize = SubtitleFontSize,
             LineSpacing = SubtitleFontSize,
             AlignmentType = AlignmentType.TopLeft,
-            TextColor = ColourPalette.SubtitleBrown,
             TextFlags = TextFlags.Emboss,
         };
 }

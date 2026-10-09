@@ -1,5 +1,7 @@
+using FFXIVClientStructs.FFXIV.Client.Graphics;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Classes;
+using KamiToolKit.Extensions;
 using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes;
@@ -28,11 +30,13 @@ internal sealed unsafe class DetailRowsListNode : NestableTreeListNode<DetailLis
             IsVisible = false,
         };
         DutyChestMeasureNode.AttachNode(this);
+        PaintHeaders();
     }
 
     public void AssignSections(List<TreeListSection<DetailListRowData>> sections) {
         Sections = sections;
         SyncNodeCallbacks();
+        PaintHeaders();
     }
 
     public void SyncRowWidths() {
@@ -81,6 +85,47 @@ internal sealed unsafe class DetailRowsListNode : NestableTreeListNode<DetailLis
 
         SyncNodeCallbacks();
         base.Update();
+        PaintHeaders();
+    }
+
+    private void PaintHeaders() {
+        if (Node is null)
+            return;
+
+        var fill = ThemeColours.Header.Current.ToByteColor();
+        for (var child = Node->ChildNode; child != null; child = child->PrevSiblingNode) {
+            if (child->GetNodeType() != NodeType.Component)
+                continue;
+
+            var component = child->GetAsAtkComponentNode();
+            if (component == null || component->Component == null)
+                continue;
+
+            PaintHeaderText(component->Component->UldManager.RootNode, fill);
+        }
+    }
+
+    private static void PaintHeaderText(AtkResNode* node, ByteColor fill) {
+        if (node == null)
+            return;
+
+        while (node->NextSiblingNode != null)
+            node = node->NextSiblingNode;
+
+        for (var current = node; current != null; current = current->PrevSiblingNode) {
+            if (current->GetNodeType() == NodeType.Text) {
+                var text = (AtkTextNode*)current;
+                text->TextColor = fill;
+                text->SetAlpha(255);
+                if (ThemeColours.UseEmboss)
+                    text->TextFlags |= TextFlags.Emboss;
+                else
+                    text->TextFlags &= ~TextFlags.Emboss;
+            }
+
+            if (current->ChildNode != null)
+                PaintHeaderText(current->ChildNode, fill);
+        }
     }
 
     protected override void OnSizeChanged() {

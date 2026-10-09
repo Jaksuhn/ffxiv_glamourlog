@@ -9,9 +9,8 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
     private const float CategoryHeadingHeight = 26f;
     private const float CategoryCountWidth = 44f;
     private const float CategoryCountRightInset = 4f;
-    private static readonly Vector4 GatheringHeadingGrey = ColourPalette.HeadingGrey;
-    private static readonly Vector4 CategoryNameGold = ColourPalette.CategoryGold;
 
+    private readonly TextNode _heading;
     private readonly List<ListButtonNode> buttons = [];
     private readonly Dictionary<ListButtonNode, TextNode> countByButton = [];
     private readonly Dictionary<ListButtonNode, string> buttonCategoryMap = [];
@@ -32,24 +31,25 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
         Search.AttachNode(this);
 
         var afterSearchY = topGap + Search.Size.Y + 6f;
-        var heading = new TextNode {
+        _heading = new TextNode {
             Position = new Vector2(3f, afterSearchY),
             Size = new Vector2(width - 6f, CategoryHeadingHeight),
             FontType = FontType.Jupiter,
             FontSize = 23,
             LineSpacing = 23,
             AlignmentType = AlignmentType.BottomLeft,
-            TextColor = GatheringHeadingGrey,
             String = Addon.GetRow(1485).Text,
         };
-        heading.RemoveTextFlags(TextFlags.Emboss);
-        heading.AddTextFlags(TextFlags.Emboss);
-        heading.AttachNode(this);
+        _heading.RemoveTextFlags(TextFlags.Emboss);
+        _heading.AddTextFlags(TextFlags.Emboss);
+        _heading.AttachNode(this);
 
         var listY = afterSearchY + CategoryHeadingHeight + 2f;
         var listHeight = Math.Max(0f, columnHeight - listY);
         CategoryList = SimpleScrollList.Create(new Vector2(0f, listY), new Vector2(width, listHeight), true);
         CategoryList.AttachNode(this);
+        _heading.TextColor = ThemeColours.Heading.Current;
+        ThemeColours.ApplyEmboss(_heading);
     }
 
     public void RebuildFromPaneOrder(IReadOnlyList<string> paneOrder, string selectedCategoryId) {
@@ -72,9 +72,10 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
             button.LabelNode.FontSize = 20;
             button.LabelNode.LineSpacing = 20;
             button.LabelNode.AlignmentType = AlignmentType.Left;
-            button.LabelNode.TextColor = CategoryNameGold;
+            button.LabelNode.TextColor = ThemeColours.Gold.Current;
             button.LabelNode.String = categoryId;
-            button.LabelNode.AddTextFlags(TextFlags.Emboss, TextFlags.Ellipsis);
+            button.LabelNode.AddTextFlags(TextFlags.Ellipsis);
+            ThemeColours.ApplyEmboss(button.LabelNode);
 
             var countNode = new TextNode {
                 Position = new Vector2(button.Width - CategoryCountWidth - CategoryCountRightInset, 1f),
@@ -83,7 +84,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
                 FontSize = 11,
                 LineSpacing = 11,
                 AlignmentType = AlignmentType.BottomRight,
-                TextColor = GatheringHeadingGrey,
+                TextColor = ThemeColours.Heading.Current,
             };
             countNode.AttachNode(button);
 

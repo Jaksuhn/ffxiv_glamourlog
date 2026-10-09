@@ -1,5 +1,4 @@
 using FFXIVClientStructs.FFXIV.Component.GUI;
-using KamiToolKit.Classes;
 using KamiToolKit.Enums;
 using KamiToolKit.Extensions;
 using KamiToolKit.Interfaces;
@@ -102,7 +101,6 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
             Height = 24f,
             IsVisible = false,
         };
-        _journalChrome.LabelNode.TextColor = ColourPalette.JournalHeaderBlack;
         _journalChrome.LabelNode.Position = new Vector2(22f, 0f);
         _journalChrome.LabelNode.RemoveTextFlags(TextFlags.Emboss);
         _journalChrome.AttachNode(this);
@@ -114,7 +112,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
             FontSize = 12,
             LineSpacing = 12,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.PrimaryWhite,
+            TextColor = ThemeColours.Text.Current,
         };
         _primary.RemoveTextFlags(TextFlags.Emboss);
         _primary.AddTextFlags(TextFlags.Ellipsis);
@@ -127,7 +125,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
             FontSize = 12,
             LineSpacing = 12,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.MutedGrey,
+            TextColor = ThemeColours.Muted.Current,
             IsVisible = false,
         };
         _secondary.RemoveTextFlags(TextFlags.Emboss);
@@ -171,7 +169,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
             FontSize = 11,
             LineSpacing = 11,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.MutedGrey,
+            TextColor = ThemeColours.Muted.Current,
         };
         _sourceOverflow.RemoveTextFlags(TextFlags.Emboss);
         _sourceOverflow.AttachNode(this);
@@ -339,7 +337,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
         _primary.FontSize = 12;
         _primary.LineSpacing = 12;
         _primary.AlignmentType = AlignmentType.Left;
-        _primary.TextColor = ColourPalette.PrimaryWhite;
+        _primary.TextColor = ThemeColours.Text.Current;
         _primary.Position = new Vector2(DetailIconTextX, 1f);
         _secondary.Position = new Vector2(DetailIconTextX, 14f);
         _inputCollision.CollisionType = CollisionType.Hit;
@@ -362,7 +360,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
                 break;
             case DetailRowKind.EmptyHint:
                 _primary.Position = new Vector2(4f, 5f);
-                _primary.TextColor = ColourPalette.MutedGrey;
+                _primary.TextColor = ThemeColours.Muted.Current;
                 _primary.RemoveTextFlags(TextFlags.Ellipsis);
                 break;
             case DetailRowKind.Piece:
@@ -374,7 +372,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
                 _primary.AlignmentType = AlignmentType.Left;
                 _primary.FontSize = 14;
                 _primary.LineSpacing = 14;
-                _primary.TextColor = itemData.IsSelected ? ColourPalette.CategoryGold : ColorHelper.GetColor(itemRow.AtkUiRarityColorId);
+                _primary.TextColor = itemData.IsSelected ? ThemeColours.Gold.Current : ThemeColour.Row(itemRow.AtkUiRarityColorId).Current;
                 if (itemData.StorageIconPart is { } storagePart) {
                     if (_lastStoragePart != storagePart) {
                         _storageBadge.SetPart(storagePart);
@@ -418,7 +416,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
                     _primary.IsVisible = true;
                     _primary.FontSize = 12;
                     _primary.LineSpacing = 12;
-                    _primary.TextColor = ColourPalette.PrimaryWhite;
+                    _primary.TextColor = ThemeColours.Text.Current;
                     _primary.RemoveTextFlags(TextFlags.Ellipsis);
                     _secondary.RemoveTextFlags(TextFlags.Ellipsis);
                     if (itemData.SecondaryText.Length == 0) {
@@ -431,7 +429,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
                         _secondary.Position = new Vector2(DutyChestLabelX, 16f);
                         _secondary.FontSize = 12;
                         _secondary.LineSpacing = 12;
-                        _secondary.TextColor = ColourPalette.MutedGrey;
+                        _secondary.TextColor = ThemeColours.Muted.Current;
                     }
                 }
                 else {
@@ -441,7 +439,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
                     if (hasSourceSecondary) {
                         _secondary.IsVisible = true;
                         _secondary.Position = new Vector2(4f, 16f);
-                        _secondary.TextColor = ColourPalette.MutedGrey;
+                        _secondary.TextColor = ThemeColours.Muted.Current;
                     }
                 }
 
@@ -509,14 +507,14 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
         _primary.FontSize = 12;
         _primary.LineSpacing = 12;
         _primary.AlignmentType = AlignmentType.Left;
-        _primary.TextColor = ColourPalette.PrimaryWhite;
+        _primary.TextColor = ThemeColours.Text.Current;
         _primary.RemoveTextFlags(TextFlags.Ellipsis);
         _secondary.String = secondaryText;
         _secondary.IsVisible = true;
         _secondary.Position = new Vector2(DetailIconTextX, 15f);
         _secondary.FontSize = 12;
         _secondary.LineSpacing = 12;
-        _secondary.TextColor = ColourPalette.SubtitleBrown;
+        _secondary.TextColor = ThemeColours.Subtitle.Current;
     }
 
     private string FormatCosts(DetailListRowData data) {

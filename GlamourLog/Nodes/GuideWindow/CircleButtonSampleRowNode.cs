@@ -7,7 +7,6 @@ namespace GlamourLog.Nodes.GuideWindow;
 
 internal sealed class CircleButtonSampleRowNode : ResNode {
     private const float ButtonSize = 28f;
-    private static readonly Vector4 TextColor = ColourPalette.BodyGrey;
 
     private readonly ReadOnlySeString _description;
     private readonly CircleButtonNode _button;
@@ -29,8 +28,8 @@ internal sealed class CircleButtonSampleRowNode : ResNode {
             FontSize = Constants.GuideBodyFontSize,
             LineSpacing = Constants.GuideBodyLineSpacing,
             AlignmentType = AlignmentType.TopLeft,
-            TextColor = TextColor,
             TextFlags = TextFlags.WordWrap | TextFlags.MultiLine,
+            TextColor = ThemeColours.Body.Current,
         };
         _text.RemoveTextFlags(TextFlags.Emboss);
         _text.AttachNode(this);

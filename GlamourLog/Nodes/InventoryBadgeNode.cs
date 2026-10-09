@@ -8,6 +8,6 @@ public sealed class InventoryBadgeNode : SimpleImageNode {
         TextureCoordinates = new Vector2(44f, 220f);
         TextureSize = new Vector2(24f, 24f);
         Size = new Vector2(12f, 12f);
-        Color = ColourPalette.Cream;
+        Color = ThemeColours.Standard.Current;
     }
 }

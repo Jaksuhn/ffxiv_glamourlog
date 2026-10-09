@@ -106,7 +106,7 @@ internal unsafe class FilterWindow : NativeAddon {
                 _draft?.PartialClassJobMatch = value;
             },
         });
-        _partialClassJobCheckbox.Label.TextColor = ColourPalette.Cream;
+        _partialClassJobCheckbox.Label.TextColor = ThemeColours.Standard.Current;
         AddNode(new CircleButtonNode {
             Icon = CircleButtonIcon.Exclamation,
             Position = new Vector2(sectionX + LabelWidth + 174f, y + 7f),
@@ -131,7 +131,7 @@ internal unsafe class FilterWindow : NativeAddon {
                 SyncExpansionControls();
             },
         });
-        _allExpansionsCheckbox.Label.TextColor = ColourPalette.Cream;
+        _allExpansionsCheckbox.Label.TextColor = ThemeColours.Standard.Current;
         _customPatchesButton = AddNode(new TextButtonNode {
             Position = new Vector2(sectionX + sectionWidth - 116f, y),
             Size = new Vector2(116f, 28f),
@@ -167,7 +167,7 @@ internal unsafe class FilterWindow : NativeAddon {
                     SyncExpansionControls();
                 },
             });
-            checkbox.Label.TextColor = ColourPalette.Cream;
+            checkbox.Label.TextColor = ThemeColours.Standard.Current;
             _expansionCheckboxes.Add((expansion.RowId, checkbox));
         }
         SyncExpansionControls();
@@ -235,10 +235,11 @@ internal unsafe class FilterWindow : NativeAddon {
             FontSize = 14,
             LineSpacing = 14,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.Cream,
             String = Addon.GetRow(6625).Text.ToString(),
             TextFlags = TextFlags.Emboss,
+            TextColor = ThemeColours.Standard.Current,
         };
+        ThemeColours.ApplyEmboss(_subSourceLabel);
         _subSourceLabel.AttachNode(_subSourceContent);
         _subSourcePosition = new Vector2(LabelWidth, 0f);
         _subSourceSize = new Vector2(sectionWidth - LabelWidth, 24f);
@@ -299,7 +300,7 @@ internal unsafe class FilterWindow : NativeAddon {
             button.LabelNode.FontType = FontType.Axis;
             button.LabelNode.FontSize = 12;
             button.LabelNode.LineSpacing = 12;
-            button.LabelNode.TextColor = ColourPalette.PrimaryWhite;
+            button.LabelNode.TextColor = ThemeColours.Text.Current;
         }
     }
 
@@ -308,31 +309,36 @@ internal unsafe class FilterWindow : NativeAddon {
             Position = new Vector2(x, y),
             Size = new Vector2(width, 2f),
         });
-        AddNode(new TextNode {
+        var titleNode = new TextNode {
             Position = new Vector2(x + 4f, y + 6f),
             Size = new Vector2(width, 20f),
             FontType = FontType.Axis,
             FontSize = 14,
             LineSpacing = 14,
             AlignmentType = AlignmentType.TopLeft,
-            TextColor = ColourPalette.BodyGrey,
             String = title,
             TextFlags = TextFlags.Emboss,
-        });
+            TextColor = ThemeColours.Body.Current,
+        };
+        ThemeColours.ApplyEmboss(titleNode);
+        AddNode(titleNode);
     }
 
-    private TextNode AddLabel(string label, float x, float y, float width, float height)
-        => AddNode(new TextNode {
+    private TextNode AddLabel(string label, float x, float y, float width, float height) {
+        var node = new TextNode {
             Position = new Vector2(x, y),
             Size = new Vector2(width, height),
             FontType = FontType.Axis,
             FontSize = 14,
             LineSpacing = 14,
             AlignmentType = AlignmentType.Left,
-            TextColor = ColourPalette.Cream,
             String = label,
             TextFlags = TextFlags.Emboss,
-        });
+            TextColor = ThemeColours.Standard.Current,
+        };
+        ThemeColours.ApplyEmboss(node);
+        return AddNode(node);
+    }
 
     private T AddNode<T>(T node) where T : NodeBase {
         _nodes.Add(node);
