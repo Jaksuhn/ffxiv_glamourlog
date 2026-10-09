@@ -1,4 +1,3 @@
-using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Tweaks.Cabinet;
 using GlamourLog.Tweaks.PrismBox;

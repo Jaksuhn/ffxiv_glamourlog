@@ -24,6 +24,11 @@ internal static class SourcesPanelBuilder {
         return b;
     }
 
+    private static void AddGeneralDutyPiece(Dictionary<uint, DutyBuckets> duties, uint cfcId, uint pieceId) {
+        if (ContentFinderCondition.GetRowRef(cfcId) is { IsValid: true, Value.ContentType.RowId: not 9 }) // exclude treasure dungeons
+            GetDutyBucket(duties, cfcId).General.Add(pieceId);
+    }
+
     private static readonly ItemInfoType[] SupplementalCofferTypes = [
         ItemInfoType.Anemos,
         ItemInfoType.Pagos,
@@ -92,9 +97,14 @@ internal static class SourcesPanelBuilder {
                         set.Add(pieceId);
                         break;
                     case ItemDungeonDropSource drop when drop.ContentFinderCondition.RowId != 0:
-                        var dropCfc = drop.ContentFinderCondition.RowId;
-                        if (ContentFinderCondition.GetRowRef(dropCfc) is { IsValid: true, Value.ContentType.RowId: not 9 }) // exclude treasure dungeons
-                            GetDutyBucket(duties, dropCfc).General.Add(pieceId);
+                        AddGeneralDutyPiece(duties, drop.ContentFinderCondition.RowId, pieceId);
+                        break;
+                    case ItemDungeonBossChestSource bossChest when bossChest.ContentFinderCondition.RowId != 0:
+                        // boss chests aren't in DungeonChestLayout; show under General
+                        GetDutyBucket(duties, bossChest.ContentFinderCondition.RowId).General.Add(pieceId);
+                        break;
+                    case ItemDungeonBossDropSource bossDrop when bossDrop.ContentFinderCondition.RowId != 0:
+                        AddGeneralDutyPiece(duties, bossDrop.ContentFinderCondition.RowId, pieceId);
                         break;
                 }
             }

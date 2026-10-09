@@ -24,7 +24,7 @@ internal sealed class CategoryDiscriminator {
     public List<uint> TerritoryIntendedUseIds { get; } = []; // match if any piece's shop source resolves to a territory with this IntendedUse
 }
 
-internal readonly record struct ClassifyContext(MirageStoreSetItem MirageRow, ReadOnlyCollection<uint> ItemIds, SpecialShop? SpecialShopRow);
+internal readonly record struct ClassifyContext(MirageStoreSetItem MirageRow, ReadOnlyCollection<uint> ItemIds, IReadOnlyList<SpecialShop> SpecialShops);
 
 internal interface IGlamourCategoryRule {
     int Phase { get; }
@@ -67,7 +67,7 @@ internal sealed class LateTabBundleRule(OutfitCategory owner) : IGlamourCategory
     public int Phase => 2;
     public string? TryMatch(ClassifyContext ctx) {
         var d = Owner.Discriminator;
-        if (ctx.SpecialShopRow is { } shop && d.SpecialShopPredicate?.Invoke(shop) == true)
+        if (d.SpecialShopPredicate is { } pred && ctx.SpecialShops.Any(pred))
             return Owner.Name;
         var checkQuest = d.QuestJournalMatches.Count > 0;
         var checkTerritory = d.TerritoryIntendedUseIds.Count > 0;

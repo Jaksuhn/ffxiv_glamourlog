@@ -82,8 +82,8 @@ internal sealed class Catalog {
         return null;
     }
 
-    public ClassifyResult ClassifySet(MirageStoreSetItem mirageRow, ReadOnlyCollection<uint> itemIds, SpecialShop? specialShopRow, byte clientPvpSeries) {
-        var ctx = new ClassifyContext(mirageRow, itemIds, specialShopRow);
+    public ClassifyResult ClassifySet(MirageStoreSetItem mirageRow, ReadOnlyCollection<uint> itemIds, IReadOnlyList<SpecialShop> specialShops, byte clientPvpSeries) {
+        var ctx = new ClassifyContext(mirageRow, itemIds, specialShops);
         foreach (var row in IDataManager.Get().GetSheet<PvPSeries>().Skip(1)) {
             if (!row.AttireItems.ContainsAll(itemIds)) continue;
             if (row.RowId == clientPvpSeries)
@@ -245,8 +245,12 @@ internal sealed class Catalog {
         return new Catalog(uiTabs, classifiable, pvp, dungeons, uncategorized, miscArmoire);
     }
 
-    public static Dictionary<uint, SpecialShop> BuildSpecialShopByReceiveItemId()
+    public static Dictionary<uint, List<SpecialShop>> BuildSpecialShopByReceiveItemId()
         => SpecialShop.Where(s => s.RowId > 0 && !string.IsNullOrEmpty(s.Name.ToString()))
             .SelectMany(s => s.Item.SelectMany(item => item.ReceiveItems.Select(r => new { Shop = s, ItemId = r.Item.RowId })))
-            .Where(x => x.ItemId > 0).GroupBy(x => x.ItemId).ToDictionary(g => g.Key, g => g.First().Shop);
+            .Where(x => x.ItemId > 0)
+            .GroupBy(x => x.ItemId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => x.Shop).DistinctBy(s => s.RowId).ToList());
 }

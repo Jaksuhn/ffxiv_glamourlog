@@ -26,8 +26,11 @@ internal static unsafe class CatalogBuilder {
         var unobtainable = UnobtainableService.Get();
         return MirageStoreSetItem.Where(x => x.RowId > 0).Select(x => {
             var items = x.Items.Where(i => i.RowId > 0).Select(i => i.RowId).ToList().AsReadOnly();
-            var specialShopRow = Enumerable.FirstOrDefault(Enumerable.Select<uint, SpecialShop?>(items, id => specialShopByItemId.TryGetValue(id, out var s) ? s : null), s => s is not null);
-            var r = catalog.ClassifySet(x, items, specialShopRow, pvpSeries);
+            var specialShops = items
+                .SelectMany(id => specialShopByItemId.TryGetValue(id, out var shops) ? shops : [])
+                .DistinctBy(s => s.RowId)
+                .ToList();
+            var r = catalog.ClassifySet(x, items, specialShops, pvpSeries);
             var isUnobtainable = unobtainable.Apply(r.IsUnobtainable, items);
 
             var name = string.Empty;

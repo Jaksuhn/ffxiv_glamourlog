@@ -24,8 +24,7 @@ internal sealed class ItemAcquisitionService : IPluginService {
         => src is ItemDungeonChestSource or ItemDungeonDropSource or ItemDungeonBossChestSource or ItemDungeonBossDropSource;
 
     internal static bool IsSourceFromCfc(ItemSource src, uint cfcId)
-        => src is ItemDungeonChestSource chest && chest.ContentFinderCondition.RowId == cfcId
-            || src is ItemDungeonDropSource drop && drop.ContentFinderCondition.RowId == cfcId;
+        => src is ItemDungeonSource dungeon && dungeon.ContentFinderCondition.RowId == cfcId;
 
     internal static bool IsCraftSource(ItemSource src)
         => src is ItemCraftResultSource;

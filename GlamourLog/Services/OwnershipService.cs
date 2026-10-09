@@ -143,7 +143,6 @@ internal sealed class OwnershipQuery {
     private bool ComputeCanAffordMissing(GlamourSet set) {
         var catalog = CatalogService.Get();
         var category = catalog.GetCategoryForPreferredCost(set);
-        var totals = new Dictionary<uint, uint>();
         foreach (var itemId in set.Items) {
             if (_snap.StoredItemIds.Contains(itemId) || _snap.InventoryItemIds.Contains(itemId))
                 continue;
@@ -152,17 +151,7 @@ internal sealed class OwnershipQuery {
             var costs = catalog.GetPrimaryItemCosts(itemId, category);
             if (costs.Count == 0)
                 return false; // exclude things with no costs from being affordable
-            foreach (var (costItemId, amount) in costs) {
-                totals.TryGetValue(costItemId, out var total);
-                totals[costItemId] = total + amount;
-            }
-        }
-
-        if (totals.Count == 0)
-            return true;
-
-        foreach (var (costItemId, totalAmount) in totals) {
-            if (totalAmount > OwnershipService.GetOwnedCurrencyCount(costItemId))
+            if (!costs.Any(c => c.Amount <= OwnershipService.GetOwnedCurrencyCount(c.ItemId)))
                 return false;
         }
         return true;

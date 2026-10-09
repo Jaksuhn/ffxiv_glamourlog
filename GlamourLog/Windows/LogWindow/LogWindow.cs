@@ -4,7 +4,6 @@ using GlamourLog.Nodes;
 using GlamourLog.Services;
 using GlamourLog.Windows.ContextMenus;
 using GlamourLog.Windows.GuideWindow;
-using GlamourLog.Windows.LogWindow;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Enums;
 using KamiToolKit.Nodes;

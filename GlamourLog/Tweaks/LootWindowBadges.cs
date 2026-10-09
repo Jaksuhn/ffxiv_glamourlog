@@ -1,6 +1,4 @@
-using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
@@ -16,6 +14,7 @@ internal sealed class LootWindowBadges : IPluginService, IAsyncDisposable {
     private readonly AddonController<AddonNeedGreed> _addonController;
     private readonly List<GlamourIconNode> _badges = [];
     private readonly List<nint> _attachedIconNodes = [];
+    private bool _updating;
 
     public unsafe LootWindowBadges() {
         _addonController = new AddonController<AddonNeedGreed> {
@@ -29,60 +28,72 @@ internal sealed class LootWindowBadges : IPluginService, IAsyncDisposable {
 
     private unsafe void OnSetup(AddonNeedGreed* addon) {
         DisposeBadges();
-        var count = GetNumItems(addon);
-        SetupBadges(addon->NumItems);
+        SetupBadges(GetItemCount(addon));
         AttachBadges(addon);
     }
 
     private unsafe void OnFinalize(AddonNeedGreed* _) => DisposeBadges();
 
     private unsafe void OnRefresh(AddonNeedGreed* addon) {
-        var count = GetNumItems(addon);
-        SetupBadges(count);
-        AttachBadges(addon);
+        // AttachNode can re-enter PostRequestedUpdate/PostRefresh - avoid nested updates
+        if (_updating)
+            return;
 
-        var catalog = CatalogService.Get();
-        var ownership = OwnershipService.Get();
-        var query = ownership.Query();
+        _updating = true;
+        try {
+            var count = GetItemCount(addon);
+            SetupBadges(count);
+            AttachBadges(addon);
 
-        for (var index = 0; index < count; index++) {
-            var badge = _badges[index];
-            ref var itemInfo = ref addon->Items[index];
-            if (itemInfo.ItemId == 0 || _attachedIconNodes[index] == 0) {
+            var catalog = CatalogService.Get();
+            var ownership = OwnershipService.Get();
+            var query = ownership.Query();
+
+            for (var index = 0; index < count; index++) {
+                var badge = _badges[index];
+                ref var itemInfo = ref addon->Items[index];
+                if (itemInfo.ItemId == 0 || _attachedIconNodes[index] == 0) {
+                    badge.IsVisible = false;
+                    continue;
+                }
+
+                var itemId = ItemUtil.GetBaseId(itemInfo.ItemId).ItemId;
+                if (itemId == 0) {
+                    badge.IsVisible = false;
+                    continue;
+                }
+
+                // don't mark already owned
+                if (query.Locate(itemId) is not PieceLocation.None) {
+                    badge.IsVisible = false;
+                    continue;
+                }
+
+                if (ownership.IsCabinetItem(itemId) || catalog.ArmoireItemIds.Contains(itemId)) {
+                    badge.SetPart(GlamourIconNode.IconPart.Armoire);
+                    badge.IsVisible = true;
+                    continue;
+                }
+
+                if (catalog.IsMirageOutfitPiece(itemId)) {
+                    badge.SetPart(GlamourIconNode.IconPart.Dresser);
+                    badge.IsVisible = true;
+                    continue;
+                }
+
                 badge.IsVisible = false;
-                continue;
             }
 
-            var itemId = ItemUtil.GetBaseId(itemInfo.ItemId).ItemId;
-            if (itemId == 0) {
-                badge.IsVisible = false;
-                continue;
-            }
-
-            // don't mark already owned
-            if (query.Locate(itemId) is not PieceLocation.None) {
-                badge.IsVisible = false;
-                continue;
-            }
-
-            if (ownership.IsCabinetItem(itemId) || catalog.ArmoireItemIds.Contains(itemId)) {
-                badge.SetPart(GlamourIconNode.IconPart.Armoire);
-                badge.IsVisible = true;
-                continue;
-            }
-
-            if (catalog.IsMirageOutfitPiece(itemId)) {
-                badge.SetPart(GlamourIconNode.IconPart.Dresser);
-                badge.IsVisible = true;
-                continue;
-            }
-
-            badge.IsVisible = false;
+            for (var index = count; index < _badges.Count; index++)
+                _badges[index].IsVisible = false;
         }
-
-        for (var index = count; index < _badges.Count; index++)
-            _badges[index].IsVisible = false;
+        finally {
+            _updating = false;
+        }
     }
+
+    private static unsafe int GetItemCount(AddonNeedGreed* addon)
+        => Math.Clamp(addon->NumItems, 0, addon->Items.Length);
 
     private void SetupBadges(int count) {
         while (_badges.Count < count) {
@@ -99,7 +110,10 @@ internal sealed class LootWindowBadges : IPluginService, IAsyncDisposable {
         if (list is null)
             return;
 
-        for (var index = 0; index < addon->NumItems; index++) {
+        var count = GetItemCount(addon);
+        SetupBadges(count);
+
+        for (var index = 0; index < count; index++) {
             var renderer = list->GetItemRenderer(index);
             if (renderer is null) {
                 _attachedIconNodes[index] = 0;
@@ -123,12 +137,6 @@ internal sealed class LootWindowBadges : IPluginService, IAsyncDisposable {
             badge.IsVisible = false;
             _attachedIconNodes[index] = iconPtr;
         }
-    }
-
-    private static unsafe int GetNumItems(AddonNeedGreed* addon) {
-        var agent = AgentLoot.Instance();
-        var numItems = agent is not null ? agent->NumItems : 0;
-        return Math.Clamp(numItems, 0, addon->Items.Length);
     }
 
     private static unsafe AtkComponentList* GetList(AddonNeedGreed* addon) {

@@ -1,5 +1,3 @@
-using FFXIVClientStructs.FFXIV.Client.Game;
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using GlamourLog.Nodes;
 using GlamourLog.Services;
 using GlamourLog.Windows.LogWindow;
