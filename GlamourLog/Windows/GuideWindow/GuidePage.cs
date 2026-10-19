@@ -20,11 +20,8 @@ internal enum GuideCategory {
 internal static class GuideCategoryExtensions {
     internal static string Title(this GuideCategory category)
         => category switch {
-            GuideCategory.Guide => "Guide",
-            GuideCategory.Tweaks => "Tweaks",
-            GuideCategory.Export => "Export",
-            GuideCategory.Settings => "Settings",
-            GuideCategory.Debug => "Debug",
+            GuideCategory.Guide or GuideCategory.Tweaks or GuideCategory.Export or GuideCategory.Settings or GuideCategory.Debug
+                => Loc.Get($"Guide_Category_{category}"),
             _ => throw new ArgumentOutOfRangeException(nameof(category), category, null),
         };
 

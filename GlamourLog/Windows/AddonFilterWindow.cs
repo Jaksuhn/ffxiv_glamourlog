@@ -36,14 +36,14 @@ internal unsafe class AddonFilterWindow : NativeAddon {
 
     public static FilterOption[] ArmoireOptions { get; } = [
         new(
-            "Hide already deposited items",
-            "When the armoire window is open, all entries that already exist inside the armoire will be hidden.",
+            UIStrings.AddonFilter_HideDeposited,
+            UIStrings.AddonFilter_Armoire_HideDeposited_Tooltip,
             c => c.HideCabinetOwnedItems,
             c => c.HideCabinetOwnedItems ^= true,
             () => CabinetListHandler.Get().OnConfigChanged()),
         new(
-            "Hide items in gearsets",
-            "When the armoire window is open, all entries that are part of gearsets will be hidden",
+            UIStrings.AddonFilter_Armoire_HideGearset,
+            UIStrings.AddonFilter_Armoire_HideGearset_Tooltip,
             c => c.HideCabinetGearsetItems,
             c => c.HideCabinetGearsetItems ^= true,
             () => CabinetListHandler.Get().OnConfigChanged()),
@@ -51,20 +51,20 @@ internal unsafe class AddonFilterWindow : NativeAddon {
 
     public static FilterOption[] DresserOptions { get; } = [
         new(
-            "Hide already deposited items",
-            "When the glamour creation window is open, items already in the glamour dresser (loose or in an outfit) are hidden.",
+            UIStrings.AddonFilter_HideDeposited,
+            UIStrings.AddonFilter_Dresser_HideDeposited_Tooltip,
             c => c.HideCrystallizeOwnedItems,
             c => c.HideCrystallizeOwnedItems ^= true,
             () => CrystallizeListHandler.Get().OnConfigChanged()),
         new(
-            "Hide armoire-eligible items",
-            "When the glamour creation window is open, items that can be stored in the armoire are hidden (whether or not you already own them there).",
+            UIStrings.AddonFilter_Dresser_HideArmoireEligible,
+            UIStrings.AddonFilter_Dresser_HideArmoireEligible_Tooltip,
             c => c.HideCrystallizeArmoireEligibleItems,
             c => c.HideCrystallizeArmoireEligibleItems ^= true,
             () => CrystallizeListHandler.Get().OnConfigChanged()),
         new(
-            "Hide non-outfit items",
-            "When the glamour creation window is open, items that are not part of any outfit set are hidden.",
+            UIStrings.AddonFilter_Dresser_HideNonOutfit,
+            UIStrings.AddonFilter_Dresser_HideNonOutfit_Tooltip,
             c => c.HideCrystallizeNonOutfitItems,
             c => c.HideCrystallizeNonOutfitItems ^= true,
             () => CrystallizeListHandler.Get().OnConfigChanged()),

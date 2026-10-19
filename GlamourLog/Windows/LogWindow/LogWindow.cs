@@ -237,7 +237,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         var helpBtnY = listBottom + (BottomStatsBlockHeight - HelpMenuButtonSize) * 0.5f;
         _helpMainMenuButton = new CircleButtonNode {
             Icon = CircleButtonIcon.QuestionMark,
-            TextTooltip = "Help and tweak settings",
+            TextTooltip = UIStrings.LogWindow_HelpTooltip,
             Size = new Vector2(HelpMenuButtonSize, HelpMenuButtonSize),
             Position = new Vector2(contentStart.X + leftPad, helpBtnY),
             OnClick = () => { WindowsService.Get().ToggleMainMenuNearLogWindow(); },

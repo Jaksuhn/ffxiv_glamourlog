@@ -1,0 +1,829 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Command_Help" xml:space="preserve">
+    <value>打开/关闭幻化图鉴窗口</value>
+  </data>
+  <data name="Command_Root" xml:space="preserve">
+    <value>幻化图鉴命令</value>
+  </data>
+  <data name="Command_Stop" xml:space="preserve">
+    <value>取消正在运行的任务</value>
+  </data>
+  <data name="Command_Store" xml:space="preserve">
+    <value>将所有可收纳的物品存入收藏柜/投影台</value>
+  </data>
+  <data name="Window_AddonFilter_Title" xml:space="preserve">
+    <value>筛选</value>
+  </data>
+  <data name="Window_PatchPicker_Title" xml:space="preserve">
+    <value>自定义版本</value>
+  </data>
+  <data name="Window_Guide_Title" xml:space="preserve">
+    <value>帮助与设置</value>
+  </data>
+  <data name="Window_Log_Title" xml:space="preserve">
+    <value>幻化图鉴</value>
+  </data>
+  <data name="Category_All" xml:space="preserve">
+    <value>全部</value>
+  </data>
+  <data name="Category_Gold_Saucer" xml:space="preserve">
+    <value>金碟游乐场</value>
+  </data>
+  <data name="Category_PvP" xml:space="preserve">
+    <value>PvP</value>
+  </data>
+  <data name="Category_Tribes" xml:space="preserve">
+    <value>友好部族</value>
+  </data>
+  <data name="Category_Job_Gear" xml:space="preserve">
+    <value>职业装备</value>
+  </data>
+  <data name="Category_Gil" xml:space="preserve">
+    <value>金币</value>
+  </data>
+  <data name="Category_Tradecraft" xml:space="preserve">
+    <value>能工巧匠</value>
+  </data>
+  <data name="Category_Forays" xml:space="preserve">
+    <value>特殊区域</value>
+  </data>
+  <data name="Category_Dungeons" xml:space="preserve">
+    <value>迷宫挑战</value>
+  </data>
+  <data name="Category_Raids" xml:space="preserve">
+    <value>大型任务</value>
+  </data>
+  <data name="Category_Trials" xml:space="preserve">
+    <value>讨伐歼灭战</value>
+  </data>
+  <data name="Category_V_C_Dungeons" xml:space="preserve">
+    <value>多变/异闻迷宫</value>
+  </data>
+  <data name="Category_Deep_Dungeons" xml:space="preserve">
+    <value>深层迷宫</value>
+  </data>
+  <data name="Category_Fates" xml:space="preserve">
+    <value>危命任务</value>
+  </data>
+  <data name="Category_Island_Sanctuary" xml:space="preserve">
+    <value>无人岛</value>
+  </data>
+  <data name="Category_Eternal_Bonding" xml:space="preserve">
+    <value>永结同心</value>
+  </data>
+  <data name="Category_Mogstation" xml:space="preserve">
+    <value>商城</value>
+  </data>
+  <data name="Category_Unsorted" xml:space="preserve">
+    <value>未分类</value>
+  </data>
+  <data name="Category_Misc_Armoire" xml:space="preserve">
+    <value>其他收藏柜</value>
+  </data>
+  <data name="Detail_SetDetails" xml:space="preserve">
+    <value>套装详情</value>
+  </data>
+  <data name="Detail_NoSetSelected" xml:space="preserve">
+    <value>未选择套装</value>
+  </data>
+  <data name="Detail_ItemDetails" xml:space="preserve">
+    <value>物品详情</value>
+  </data>
+  <data name="Detail_CurrenciesSingle" xml:space="preserve">
+    <value>所需货币（单件）</value>
+  </data>
+  <data name="Detail_CurrenciesFull" xml:space="preserve">
+    <value>所需货币（整套）</value>
+  </data>
+  <data name="Detail_Costs" xml:space="preserve">
+    <value>花费</value>
+  </data>
+  <data name="Detail_Sources" xml:space="preserve">
+    <value>获取途径</value>
+  </data>
+  <data name="Detail_ItemsWithAppearance" xml:space="preserve">
+    <value>同外观物品</value>
+  </data>
+  <data name="Detail_SharedModels" xml:space="preserve">
+    <value>同模型</value>
+  </data>
+  <data name="Detail_SetsWithSameModel" xml:space="preserve">
+    <value>包含同模型物品的套装</value>
+  </data>
+  <data name="SetList_NotInListSuffix" xml:space="preserve">
+    <value> · 不在列表中</value>
+  </data>
+  <data name="SetList_Obtained" xml:space="preserve">
+    <value>已获得 {0}/{1}</value>
+  </data>
+  <data name="SetList_InInventory" xml:space="preserve">
+    <value>在背包中</value>
+  </data>
+  <data name="SetList_Completable" xml:space="preserve">
+    <value>可完成</value>
+  </data>
+  <data name="SetList_Patch" xml:space="preserve">
+    <value>版本 {0}</value>
+  </data>
+  <data name="SetList_ItemLevel" xml:space="preserve">
+    <value>品级 {0}</value>
+  </data>
+  <data name="Chest_FinalBoss" xml:space="preserve">
+    <value>最终头目</value>
+  </data>
+  <data name="Chest_Boss" xml:space="preserve">
+    <value>头目</value>
+  </data>
+  <data name="Chest_BossNumbered" xml:space="preserve">
+    <value>头目 #{0}</value>
+  </data>
+  <data name="Chest_Regular" xml:space="preserve">
+    <value>普通</value>
+  </data>
+  <data name="Chest_UnknownType" xml:space="preserve">
+    <value>未知类型</value>
+  </data>
+  <data name="Chest_MapTitle" xml:space="preserve">
+    <value>{0}宝箱</value>
+  </data>
+  <data name="Chest_Chest" xml:space="preserve">
+    <value>宝箱</value>
+  </data>
+  <data name="Chest_Numbered" xml:space="preserve">
+    <value>宝箱 {0}</value>
+  </data>
+  <data name="Source_General" xml:space="preserve">
+    <value>通用</value>
+  </data>
+  <data name="Source_Duties" xml:space="preserve">
+    <value>副本</value>
+  </data>
+  <data name="Source_Fates" xml:space="preserve">
+    <value>危命任务</value>
+  </data>
+  <data name="Source_NpcNumbered" xml:space="preserve">
+    <value>NPC #{0}</value>
+  </data>
+  <data name="Source_MogStation" xml:space="preserve">
+    <value>商城</value>
+  </data>
+  <data name="Source_Lootboxes" xml:space="preserve">
+    <value>箱子</value>
+  </data>
+  <data name="Source_RecipeNumbered" xml:space="preserve">
+    <value>配方 #{0}</value>
+  </data>
+  <data name="Source_Crafting" xml:space="preserve">
+    <value>制作</value>
+  </data>
+  <data name="Source_Desynthesis" xml:space="preserve">
+    <value>分解</value>
+  </data>
+  <data name="Source_QuestNumbered" xml:space="preserve">
+    <value>任务 #{0}</value>
+  </data>
+  <data name="Source_Quests" xml:space="preserve">
+    <value>任务</value>
+  </data>
+  <data name="Source_PvpSeriesNumbered" xml:space="preserve">
+    <value>第{0}赛季</value>
+  </data>
+  <data name="Source_VendorShopNumbered" xml:space="preserve">
+    <value>商店 #{0}</value>
+  </data>
+  <data name="SourceType_CraftRecipe" xml:space="preserve">
+    <value>制作</value>
+  </data>
+  <data name="SourceType_FreeCompanyCraftRecipe" xml:space="preserve">
+    <value>部队工房制作</value>
+  </data>
+  <data name="SourceType_SpecialShop" xml:space="preserve">
+    <value>兑换商店</value>
+  </data>
+  <data name="SourceType_GilShop" xml:space="preserve">
+    <value>金币商店</value>
+  </data>
+  <data name="SourceType_FCShop" xml:space="preserve">
+    <value>部队商店</value>
+  </data>
+  <data name="SourceType_GCShop" xml:space="preserve">
+    <value>军票商店</value>
+  </data>
+  <data name="SourceType_CashShop" xml:space="preserve">
+    <value>商城</value>
+  </data>
+  <data name="SourceType_FateShop" xml:space="preserve">
+    <value>危命任务商店</value>
+  </data>
+  <data name="SourceType_CalamitySalvagerShop" xml:space="preserve">
+    <value>灾后物资回收商店</value>
+  </data>
+  <data name="SourceType_CollectablesShop" xml:space="preserve">
+    <value>收藏品交易商店</value>
+  </data>
+  <data name="SourceType_AnimaShop" xml:space="preserve">
+    <value>魂武商店</value>
+  </data>
+  <data name="SourceType_Monster" xml:space="preserve">
+    <value>怪物掉落</value>
+  </data>
+  <data name="SourceType_Fate" xml:space="preserve">
+    <value>危命任务</value>
+  </data>
+  <data name="SourceType_Desynthesis" xml:space="preserve">
+    <value>分解</value>
+  </data>
+  <data name="SourceType_Loot" xml:space="preserve">
+    <value>战利品</value>
+  </data>
+  <data name="SourceType_Reduction" xml:space="preserve">
+    <value>精选</value>
+  </data>
+  <data name="SourceType_Airship" xml:space="preserve">
+    <value>飞空艇探索</value>
+  </data>
+  <data name="SourceType_Submarine" xml:space="preserve">
+    <value>潜水艇探索</value>
+  </data>
+  <data name="SourceType_QuickVenture" xml:space="preserve">
+    <value>快速探险</value>
+  </data>
+  <data name="SourceType_DungeonChest" xml:space="preserve">
+    <value>副本宝箱</value>
+  </data>
+  <data name="SourceType_DungeonBossDrop" xml:space="preserve">
+    <value>副本头目掉落</value>
+  </data>
+  <data name="SourceType_DungeonBossChest" xml:space="preserve">
+    <value>副本头目宝箱</value>
+  </data>
+  <data name="SourceType_DungeonDrop" xml:space="preserve">
+    <value>副本掉落</value>
+  </data>
+  <data name="SourceType_Achievement" xml:space="preserve">
+    <value>成就</value>
+  </data>
+  <data name="SourceType_Quest" xml:space="preserve">
+    <value>任务</value>
+  </data>
+  <data name="SourceType_Coffer" xml:space="preserve">
+    <value>箱子</value>
+  </data>
+  <data name="SourceType_PalaceOfTheDead" xml:space="preserve">
+    <value>死者宫殿</value>
+  </data>
+  <data name="SourceType_HeavenOnHigh" xml:space="preserve">
+    <value>天之御柱</value>
+  </data>
+  <data name="SourceType_EurekaOrthos" xml:space="preserve">
+    <value>正统优雷卡</value>
+  </data>
+  <data name="SourceType_PilgrimsTraverse" xml:space="preserve">
+    <value>朝圣交错之路</value>
+  </data>
+  <data name="SourceType_Anemos" xml:space="preserve">
+    <value>常风之地</value>
+  </data>
+  <data name="SourceType_Pagos" xml:space="preserve">
+    <value>恒冰之地</value>
+  </data>
+  <data name="SourceType_Pyros" xml:space="preserve">
+    <value>涌火之地</value>
+  </data>
+  <data name="SourceType_Hydatos" xml:space="preserve">
+    <value>丰水之地</value>
+  </data>
+  <data name="SourceType_Bozja" xml:space="preserve">
+    <value>博兹雅</value>
+  </data>
+  <data name="SourceType_Logogram" xml:space="preserve">
+    <value>文理碎晶</value>
+  </data>
+  <data name="SourceType_PagosTreasure" xml:space="preserve">
+    <value>恒冰之地宝箱</value>
+  </data>
+  <data name="SourceType_PyrosTreasure" xml:space="preserve">
+    <value>涌火之地宝箱</value>
+  </data>
+  <data name="SourceType_HydatosTreasure" xml:space="preserve">
+    <value>丰水之地宝箱</value>
+  </data>
+  <data name="SourceType_OccultTreasure" xml:space="preserve">
+    <value>新月岛宝箱</value>
+  </data>
+  <data name="SourceType_OccultPot" xml:space="preserve">
+    <value>新月岛壶</value>
+  </data>
+  <data name="SourceType_OccultGoldenCoffer" xml:space="preserve">
+    <value>新月岛金宝箱</value>
+  </data>
+  <data name="SourceType_PVPSeries" xml:space="preserve">
+    <value>PvP 赛季</value>
+  </data>
+  <data name="SourceType_Gardening" xml:space="preserve">
+    <value>园艺</value>
+  </data>
+  <data name="SourceType_Armoire" xml:space="preserve">
+    <value>收藏柜</value>
+  </data>
+  <data name="SourceType_GlamourReadySet" xml:space="preserve">
+    <value>套装</value>
+  </data>
+  <data name="SourceType_Gearset" xml:space="preserve">
+    <value>套装</value>
+  </data>
+  <data name="SourceType_TripleTriad" xml:space="preserve">
+    <value>九宫幻卡</value>
+  </data>
+  <data name="SourceType_CustomDelivery" xml:space="preserve">
+    <value>老主顾交易</value>
+  </data>
+  <data name="SourceType_StellarMission" xml:space="preserve">
+    <value>宇宙探索任务</value>
+  </data>
+  <data name="SourceType_ZodiacWeapon" xml:space="preserve">
+    <value>黄道武器</value>
+  </data>
+  <data name="SourceType_AnimaWeapon" xml:space="preserve">
+    <value>魂武</value>
+  </data>
+  <data name="SourceType_EurekanWeapon" xml:space="preserve">
+    <value>优雷卡武器</value>
+  </data>
+  <data name="SourceType_ResistanceWeapon" xml:space="preserve">
+    <value>义军武器</value>
+  </data>
+  <data name="SourceType_MandervilleWeapon" xml:space="preserve">
+    <value>曼德维尔武器</value>
+  </data>
+  <data name="SourceType_PhantomWeapon" xml:space="preserve">
+    <value>幻境武器</value>
+  </data>
+  <data name="Filter_PartialJobTooltip" xml:space="preserve">
+    <value>物品是否必须仅限所选职业穿戴，还是只要包含该职业即可。</value>
+  </data>
+  <data name="Filter_Expansion" xml:space="preserve">
+    <value>资料片</value>
+  </data>
+  <data name="Filter_Completed" xml:space="preserve">
+    <value>已完成</value>
+  </data>
+  <data name="Filter_Completed_Tooltip" xml:space="preserve">
+    <value>套装中所有可获得的部件是否均已拥有。</value>
+  </data>
+  <data name="Filter_Incompatible" xml:space="preserve">
+    <value>不可穿戴</value>
+  </data>
+  <data name="Filter_Incompatible_Tooltip" xml:space="preserve">
+    <value>当前角色的种族和性别是否无法穿戴该套装。</value>
+  </data>
+  <data name="Filter_Unobtainable" xml:space="preserve">
+    <value>无法获得</value>
+  </data>
+  <data name="Filter_Unobtainable_Tooltip" xml:space="preserve">
+    <value>该套装当前是否无法获得。</value>
+  </data>
+  <data name="Filter_Mogstation" xml:space="preserve">
+    <value>商城</value>
+  </data>
+  <data name="Filter_Mogstation_Tooltip" xml:space="preserve">
+    <value>该套装是否来自商城。</value>
+  </data>
+  <data name="Filter_Contributable" xml:space="preserve">
+    <value>可收纳</value>
+  </data>
+  <data name="Filter_Contributable_Tooltip" xml:space="preserve">
+    <value>背包中是否有部件当前可以收纳进该套装。</value>
+  </data>
+  <data name="Filter_Affordable" xml:space="preserve">
+    <value>买得起</value>
+  </data>
+  <data name="Filter_Affordable_Tooltip" xml:space="preserve">
+    <value>是否负担得起所有缺失部件的首选花费。</value>
+  </data>
+  <data name="Filter_Tradeable" xml:space="preserve">
+    <value>可交易</value>
+  </data>
+  <data name="Filter_Tradeable_Tooltip" xml:space="preserve">
+    <value>套装中是否有可交易或可在市场板购买的部件。</value>
+  </data>
+  <data name="Filter_Started" xml:space="preserve">
+    <value>已开始</value>
+  </data>
+  <data name="Filter_Started_Tooltip" xml:space="preserve">
+    <value>该套装是否已部分完成。</value>
+  </data>
+  <data name="Filter_Armoire" xml:space="preserve">
+    <value>收藏柜</value>
+  </data>
+  <data name="Filter_Armoire_Tooltip" xml:space="preserve">
+    <value>套装中是否有可放入收藏柜的部件。</value>
+  </data>
+  <data name="Filter_Misplaced" xml:space="preserve">
+    <value>存放错误</value>
+  </data>
+  <data name="Filter_Misplaced_Tooltip" xml:space="preserve">
+    <value>是否有可放入收藏柜的部件当前存放在投影台中。</value>
+  </data>
+  <data name="Filter_SharedModel" xml:space="preserve">
+    <value>同模型</value>
+  </data>
+  <data name="Filter_SharedModel_Tooltip" xml:space="preserve">
+    <value>是否有其他套装与其使用完全相同的装备模型。</value>
+  </data>
+  <data name="FilterType_Include" xml:space="preserve">
+    <value>包含</value>
+  </data>
+  <data name="FilterType_Only" xml:space="preserve">
+    <value>仅限</value>
+  </data>
+  <data name="FilterType_Exclude" xml:space="preserve">
+    <value>排除</value>
+  </data>
+  <data name="Enum_GlamourSetSortMode_Alphabetical" xml:space="preserve">
+    <value>按名称</value>
+  </data>
+  <data name="Enum_GlamourSetSortMode_ItemLevel" xml:space="preserve">
+    <value>按品级</value>
+  </data>
+  <data name="Enum_GlamourSetSortMode_Patch" xml:space="preserve">
+    <value>按版本</value>
+  </data>
+  <data name="Filter_AllSources" xml:space="preserve">
+    <value>全部来源</value>
+  </data>
+  <data name="Filter_AllCurrencies" xml:space="preserve">
+    <value>全部货币</value>
+  </data>
+  <data name="SetList_FiltersTooltip" xml:space="preserve">
+    <value>套装列表筛选</value>
+  </data>
+  <data name="AddonFilter_HideDeposited" xml:space="preserve">
+    <value>隐藏已收纳的物品</value>
+  </data>
+  <data name="AddonFilter_Armoire_HideDeposited_Tooltip" xml:space="preserve">
+    <value>打开收藏柜窗口时，隐藏所有已存在于收藏柜中的条目。</value>
+  </data>
+  <data name="AddonFilter_Armoire_HideGearset" xml:space="preserve">
+    <value>隐藏套装中的物品</value>
+  </data>
+  <data name="AddonFilter_Armoire_HideGearset_Tooltip" xml:space="preserve">
+    <value>打开收藏柜窗口时，隐藏所有属于套装（装备组）的条目。</value>
+  </data>
+  <data name="AddonFilter_Dresser_HideDeposited_Tooltip" xml:space="preserve">
+    <value>打开投影模板创建窗口时，隐藏已在投影台中的物品（单件或套装内）。</value>
+  </data>
+  <data name="AddonFilter_Dresser_HideArmoireEligible" xml:space="preserve">
+    <value>隐藏可放入收藏柜的物品</value>
+  </data>
+  <data name="AddonFilter_Dresser_HideArmoireEligible_Tooltip" xml:space="preserve">
+    <value>打开投影模板创建窗口时，隐藏可放入收藏柜的物品（无论收藏柜中是否已有）。</value>
+  </data>
+  <data name="AddonFilter_Dresser_HideNonOutfit" xml:space="preserve">
+    <value>隐藏非套装物品</value>
+  </data>
+  <data name="AddonFilter_Dresser_HideNonOutfit_Tooltip" xml:space="preserve">
+    <value>打开投影模板创建窗口时，隐藏不属于任何套装的物品。</value>
+  </data>
+  <data name="PatchPicker_ExpansionNumbered" xml:space="preserve">
+    <value>资料片 {0}</value>
+  </data>
+  <data name="PatchPicker_Footnote" xml:space="preserve">
+    <value>版本号指物品被加入游戏数据的版本，不一定是开放获取的版本。</value>
+  </data>
+  <data name="PatchPicker_Patch" xml:space="preserve">
+    <value>版本 {0:0.0#}</value>
+  </data>
+  <data name="Common_Confirm" xml:space="preserve">
+    <value>确定</value>
+  </data>
+  <data name="Tweak_StoreAllTooltip" xml:space="preserve">
+    <value>收纳所有可收纳的物品</value>
+  </data>
+  <data name="LogWindow_HelpTooltip" xml:space="preserve">
+    <value>帮助与功能设置</value>
+  </data>
+  <data name="ContextMenu_NavigateToLocation" xml:space="preserve">
+    <value>前往该地点</value>
+  </data>
+  <data name="Export_CopyToClipboard" xml:space="preserve">
+    <value>复制到剪贴板</value>
+  </data>
+  <data name="Guide_Category" xml:space="preserve">
+    <value>分类</value>
+  </data>
+  <data name="ChatAlert_ArmoireItem" xml:space="preserve">
+    <value> 该物品可以放入收藏柜！</value>
+  </data>
+  <data name="ChatAlert_FinalPiece" xml:space="preserve">
+    <value> {0}的最后一件！</value>
+  </data>
+  <data name="ChatAlert_SetProgress" xml:space="preserve">
+    <value> 套装{2}已收集 {0}/{1}！</value>
+  </data>
+  <data name="Store_InsufficientPrisms" xml:space="preserve">
+    <value>无法收纳物品：幻化棱晶不足</value>
+  </data>
+  <data name="Store_StoredOne" xml:space="preserve">
+    <value>已将 {0} 件物品收纳至 </value>
+  </data>
+  <data name="Store_StoredMany" xml:space="preserve">
+    <value>已将 {0} 件物品收纳至 </value>
+  </data>
+  <data name="Store_StoredSuffix" xml:space="preserve">
+    <value>中</value>
+  </data>
+  <data name="AutoDuty_InvalidDuty" xml:space="preserve">
+    <value>GlamourLog：无效的副本。</value>
+  </data>
+  <data name="AutoDuty_AllCollected" xml:space="preserve">
+    <value>该副本的所有套装部件均已收集。</value>
+  </data>
+  <data name="AutoDuty_NoPath" xml:space="preserve">
+    <value>AutoDuty 没有该副本的路径。</value>
+  </data>
+  <data name="AutoDuty_SetupFailed" xml:space="preserve">
+    <value>设置 AutoDuty 刷取失败。</value>
+  </data>
+  <data name="Map_Location" xml:space="preserve">
+    <value>位置</value>
+  </data>
+  <data name="JobPicker_Tank" xml:space="preserve">
+    <value>防护职业</value>
+  </data>
+  <data name="JobPicker_Healer" xml:space="preserve">
+    <value>治疗职业</value>
+  </data>
+  <data name="JobPicker_DPS" xml:space="preserve">
+    <value>进攻职业</value>
+  </data>
+  <data name="JobPicker_Melee_DPS" xml:space="preserve">
+    <value>近战进攻职业</value>
+  </data>
+  <data name="JobPicker_Physical_Ranged_DPS" xml:space="preserve">
+    <value>远程物理进攻职业</value>
+  </data>
+  <data name="JobPicker_Magical_Ranged_DPS" xml:space="preserve">
+    <value>远程魔法进攻职业</value>
+  </data>
+  <data name="JobPicker_Crafter" xml:space="preserve">
+    <value>能工巧匠</value>
+  </data>
+  <data name="JobPicker_Gatherer" xml:space="preserve">
+    <value>大地使者</value>
+  </data>
+  <data name="JobPicker_All" xml:space="preserve">
+    <value>全部</value>
+  </data>
+  <data name="Guide_Category_Guide" xml:space="preserve">
+    <value>指南</value>
+  </data>
+  <data name="Guide_Category_Tweaks" xml:space="preserve">
+    <value>功能增强</value>
+  </data>
+  <data name="Guide_Category_Export" xml:space="preserve">
+    <value>导出</value>
+  </data>
+  <data name="Guide_Category_Settings" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="Guide_Category_Debug" xml:space="preserve">
+    <value>调试</value>
+  </data>
+  <data name="Guide_Tweak_Filters" xml:space="preserve">
+    <value>[h]筛选[/h]：打开筛选窗口，隐藏符合以下条件的物品：</value>
+  </data>
+  <data name="Guide_Armoire_Title" xml:space="preserve">
+    <value>收藏柜</value>
+  </data>
+  <data name="Guide_Armoire_Intro" xml:space="preserve">
+    <value>GlamourLog 会在收藏柜窗口的分类箭头旁添加两个按钮。</value>
+  </data>
+  <data name="Guide_Armoire_StoreAll" xml:space="preserve">
+    <value>[h]全部收纳[/h]：将背包中所有可收纳的物品存入收藏柜。套装（装备组）中的物品会被忽略。</value>
+  </data>
+  <data name="Guide_Dresser_Title" xml:space="preserve">
+    <value>投影台</value>
+  </data>
+  <data name="Guide_Dresser_Intro" xml:space="preserve">
+    <value>GlamourLog 会在物品收纳窗口的分类箭头上方添加两个按钮。</value>
+  </data>
+  <data name="Guide_Dresser_StoreAll" xml:space="preserve">
+    <value>[h]全部收纳[/h]：将背包中所有可收纳的物品存入投影台。套装（装备组）中的物品会被忽略。</value>
+  </data>
+  <data name="Guide_ChatAlerts_Title" xml:space="preserve">
+    <value>聊天提示</value>
+  </data>
+  <data name="Guide_ChatAlerts_Intro" xml:space="preserve">
+    <value>拾取属于幻化套装的物品时，会在聊天栏的拾取消息后附加套装收集进度。</value>
+  </data>
+  <data name="Guide_ChatAlerts_ExampleLoot" xml:space="preserve">
+    <value>获得了“{0}”。</value>
+  </data>
+  <data name="Guide_ChatAlerts_AlreadyOwned" xml:space="preserve">
+    <value>如果你已在仓库中拥有该物品，拾取消息将保持不变。</value>
+  </data>
+  <data name="Guide_LootWindow_Title" xml:space="preserve">
+    <value>战利品窗口</value>
+  </data>
+  <data name="Guide_LootWindow_Intro" xml:space="preserve">
+    <value>打开战利品窗口时，尚未拥有的幻化部件会在物品图标上显示徽章。</value>
+  </data>
+  <data name="Guide_LootWindow_Armoire" xml:space="preserve">
+    <value>[h]收藏柜徽章[/h]：显示在尚未拥有、可放入收藏柜的物品上。</value>
+  </data>
+  <data name="Guide_LootWindow_Dresser" xml:space="preserve">
+    <value>[h]投影台徽章[/h]：显示在尚未拥有、不可放入收藏柜的套装部件上。</value>
+  </data>
+  <data name="Guide_Counters_Title" xml:space="preserve">
+    <value>计数器</value>
+  </data>
+  <data name="Guide_Counters_Completed" xml:space="preserve">
+    <value>幻化图鉴右下角显示两个数字。上方数字是你已完成的套装数量与游戏中可获得套装总数的对比。</value>
+  </data>
+  <data name="Guide_Counters_Saved" xml:space="preserve">
+    <value>下方数字是通过将部件以套装形式存放（而非单件散放在投影台中）
+为你节省的投影台格子数量。</value>
+  </data>
+  <data name="Guide_Counters_FootnoteCombined" xml:space="preserve">
+    <value>已完成计数同时统计投影台和收藏柜中的套装。</value>
+  </data>
+  <data name="Guide_Counters_FootnoteMisc" xml:space="preserve">
+    <value>“其他收藏柜”不计入任何计数。</value>
+  </data>
+  <data name="Guide_Icons_Title" xml:space="preserve">
+    <value>图标</value>
+  </data>
+  <data name="Guide_Icons_Checkmark" xml:space="preserve">
+    <value>[h]对勾[/h]：当套装的所有部件都在投影台或收藏柜中时，显示在套装图标上。背包中的物品不计入。</value>
+  </data>
+  <data name="Guide_Icons_Unobtainable" xml:space="preserve">
+    <value>[h]无法获得[/h]：显示在当前无法获得的套装上，例如季节活动套装。这些套装不计入完成计数。</value>
+  </data>
+  <data name="Guide_Icons_FadedDresser" xml:space="preserve">
+    <value>[h]淡色投影台徽章[/h]：当物品在投影台中[e]并非[/e]以套装形式存放时，显示在已完成的套装或已拥有的部件上。</value>
+  </data>
+  <data name="Guide_Icons_Dresser" xml:space="preserve">
+    <value>[h]投影台徽章[/h]：当物品以套装形式存放在投影台中时，显示在已完成的套装或已拥有的部件上。</value>
+  </data>
+  <data name="Guide_Icons_Armoire" xml:space="preserve">
+    <value>[h]收藏柜徽章[/h]：当物品在收藏柜中时，显示在已完成的套装或已拥有的部件上。</value>
+  </data>
+  <data name="Guide_Icons_WarningDresser" xml:space="preserve">
+    <value>[h]投影台警告[/h]：当物品存放在投影台中、但本可以放入收藏柜时显示。同样适用于套装。</value>
+  </data>
+  <data name="Guide_Integrations_Title" xml:space="preserve">
+    <value>插件联动</value>
+  </data>
+  <data name="Guide_Integrations_Intro" xml:space="preserve">
+    <value>GlamourLog 无需依赖其他插件即可使用，但可以通过其他插件增强功能。</value>
+  </data>
+  <data name="Guide_Integrations_AllaganTools" xml:space="preserve">
+    <value>[e]Allagan Tools[/e] 用于[h]套装详情[/h]的[h]所需货币[/h]部分，以获取角色所有背包中持有的货币数量。若未安装，则仅统计普通背包中的数量。</value>
+  </data>
+  <data name="Guide_Integrations_Vnavmesh" xml:space="preserve">
+    <value>[e]vnavmesh[/e] 用于[h]来源与花费[/h]的右键菜单。安装后，该菜单项可自动寻路前往物品的相关来源。</value>
+  </data>
+  <data name="Guide_Integrations_AutoDuty" xml:space="preserve">
+    <value>[e]AutoDuty[/e] 用于副本[h]来源[/h]的右键菜单。安装后，该菜单项将启动 AutoDuty 循环，自动刷取相关副本，直到获得所有缺失的套装部件。</value>
+  </data>
+  <data name="Guide_DataExport_Title" xml:space="preserve">
+    <value>数据导出</value>
+  </data>
+  <data name="Guide_DataExport_Intro" xml:space="preserve">
+    <value>你可以在此将投影台和收藏柜数据导出为可导入网站或其他插件的格式。</value>
+  </data>
+  <data name="Guide_LogWindowSettings_Title" xml:space="preserve">
+    <value>幻化图鉴窗口</value>
+  </data>
+  <data name="Guide_LogWindowSettings_DisableClose" xml:space="preserve">
+    <value>禁止强制关闭窗口</value>
+  </data>
+  <data name="Guide_LogWindowSettings_DisableClose_Tooltip" xml:space="preserve">
+    <value>防止游戏在切换区域或播放过场动画时关闭窗口（窗口仍会暂时隐藏）。同时禁用 ESC 关闭，必须手动点击关闭。</value>
+  </data>
+  <data name="Guide_LogWindowSettings_PersistSearch" xml:space="preserve">
+    <value>保留搜索内容</value>
+  </data>
+  <data name="Guide_LogWindowSettings_PersistSearch_Tooltip" xml:space="preserve">
+    <value>关闭并重新打开幻化图鉴窗口时保留搜索文本。</value>
+  </data>
+</root>

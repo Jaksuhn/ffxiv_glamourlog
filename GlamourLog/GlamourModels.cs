@@ -84,7 +84,7 @@ internal readonly record struct SourceNavigateTarget(uint TerritoryTypeId, Vecto
         if (TerritoryType.GetRowRef(TerritoryTypeId) is not { IsValid: true, Value.Map.RowId: var mapId } || mapId == 0)
             return;
 
-        var name = string.IsNullOrWhiteSpace(label) ? "Location" : label;
+        var name = string.IsNullOrWhiteSpace(label) ? UIStrings.Map_Location : label;
         agent->FlagMarkerCount = 0; // need to replace last flag
         agent->SetFlagMapMarker(TerritoryTypeId, mapId, WorldPosition);
         agent->OpenMap(mapId, TerritoryTypeId, name, FFXIVClientStructs.FFXIV.Client.UI.Agent.MapType.QuestLog);

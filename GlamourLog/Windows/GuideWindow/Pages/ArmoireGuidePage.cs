@@ -8,40 +8,38 @@ internal sealed class ArmoireGuidePage : IGuidePage {
     public string Id => "tweaks.armoire";
     public GuideCategory Category => GuideCategory.Tweaks;
     public int Order => 0;
-    public string Title => "Armoire";
+    public string Title => UIStrings.Guide_Armoire_Title;
 
     public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
         => [
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Append("GlamourLog adds two buttons next to the category arrows on the armoire window.")
+                        .Append(UIStrings.Guide_Armoire_Intro)
                         .Encode())),
             new CircleButtonExampleBlock(
                 CircleButtonIcon.GearCog,
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Highlight("Filters")
-                        .Append(" opens a filter window to hide items that match some criteria:")
+                        .Markup(UIStrings.Guide_Tweak_Filters)
                         .Encode())),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Emphasis("Hide already deposited items")
+                        .Emphasis(UIStrings.AddonFilter_HideDeposited)
                         .Encode()),
                 TextLeftInset: Constants.IconTextLeft),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Emphasis("Hide items in gearsets")
+                        .Emphasis(UIStrings.AddonFilter_Armoire_HideGearset)
                         .Encode()),
                 TextLeftInset: Constants.IconTextLeft),
             new CircleButtonExampleBlock(
                 CircleButtonIcon.Chest,
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Highlight("Store all")
-                        .Append(" stores all eligible items from your inventory into the armoire. Ignores items in gearsets.")
+                        .Markup(UIStrings.Guide_Armoire_StoreAll)
                         .Encode())),
         ];
 }

@@ -73,7 +73,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
             button.LabelNode.LineSpacing = 20;
             button.LabelNode.AlignmentType = AlignmentType.Left;
             button.LabelNode.TextColor = ThemeColours.Gold.Current;
-            button.LabelNode.String = categoryId;
+            button.LabelNode.String = Loc.Category(categoryId);
             button.LabelNode.AddTextFlags(TextFlags.Ellipsis);
             ThemeColours.ApplyEmboss(button.LabelNode);
 
@@ -113,7 +113,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
             if (!buttonCategoryMap.TryGetValue(btn, out var categoryId))
                 continue;
 
-            btn.LabelNode.String = categoryId;
+            btn.LabelNode.String = Loc.Category(categoryId);
             btn.Selected = categoryId == selectedCategoryId;
             if (refreshCounts && countByButton.TryGetValue(btn, out var countNode)) {
                 var cr = categoryRows(categoryId);

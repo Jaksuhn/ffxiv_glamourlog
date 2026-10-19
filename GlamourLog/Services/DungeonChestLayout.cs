@@ -27,10 +27,10 @@ internal sealed class DungeonChestLayout {
         };
 
         internal string SecondaryLabel => Kind switch {
-            ChestKind.FinalBoss => "Final Boss",
-            ChestKind.Boss => FightNo is { } num ? $"Boss #{num + 1}" : "Boss",
-            ChestKind.Regular => "Regular",
-            _ => "Unk Type",
+            ChestKind.FinalBoss => UIStrings.Chest_FinalBoss,
+            ChestKind.Boss => FightNo is { } num ? string.Format(UIStrings.Chest_BossNumbered, num + 1) : UIStrings.Chest_Boss,
+            ChestKind.Regular => UIStrings.Chest_Regular,
+            _ => UIStrings.Chest_UnknownType,
         };
 
         internal bool HasMapMarker => MapId != 0 && TerritoryTypeId != 0 && Position != default;
@@ -45,7 +45,7 @@ internal sealed class DungeonChestLayout {
         internal unsafe void OpenMap(string? title = null) {
             if (!HasMapMarker || AgentMap.Instance() is not (not null and var agent))
                 return;
-            var name = string.IsNullOrWhiteSpace(title) ? SecondaryLabel.Length > 0 ? $"{SecondaryLabel} Chest" : "Chest" : title;
+            var name = string.IsNullOrWhiteSpace(title) ? SecondaryLabel.Length > 0 ? string.Format(UIStrings.Chest_MapTitle, SecondaryLabel) : UIStrings.Chest_Chest : title;
             IPluginLog.Get().Info($"Opening map (m:{MapId};t:{TerritoryTypeId}) with coords: {MapPosition}");
             agent->OpenMap(MapId, TerritoryTypeId, name);
             agent->ResetMapMarkers();
@@ -121,7 +121,7 @@ internal sealed class DungeonChestLayout {
     internal float ComputeMaxLabelColumnWidth(TextNode measure, IReadOnlyList<uint> chestOrder, string? extraPrimaryLabel = null) {
         var max = extraPrimaryLabel is { Length: > 0 } ? DetailListItemNode.MeasureDutyChestLabelColumnWidth(measure, extraPrimaryLabel, string.Empty) : 0f;
         for (var i = 0; i < chestOrder.Count; i++) {
-            var width = DetailListItemNode.MeasureDutyChestLabelColumnWidth(measure, $"Chest {i + 1}", FormatSecondaryLabel(chestOrder[i]));
+            var width = DetailListItemNode.MeasureDutyChestLabelColumnWidth(measure, string.Format(UIStrings.Chest_Numbered, i + 1), FormatSecondaryLabel(chestOrder[i]));
             if (width > max)
                 max = width;
         }

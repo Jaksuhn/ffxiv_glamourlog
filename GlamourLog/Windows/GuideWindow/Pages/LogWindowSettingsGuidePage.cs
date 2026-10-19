@@ -7,19 +7,19 @@ internal sealed class LogWindowSettingsGuidePage : IGuidePage {
     public string Id => "settings.log-window";
     public GuideCategory Category => GuideCategory.Settings;
     public int Order => 0;
-    public string Title => "Glamour Log Window";
+    public string Title => UIStrings.Guide_LogWindowSettings_Title;
 
     public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context) {
         var configuration = context.Configuration;
         return [
             new CheckboxSettingBlock(
-                "Disable force window closing",
-                "Prevents the game from closing the addon when you go through an area transition or cutscene. Will still hide the addon. Also disables the ability to close via ESC. Must be clicked manually.",
+                UIStrings.Guide_LogWindowSettings_DisableClose,
+                UIStrings.Guide_LogWindowSettings_DisableClose_Tooltip,
                 () => configuration.DisableClose,
                 value => SetDisableClose(context, value)),
             new CheckboxSettingBlock(
-                "Persist search",
-                "Keeps the search text when the Glamour Log window is closed and reopened.",
+                UIStrings.Guide_LogWindowSettings_PersistSearch,
+                UIStrings.Guide_LogWindowSettings_PersistSearch_Tooltip,
                 () => configuration.PersistSearch,
                 value => {
                     configuration.PersistSearch = value;

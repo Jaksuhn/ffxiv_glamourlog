@@ -111,11 +111,11 @@ internal unsafe class FilterWindow : NativeAddon {
             Icon = CircleButtonIcon.Exclamation,
             Position = new Vector2(sectionX + LabelWidth + 174f, y + 7f),
             Size = new Vector2(22f),
-            TextTooltip = "Whether or not an item should be wearable by only the matching job(s) or if it should contain that job.",
+            TextTooltip = UIStrings.Filter_PartialJobTooltip,
         });
         y += 40f;
 
-        AddLabel("Expansion", sectionX, y, LabelWidth, 24f);
+        AddLabel(UIStrings.Filter_Expansion, sectionX, y, LabelWidth, 24f);
         var expansionX = sectionX + LabelWidth;
         var expansionWidth = sectionWidth - LabelWidth;
         var expansionColumnWidth = sectionWidth / 3f;
@@ -249,17 +249,17 @@ internal unsafe class FilterWindow : NativeAddon {
         AddSectionTitle(Addon.GetRow(66).Text.ToString(), x, y, contentWidth);
         y += 28f;
 
-        AddModeRow("Completed", "Whether every obtainable piece in the set is owned.", draft => draft.Completed, (draft, value) => draft.Completed = value);
-        AddModeRow("Incompatible", "Whether the set cannot be worn by your character's race and sex.", draft => draft.Incompatible, (draft, value) => draft.Incompatible = value);
-        AddModeRow("Unobtainable", "Whether the set cannot currently be obtained.", draft => draft.Unobtainable, (draft, value) => draft.Unobtainable = value);
-        AddModeRow("Mogstation", "Whether the set is obtained from the Mogstation.", draft => draft.Mogstation, (draft, value) => draft.Mogstation = value);
-        AddModeRow("Contributable", "Whether an inventory piece can currently be contributed to the set.", draft => draft.Contributable, (draft, value) => draft.Contributable = value);
-        AddModeRow("Affordable", "Whether you can afford the preferred costs of every missing piece.", draft => draft.Affordable, (draft, value) => draft.Affordable = value);
-        AddModeRow("Tradeable", "Whether the set has a piece that can be traded or bought on the market board.", draft => draft.Tradeable, (draft, value) => draft.Tradeable = value);
-        AddModeRow("Started", "Whether the set is partially completed.", draft => draft.Started, (draft, value) => draft.Started = value);
-        AddModeRow("Armoire", "Whether the set contains a piece that can be stored in the armoire.", draft => draft.Armoire, (draft, value) => draft.Armoire = value);
-        AddModeRow("Misplaced", "Whether an armoire-eligible piece is currently stored in the glamour dresser.", draft => draft.Misplaced, (draft, value) => draft.Misplaced = value);
-        AddModeRow("Shared model", "Whether another set shares the same complete set of equipment models.", draft => draft.SharedModel, (draft, value) => draft.SharedModel = value);
+        AddModeRow(UIStrings.Filter_Completed, UIStrings.Filter_Completed_Tooltip, draft => draft.Completed, (draft, value) => draft.Completed = value);
+        AddModeRow(UIStrings.Filter_Incompatible, UIStrings.Filter_Incompatible_Tooltip, draft => draft.Incompatible, (draft, value) => draft.Incompatible = value);
+        AddModeRow(UIStrings.Filter_Unobtainable, UIStrings.Filter_Unobtainable_Tooltip, draft => draft.Unobtainable, (draft, value) => draft.Unobtainable = value);
+        AddModeRow(UIStrings.Filter_Mogstation, UIStrings.Filter_Mogstation_Tooltip, draft => draft.Mogstation, (draft, value) => draft.Mogstation = value);
+        AddModeRow(UIStrings.Filter_Contributable, UIStrings.Filter_Contributable_Tooltip, draft => draft.Contributable, (draft, value) => draft.Contributable = value);
+        AddModeRow(UIStrings.Filter_Affordable, UIStrings.Filter_Affordable_Tooltip, draft => draft.Affordable, (draft, value) => draft.Affordable = value);
+        AddModeRow(UIStrings.Filter_Tradeable, UIStrings.Filter_Tradeable_Tooltip, draft => draft.Tradeable, (draft, value) => draft.Tradeable = value);
+        AddModeRow(UIStrings.Filter_Started, UIStrings.Filter_Started_Tooltip, draft => draft.Started, (draft, value) => draft.Started = value);
+        AddModeRow(UIStrings.Filter_Armoire, UIStrings.Filter_Armoire_Tooltip, draft => draft.Armoire, (draft, value) => draft.Armoire = value);
+        AddModeRow(UIStrings.Filter_Misplaced, UIStrings.Filter_Misplaced_Tooltip, draft => draft.Misplaced, (draft, value) => draft.Misplaced = value);
+        AddModeRow(UIStrings.Filter_SharedModel, UIStrings.Filter_SharedModel_Tooltip, draft => draft.SharedModel, (draft, value) => draft.SharedModel = value);
         SyncModeRows();
 
         const float buttonWidth = 116f;

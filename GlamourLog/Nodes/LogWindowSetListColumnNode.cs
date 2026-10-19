@@ -35,7 +35,7 @@ internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
 
         FilterButton = new CircleButtonNode {
             Icon = CircleButtonIcon.GearCog,
-            TextTooltip = "Set list filters",
+            TextTooltip = UIStrings.SetList_FiltersTooltip,
             Size = new Vector2(FilterCogSize, FilterCogSize),
             Position = new Vector2(filterRelX, 0f),
             OnClick = openFilterWindow,

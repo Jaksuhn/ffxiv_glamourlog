@@ -16,7 +16,7 @@ internal static class SourceContextMenu {
         menu.Clear();
 
         if (navigateTarget is { TerritoryTypeId: not 0 and var territoryId, WorldPosition: var pos } && Svc.Interface.IsPluginLoaded("vnavmesh")) {
-            menu.AddItem("Navigate to location", () => {
+            menu.AddItem(UIStrings.ContextMenu_NavigateToLocation, () => {
                 Svc.Automation.Start(new NavTo(territoryId, pos));
             });
         }

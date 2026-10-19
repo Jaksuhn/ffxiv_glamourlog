@@ -34,9 +34,9 @@ internal unsafe partial class LogWindow {
 
         if (_selectedSet == null) {
             sections.Add(new TreeListSection<DetailListRowData> {
-                Header = "Set Details",
+                Header = UIStrings.Detail_SetDetails,
                 Entries = [
-                    new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = "No set selected" },
+                    new DetailListRowData { Kind = DetailRowKind.JournalHeader, PrimaryText = UIStrings.Detail_NoSetSelected },
                 ],
             });
             DetailList.AssignSections(sections);
@@ -70,7 +70,7 @@ internal unsafe partial class LogWindow {
         }
 
         sections.Add(new TreeListSection<DetailListRowData> {
-            Header = isCabinetOnly ? "Item Details" : "Set Details",
+            Header = isCabinetOnly ? UIStrings.Detail_ItemDetails : UIStrings.Detail_SetDetails,
             Entries = detailsEntries,
         });
 
@@ -79,7 +79,7 @@ internal unsafe partial class LogWindow {
             var costEntries = new List<DetailListRowData> {
                 new() {
                     Kind = DetailRowKind.JournalHeader,
-                    PrimaryText = _selectedSourcePieceItemId is not null ? "Currencies Required (Single Item)" : "Currencies Required (Full Set)",
+                    PrimaryText = _selectedSourcePieceItemId is not null ? UIStrings.Detail_CurrenciesSingle : UIStrings.Detail_CurrenciesFull,
                 },
             };
             var ordered = costTotals.OrderBy(x => Item.GetRow(x.Key).Name.ToString(), StringComparer.Ordinal).ToList();
@@ -100,7 +100,7 @@ internal unsafe partial class LogWindow {
             }
 
             sections.Add(new TreeListSection<DetailListRowData> {
-                Header = "Costs",
+                Header = UIStrings.Detail_Costs,
                 Entries = costEntries,
             });
         }
@@ -112,7 +112,7 @@ internal unsafe partial class LogWindow {
             DetailList.DutyChestMeasureNode);
         if (sourceChildren.Count > 0) {
             sections.Add(new TreeListSection<DetailListRowData> {
-                Header = "Sources",
+                Header = UIStrings.Detail_Sources,
                 Children = sourceChildren,
             });
         }
@@ -165,7 +165,7 @@ internal unsafe partial class LogWindow {
             var entries = new List<DetailListRowData> {
                 new() {
                     Kind = DetailRowKind.JournalHeader,
-                    PrimaryText = "Items with this appearance",
+                    PrimaryText = UIStrings.Detail_ItemsWithAppearance,
                 },
             };
 
@@ -181,7 +181,7 @@ internal unsafe partial class LogWindow {
             }
 
             return new TreeListSection<DetailListRowData> {
-                Header = "Shared Models",
+                Header = UIStrings.Detail_SharedModels,
                 Entries = entries,
             };
         }
@@ -195,7 +195,7 @@ internal unsafe partial class LogWindow {
         var setEntries = new List<DetailListRowData> {
             new() {
                 Kind = DetailRowKind.JournalHeader,
-                PrimaryText = "Sets that contain same-model items",
+                PrimaryText = UIStrings.Detail_SetsWithSameModel,
             },
         };
 
@@ -207,7 +207,7 @@ internal unsafe partial class LogWindow {
         }
 
         return new TreeListSection<DetailListRowData> {
-            Header = "Shared Models",
+            Header = UIStrings.Detail_SharedModels,
             Entries = setEntries,
         };
     }

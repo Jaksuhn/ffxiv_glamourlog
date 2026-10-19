@@ -6,14 +6,14 @@ internal sealed class CountersGuidePage : IGuidePage {
     public string Id => "guide.counters";
     public GuideCategory Category => GuideCategory.Guide;
     public int Order => 1;
-    public string Title => "Counters";
+    public string Title => UIStrings.Guide_Counters_Title;
 
     public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
         => [
             new GuideTextBlock(new Lumina.Text.ReadOnly.ReadOnlySeString(
-                new SeStringBuilder().Append("The bottom-right of the glamour log displays two numbers. The top number is the amount of sets you have completed out of the total number of sets available in the game.\n")
-                .Append("The bottom number is the amount of glamour dresser slots you have\nsaved by having these pieces stored as outfits instead of being loose inside the dresser.\n\n")
-                .Footnote("Completed counter combines sets in the dresser and the armoire.\n")
-                .Footnote("\"Misc Armoire\" are not included in either counters.").Encode())),
+                new SeStringBuilder().Append(UIStrings.Guide_Counters_Completed + "\n")
+                .Append(UIStrings.Guide_Counters_Saved + "\n\n")
+                .Footnote(UIStrings.Guide_Counters_FootnoteCombined + "\n")
+                .Footnote(UIStrings.Guide_Counters_FootnoteMisc).Encode())),
         ];
 }

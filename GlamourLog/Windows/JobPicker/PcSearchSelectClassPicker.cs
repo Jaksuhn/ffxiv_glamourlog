@@ -290,13 +290,26 @@ internal sealed unsafe class PcSearchSelectClassPicker : IDisposable {
                 case AtkValueType.String:
                 case AtkValueType.ManagedString:
                 case AtkValueType.ConstString:
-                    AssignSetupString(ref value, (string)snapshot.Value!);
+                    AssignSetupString(ref value, LocalizedSetupString(i, (string)snapshot.Value!));
                     break;
                 default:
                     throw new NotSupportedException(
                         $"Cannot replay {AddonName} AtkValue {i} with type {FormatType(snapshot.Type)}.");
             }
         }
+    }
+
+    // captured strings are English: role/"All" labels come from the string table, job names from the
+    // ClassJob sheet (job name i lines up with the icon id at i - 43, which is 62000 + ClassJob row)
+    private static string LocalizedSetupString(int index, string captured) {
+        if (Loc.IsDefault)
+            return captured;
+        if (index is >= 95 and < 138
+            && PcSearchSelectClassSetupData.Values[index - 43].Value is int iconId and > 62000
+            && ClassJob.GetRowRef((uint)(iconId - 62000)) is { IsValid: true, Value.Name: var name }
+            && !name.IsEmpty)
+            return name.ToString();
+        return Loc.GetOr($"JobPicker_{captured}", captured);
     }
 
     private void AssignSetupString(ref AtkValue value, string text) {

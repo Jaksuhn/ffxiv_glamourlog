@@ -23,6 +23,7 @@ public sealed class SetListSortControlNode : ResNode {
         var sortBlockEndX = LayoutWidth + ButtonGap;
 
         SortDropDown = new EnumDropDownNode<GlamourSetSortMode> {
+            GetLabelFunction = mode => DropDownListOption.DescriptionForEnumField(mode),
             Position = new Vector2(sortBlockEndX - listOuterWidth, 0f),
             Size = new Vector2(listOuterWidth, ButtonSize),
             Options =

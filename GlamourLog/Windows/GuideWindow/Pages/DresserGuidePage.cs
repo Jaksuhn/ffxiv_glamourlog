@@ -8,46 +8,44 @@ internal sealed class DresserGuidePage : IGuidePage {
     public string Id => "tweaks.dresser";
     public GuideCategory Category => GuideCategory.Tweaks;
     public int Order => 1;
-    public string Title => "Dresser";
+    public string Title => UIStrings.Guide_Dresser_Title;
 
     public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
         => [
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Append("GlamourLog adds two buttons above the category arrows on the item deposit window.")
+                        .Append(UIStrings.Guide_Dresser_Intro)
                         .Encode())),
             new CircleButtonExampleBlock(
                 CircleButtonIcon.GearCog,
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Highlight("Filters")
-                        .Append(" opens a filter window to hide items that match some criteria:")
+                        .Markup(UIStrings.Guide_Tweak_Filters)
                         .Encode())),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Emphasis("Hide already deposited items")
+                        .Emphasis(UIStrings.AddonFilter_HideDeposited)
                         .Encode()),
                 TextLeftInset: Constants.IconTextLeft),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Emphasis("Hide armoire-eligible items")
+                        .Emphasis(UIStrings.AddonFilter_Dresser_HideArmoireEligible)
                         .Encode()),
                 TextLeftInset: Constants.IconTextLeft),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Emphasis("Hide non-outfit items")
+                        .Emphasis(UIStrings.AddonFilter_Dresser_HideNonOutfit)
                         .Encode()),
                 TextLeftInset: Constants.IconTextLeft),
             new CircleButtonExampleBlock(
                 CircleButtonIcon.Chest,
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Highlight("Store all")
-                        .Append(" stores all eligible items from your inventory into the dresser. Ignores items in gearsets.")
+                        .Markup(UIStrings.Guide_Dresser_StoreAll)
                         .Encode())),
         ];
 }

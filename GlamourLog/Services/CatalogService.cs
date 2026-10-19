@@ -408,7 +408,7 @@ internal sealed class CatalogService : IPluginService, IDisposable {
                 AddSourceOption(source.Type, $"achievement:{achievementSource.Achievement.RowId}", achievementSource.Achievement.RowId == 0 ? string.Empty : achievementSource.Achievement.Value.Name.ToString(), bySource, optionLabels);
                 return;
             case ItemPVPSeriesSource seriesSource:
-                AddSourceOption(source.Type, $"pvp-series:{seriesSource.PvpSeries.RowId}", seriesSource.PvpSeries.RowId == 0 ? string.Empty : $"Series {seriesSource.PvpSeries.RowId}", bySource, optionLabels);
+                AddSourceOption(source.Type, $"pvp-series:{seriesSource.PvpSeries.RowId}", seriesSource.PvpSeries.RowId == 0 ? string.Empty : string.Format(UIStrings.Source_PvpSeriesNumbered, seriesSource.PvpSeries.RowId), bySource, optionLabels);
                 return;
             case ItemCashShopSource:
                 EnsureSource(source.Type, bySource);
@@ -438,12 +438,12 @@ internal sealed class CatalogService : IPluginService, IDisposable {
             AddSourceOption(shopSource.Type, $"npc-name:{name}", name, bySource, optionLabels);
         }
         foreach (var npc in npcs.Where(npc => string.IsNullOrWhiteSpace(npc.Name))) {
-            AddSourceOption(shopSource.Type, $"npc:{npc.RowId}", $"NPC #{npc.RowId}", bySource, optionLabels);
+            AddSourceOption(shopSource.Type, $"npc:{npc.RowId}", string.Format(UIStrings.Source_NpcNumbered, npc.RowId), bySource, optionLabels);
         }
 
         if (npcs.Count == 0 && shopSource.Shop.RowId != 0) {
             var shopName = shopSource.Shop.Name.Trim();
-            AddSourceOption(shopSource.Type, $"shop:{(uint)shopSource.Type}:{shopSource.Shop.RowId}", shopName.Length == 0 ? $"Vendor shop #{shopSource.Shop.RowId}" : shopName, bySource, optionLabels);
+            AddSourceOption(shopSource.Type, $"shop:{(uint)shopSource.Type}:{shopSource.Shop.RowId}", shopName.Length == 0 ? string.Format(UIStrings.Source_VendorShopNumbered, shopSource.Shop.RowId) : shopName, bySource, optionLabels);
         }
     }
 
@@ -470,7 +470,10 @@ internal sealed class CatalogService : IPluginService, IDisposable {
     private static string ItemName(uint itemId)
         => itemId != 0 && Item.GetRowRef(itemId) is { IsValid: true, Value.Name: var name } ? name.ToString().Trim() : string.Empty;
 
-    private static string ToName(ItemInfoType type) {
+    private static string ToName(ItemInfoType type)
+        => Loc.GetOr($"SourceType_{type}", ToEnglishName(type));
+
+    private static string ToEnglishName(ItemInfoType type) {
         if (type == ItemInfoType.CashShop)
             return "Mogstation";
         if (type == ItemInfoType.CraftRecipe)

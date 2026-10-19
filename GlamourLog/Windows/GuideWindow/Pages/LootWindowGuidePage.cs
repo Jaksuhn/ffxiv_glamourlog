@@ -6,28 +6,26 @@ internal sealed class LootWindowGuidePage : IGuidePage {
     public string Id => "tweaks.loot-window";
     public GuideCategory Category => GuideCategory.Tweaks;
     public int Order => 3;
-    public string Title => "Loot Window";
+    public string Title => UIStrings.Guide_LootWindow_Title;
 
     public IReadOnlyList<IGuideBlock> BuildBlocks(GuidePageContext context)
         => [
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Append("When the loot window is open, a badge is displayed on item icons for glam pieces you do not already own.")
+                        .Append(UIStrings.Guide_LootWindow_Intro)
                         .Encode())),
             new IconExampleBlock(
                 IconExampleKind.Armoire,
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Highlight("Armoire badge")
-                        .Append(" is shown on unowned armoire-eligible items.")
+                        .Markup(UIStrings.Guide_LootWindow_Armoire)
                         .Encode())),
             new IconExampleBlock(
                 IconExampleKind.Dresser,
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     new SeStringBuilder()
-                        .Highlight("Dresser badge")
-                        .Append(" is shown on unowned, non-armoire outfit pieces.")
+                        .Markup(UIStrings.Guide_LootWindow_Dresser)
                         .Encode())),
         ];
 }

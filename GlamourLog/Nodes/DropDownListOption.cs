@@ -33,11 +33,13 @@ internal static class DropDownListOption {
     internal static IEnumerable<string> EnumDescriptions<T>() where T : struct, Enum
         => Enum.GetValues<T>().Select(static v => DescriptionForEnumField(v));
 
-    private static string DescriptionForEnumField<T>(T value) where T : struct, Enum {
+    // localized label (Enum.<Type>.<Member>), falling back to the [Description] text
+    internal static string DescriptionForEnumField<T>(T value) where T : struct, Enum {
         var name = Enum.GetName(value);
         if (name is null)
             return value.ToString() ?? string.Empty;
         var field = typeof(T).GetField(name, BindingFlags.Public | BindingFlags.Static);
-        return field?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? value.ToString() ?? string.Empty;
+        var description = field?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? value.ToString() ?? string.Empty;
+        return Loc.GetOr($"Enum_{typeof(T).Name}_{name}", description);
     }
 }

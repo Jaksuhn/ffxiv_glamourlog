@@ -1,0 +1,3 @@
+files:
+  - source: /GlamourLog/Resources/Localization/UIStrings.resx
+    translation: /GlamourLog/Resources/Localization/UIStrings.%two_letters_code%.resx

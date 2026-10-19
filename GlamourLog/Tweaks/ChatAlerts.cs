@@ -45,12 +45,23 @@ internal class ChatAlerts : IPluginService, IDisposable {
 
         if (ownedCount == total && ownedCountBefore < total) {
             if (primarySet.NonSetCabinetPiece)
-                message.Message.Append(" This item can go in your armoire!");
+                message.Message.Append(UIStrings.ChatAlert_ArmoireItem);
             else
-                message.Message.Append(" The final piece of ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
+                AppendWithLink(message.Message, string.Format(UIStrings.ChatAlert_FinalPiece, LinkMarker), primarySet.ItemId);
             return;
         }
 
-        message.Message.Append($" {ownedCount}/{total} of the set ").Append(SeString.CreateItemLink(primarySet.ItemId)).Append("!");
+        AppendWithLink(message.Message, string.Format(UIStrings.ChatAlert_SetProgress, ownedCount, total, LinkMarker), primarySet.ItemId);
+    }
+
+    private const string LinkMarker = "\u0001";
+
+    // localized text carries the set link position as a marker so word order can vary per language
+    private static void AppendWithLink(SeString message, string text, uint itemId) {
+        var parts = text.Split(LinkMarker, 2);
+        message.Append(parts[0]);
+        if (parts.Length < 2)
+            return;
+        message.Append(SeString.CreateItemLink(itemId)).Append(parts[1]);
     }
 }

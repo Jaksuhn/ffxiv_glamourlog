@@ -526,7 +526,7 @@ internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRow
             return _secondary.String.ToString();
         }
 
-        return $"Obt. {FormatNumber(owned)}/{FormatNumber(required)}";
+        return string.Format(UIStrings.SetList_Obtained, FormatNumber(owned), FormatNumber(required));
     }
 
     // atk caches ellipsis metrics until string is toggled after a native draw pass
