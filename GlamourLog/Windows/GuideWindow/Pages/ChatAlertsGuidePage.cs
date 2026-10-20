@@ -18,15 +18,16 @@ internal sealed class ChatAlertsGuidePage : IGuidePage {
                         .Append(UIStrings.Guide_ChatAlerts_Intro).Encode())),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
-                    AppendWithLink(ExampleLoot(32597), string.Format(UIStrings.ChatAlert_SetProgress, 3, 5, LinkMarker), 51550)
+                    AppendAlertWithLink(ExampleLoot(32597), string.Format(UIStrings.ChatAlert_SetProgress, 3, 5, LinkMarker), 51550)
                         .Encode())),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
-                    AppendWithLink(ExampleLoot(32622), string.Format(UIStrings.ChatAlert_FinalPiece, LinkMarker), 51550)
+                    AppendAlertWithLink(ExampleLoot(32622), string.Format(UIStrings.ChatAlert_FinalPiece, LinkMarker), 51550)
                         .Encode())),
             new GuideTextBlock(
                 new Lumina.Text.ReadOnly.ReadOnlySeString(
                     ExampleLoot(50933)
+                        .Append(" ")
                         .Append(UIStrings.ChatAlert_ArmoireItem)
                         .Encode())),
             new GuideTextBlock(
@@ -39,6 +40,9 @@ internal sealed class ChatAlertsGuidePage : IGuidePage {
     // mimics the game's loot notice, which is itself localized by the client
     private static SeStringBuilder ExampleLoot(uint itemId)
         => AppendWithLink(new SeStringBuilder(), string.Format(UIStrings.Guide_ChatAlerts_ExampleLoot, LinkMarker), itemId);
+
+    private static SeStringBuilder AppendAlertWithLink(SeStringBuilder builder, string text, uint itemId)
+        => AppendWithLink(builder.Append(" "), text, itemId);
 
     private static SeStringBuilder AppendWithLink(SeStringBuilder builder, string text, uint itemId) {
         var parts = text.Split(LinkMarker, 2);

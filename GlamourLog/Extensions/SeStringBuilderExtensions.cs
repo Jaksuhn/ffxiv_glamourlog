@@ -1,9 +1,9 @@
 ﻿using Dalamud.Game.Text.SeStringHandling;
 using System.Text.RegularExpressions;
 
-namespace GlamourLog;
+namespace GlamourLog.Extensions;
 
-internal static class SeStringBuilderExtensions {
+internal static partial class SeStringBuilderExtensions {
     extension(SeStringBuilder sb) {
         public SeStringBuilder Highlight(string text)
             => sb.AddUiForeground(ThemeColours.Highlight.Key).Append(text).AddUiForegroundOff();
@@ -32,5 +32,8 @@ internal static class SeStringBuilderExtensions {
         }
     }
 
-    private static readonly Regex MarkupPattern = new(@"\[(h|e)\](.*?)\[/\1\]", RegexOptions.Singleline);
+    private static readonly Regex MarkupPattern = MarkupRegex();
+
+    [GeneratedRegex(@"\[(h|e)\](.*?)\[/\1\]", RegexOptions.Singleline)]
+    private static partial Regex MarkupRegex();
 }

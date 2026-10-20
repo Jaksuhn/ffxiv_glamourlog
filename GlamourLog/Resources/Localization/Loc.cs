@@ -1,4 +1,3 @@
-using Dalamud.Plugin;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -6,23 +5,18 @@ namespace GlamourLog.Resources.Localization;
 
 /// <summary>
 /// Keeps <see cref="UIStrings"/> on the Dalamud UI language and resolves resource names that are only
-/// known at runtime (category ids, enum values, ...). Missing translations fall back to the neutral
-/// (English) resources. Text is resolved when nodes are built, so a language change applies the next
-/// time a window is opened.
+/// known at runtime (category ids, job-picker role labels, ...). Missing translations fall back to the
+/// neutral (English) resources. Text is resolved when nodes are built, so a language change applies the
+/// next time a window is opened.
 /// </summary>
-internal static partial class Loc {
-    private static IDalamudPluginInterface? _pluginInterface;
-
-    public static void Init(IDalamudPluginInterface pluginInterface) {
-        _pluginInterface = pluginInterface;
-        pluginInterface.LanguageChanged += SetLanguage;
-        SetLanguage(pluginInterface.UiLanguage);
+internal sealed partial class Loc : IPluginService, IDisposable {
+    public Loc() {
+        Svc.Interface.LanguageChanged += SetLanguage;
+        SetLanguage(Svc.Interface.UiLanguage);
     }
 
-    public static void Dispose() {
-        if (_pluginInterface is not null)
-            _pluginInterface.LanguageChanged -= SetLanguage;
-        _pluginInterface = null;
+    public void Dispose() {
+        Svc.Interface.LanguageChanged -= SetLanguage;
     }
 
     /// <summary>True when the UI is in English, i.e. the neutral resources are used as-is.</summary>
@@ -31,8 +25,6 @@ internal static partial class Loc {
     /// <summary>Looks up a resource by a runtime-built name, or returns <paramref name="fallback"/> if there is none.</summary>
     public static string GetOr(string name, string fallback)
         => UIStrings.ResourceManager.GetString(ToResourceName(name), UIStrings.Culture) ?? fallback;
-
-    public static string Get(string name) => GetOr(name, name);
 
     /// <summary>Display name for an internal (English) category id.</summary>
     public static string Category(string categoryId) => GetOr($"Category_{categoryId}", categoryId);

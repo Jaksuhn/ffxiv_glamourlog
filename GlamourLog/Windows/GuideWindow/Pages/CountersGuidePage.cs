@@ -1,4 +1,5 @@
 using Dalamud.Game.Text.SeStringHandling;
+using GlamourLog.Extensions;
 
 namespace GlamourLog.Windows.GuideWindow;
 

@@ -1,5 +1,6 @@
 using Dalamud.Game.Text.SeStringHandling;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using GlamourLog.Extensions;
 using GlamourLog.Nodes;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Nodes;

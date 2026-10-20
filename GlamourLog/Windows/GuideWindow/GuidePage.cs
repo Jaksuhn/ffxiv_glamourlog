@@ -18,12 +18,14 @@ internal enum GuideCategory {
 }
 
 internal static class GuideCategoryExtensions {
-    internal static string Title(this GuideCategory category)
-        => category switch {
-            GuideCategory.Guide or GuideCategory.Tweaks or GuideCategory.Export or GuideCategory.Settings or GuideCategory.Debug
-                => Loc.Get($"Guide_Category_{category}"),
-            _ => throw new ArgumentOutOfRangeException(nameof(category), category, null),
-        };
+    internal static string Label(this GuideCategory category) => category switch {
+        GuideCategory.Guide => UIStrings.Guide_Category_Guide,
+        GuideCategory.Tweaks => UIStrings.Guide_Category_Tweaks,
+        GuideCategory.Export => UIStrings.Guide_Category_Export,
+        GuideCategory.Settings => UIStrings.Guide_Category_Settings,
+        GuideCategory.Debug => UIStrings.Guide_Category_Debug,
+        _ => throw new ArgumentOutOfRangeException(nameof(category), category, null),
+    };
 
     internal static int Order(this GuideCategory category)
         => category switch {
@@ -79,6 +81,6 @@ internal static class GuidePageCatalog {
         return [.. pages
             .GroupBy(page => page.Category)
             .OrderBy(group => group.Key.Order())
-            .Select(group => new GuideCategoryPages(group.Key.Title(),[.. group.OrderBy(page => page.Order).ThenBy(page => page.Id, StringComparer.Ordinal)]))];
+            .Select(group => new GuideCategoryPages(group.Key.Label(),[.. group.OrderBy(page => page.Order).ThenBy(page => page.Id, StringComparer.Ordinal)]))];
     }
 }

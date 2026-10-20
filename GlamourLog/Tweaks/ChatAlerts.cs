@@ -45,7 +45,7 @@ internal class ChatAlerts : IPluginService, IDisposable {
 
         if (ownedCount == total && ownedCountBefore < total) {
             if (primarySet.NonSetCabinetPiece)
-                message.Message.Append(UIStrings.ChatAlert_ArmoireItem);
+                message.Message.Append(" ").Append(UIStrings.ChatAlert_ArmoireItem);
             else
                 AppendWithLink(message.Message, string.Format(UIStrings.ChatAlert_FinalPiece, LinkMarker), primarySet.ItemId);
             return;
@@ -59,7 +59,7 @@ internal class ChatAlerts : IPluginService, IDisposable {
     // localized text carries the set link position as a marker so word order can vary per language
     private static void AppendWithLink(SeString message, string text, uint itemId) {
         var parts = text.Split(LinkMarker, 2);
-        message.Append(parts[0]);
+        message.Append(" ").Append(parts[0]);
         if (parts.Length < 2)
             return;
         message.Append(SeString.CreateItemLink(itemId)).Append(parts[1]);

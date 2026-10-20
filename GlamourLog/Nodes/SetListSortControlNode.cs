@@ -17,13 +17,13 @@ public sealed class SetListSortControlNode : ResNode {
     public SetListSortControlNode(ListSortDirection sortDirection) {
         var measure = DropDownListOption.CreateAxis14MeasureNode();
         measure.AttachNode(this);
-        var listOuterWidth = DropDownListOption.OuterWidthForListLabels(measure, DropDownListOption.EnumDescriptions<GlamourSetSortMode>());
+        var listOuterWidth = DropDownListOption.OuterWidthForListLabels(measure, Enum.GetValues<GlamourSetSortMode>().Select(static m => m.Label()));
         Size = new Vector2(LayoutWidth, ButtonSize);
 
         var sortBlockEndX = LayoutWidth + ButtonGap;
 
         SortDropDown = new EnumDropDownNode<GlamourSetSortMode> {
-            GetLabelFunction = mode => DropDownListOption.DescriptionForEnumField(mode),
+            GetLabelFunction = static mode => mode.Label(),
             Position = new Vector2(sortBlockEndX - listOuterWidth, 0f),
             Size = new Vector2(listOuterWidth, ButtonSize),
             Options =

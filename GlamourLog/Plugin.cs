@@ -17,7 +17,6 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
 #if LOCAL_CS
         dalamud.InitCustomClientStructs();
 #endif
-        Loc.Init(dalamud);
         await KamiToolKitLibrary.InitializeAsync(dalamud);
         CLibMain.Init(dalamud, this, CLibModule.All);
     }
@@ -25,6 +24,5 @@ public sealed class Plugin(IDalamudPluginInterface dalamud) : IAsyncDalamudPlugi
     public async ValueTask DisposeAsync() {
         await CLibMain.DisposeAsync();
         await IFramework.Get().Run(KamiToolKitLibrary.Dispose);
-        Loc.Dispose();
     }
 }
