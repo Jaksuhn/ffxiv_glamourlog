@@ -506,6 +506,20 @@ internal unsafe class FilterWindow : NativeAddon {
         if (!_committed)
             picker.SetSelectedClassJobIds(Filters.ClassJobIds, notify: false);
 
+        try {
+            // do this before base.OnFinalize just to prevent them from accessing destroyed nodes
+            _currencyFilter?.CollapseIfOpen();
+            if (_sourceDropDown is { IsCollapsed: false })
+                _sourceDropDown.Collapse(playSoundEffect: false);
+            if (_subSourceDropDown is { IsCollapsed: false })
+                _subSourceDropDown.Collapse(playSoundEffect: false);
+
+            _currencyFilter?.DropDown.Dispose();
+            _sourceDropDown?.Dispose();
+            _subSourceDropDown?.Dispose();
+        }
+        catch { }
+
         // don't dispose nodes here
         _nodes.Clear();
         _modeRows.Clear();
