@@ -1,30 +1,26 @@
-using System.Reflection;
 using Dalamud.Plugin.Ipc;
 
 namespace GlamourLog.Services;
 
 internal sealed class AutoDutyIpc : IPluginService {
-    private static readonly string[] GlamourFarmEnable = [
-        "Loop.Pre.Enabled",
-        "Loop.Between.Actions.[RepairLoopActionConfig].Enabled",
-        "Loop.Between.Enabled",
-        "Loop.Between.Actions.[GlamourLoopActionConfig].Enabled",
-        "Loop.Between.Actions.[ArmoireLoopActionConfig].Enabled",
-        "Loop.Between.Enabled",
-        "Loop.Termination.StopWhenDutyGathered",
+    private static readonly (string Key, string Value)[] _configs = [
+        ("Loop.Between.Enabled", "true"),
+        ("Loop.Between.Actions.[GlamourLoopActionConfig].Enabled", "true"),
+        ("Loop.Between.Actions.[ArmoireLoopActionConfig].Enabled", "true"),
+        ("Loop.Termination.Enabled", "true"),
+        ("Loop.Termination.StopWhenDutyGathered", "true"),
     ];
 
-    private const string SectionStart = "EnablePreLoopActions";
-    private const string SectionEnd = "TerminationKeepActive";
-
-    private readonly ICallGateSubscriber<object, bool> _pushOverrides;
+    private readonly ICallGateSubscriber<string, bool, object> _pluginConfig;
+    private readonly ICallGateSubscriber<string, object, object> _setConfig;
     private readonly ICallGateSubscriber<uint, bool> _contentHasPath;
-    private readonly ICallGateSubscriber<uint, int, bool, object> _run;
+    private readonly ICallGateSubscriber<string, uint, int, bool, object> _runForPlugin;
 
     public AutoDutyIpc() {
-        _pushOverrides = Svc.Interface.GetIpcSubscriber<object, bool>("AutoDuty.PushConfigOverrides");
+        _pluginConfig = Svc.Interface.GetIpcSubscriber<string, bool, object>("AutoDuty.PluginConfig");
+        _setConfig = Svc.Interface.GetIpcSubscriber<string, object, object>("AutoDuty.SetConfig");
         _contentHasPath = Svc.Interface.GetIpcSubscriber<uint, bool>("AutoDuty.ContentHasPath");
-        _run = Svc.Interface.GetIpcSubscriber<uint, int, bool, object>("AutoDuty.Run");
+        _runForPlugin = Svc.Interface.GetIpcSubscriber<string, uint, int, bool, object>("AutoDuty.RunForPlugin");
     }
 
     internal void FarmOutfit(uint cfcId) {
@@ -38,66 +34,18 @@ internal sealed class AutoDutyIpc : IPluginService {
             return;
         }
 
-        if (!_run.HasFunction || !_contentHasPath.HasFunction || !_contentHasPath.InvokeFunc(territory)) {
+        if (!_contentHasPath.HasFunction || !_contentHasPath.InvokeFunc(territory)) {
             IChatGui.Get().EchoMessage(UIStrings.AutoDuty_NoPath);
             return;
         }
 
-        var overrides = GetConfigOverrides();
-        if (!_pushOverrides.HasFunction || !_pushOverrides.InvokeFunc(overrides)) {
+        if (!_runForPlugin.HasAction || !_pluginConfig.HasAction || !_setConfig.HasAction) {
             IChatGui.Get().EchoError(UIStrings.AutoDuty_SetupFailed);
             return;
         }
 
-        _run.InvokeAction(territory, 0, true);
+        _pluginConfig.InvokeAction(Svc.Interface.Manifest.InternalName, true);
+        _configs.ForEach(_setConfig.InvokeAction);
+        _runForPlugin.InvokeAction(Svc.Interface.Manifest.InternalName, territory, 0, false);
     }
-
-    // get all possible configs and set them to default
-    private static Dictionary<string, string> GetConfigOverrides() {
-        if (TryBuildOverridesFromReflection(out var overrides))
-            return overrides;
-
-        return GlamourFarmEnable.ToDictionary(k => k, _ => "true", StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static bool TryBuildOverridesFromReflection(out Dictionary<string, string> overrides) {
-        overrides = [with(StringComparer.OrdinalIgnoreCase)];
-
-        var configType = GetConfigType();
-        if (configType is null)
-            return false;
-
-        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
-        var boolFields = configType.GetFields(flags)
-            .Where(f => f.FieldType == typeof(bool))
-            .Select(f => (Field: f, Name: CleanConfigName(f.Name)))
-            .Where(x => !x.Name.Equals("Version", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(x => x.Field.MetadataToken)
-            .ToList();
-
-        if (boolFields.Count == 0)
-            return false;
-
-        var start = boolFields.FindIndex(x => x.Name.Equals(SectionStart, StringComparison.OrdinalIgnoreCase));
-        var end = boolFields.FindIndex(x => x.Name.Equals(SectionEnd, StringComparison.OrdinalIgnoreCase));
-        if (start < 0 || end < 0 || end < start)
-            return false;
-
-        for (var i = start; i <= end; i++)
-            overrides[boolFields[i].Name] = "false";
-
-        foreach (var key in GlamourFarmEnable)
-            overrides[key] = "true";
-
-        return true;
-    }
-
-    private static Type? GetConfigType()
-        => AppDomain.CurrentDomain.GetAssemblies()
-            .FirstOrDefault(a => a.GetName().Name?.Equals("AutoDuty", StringComparison.OrdinalIgnoreCase) == true)
-            ?.GetType("AutoDuty.Windows.Configuration");
-
-    // ConfigHelper.FindConfig
-    private static string CleanConfigName(string fieldName)
-        => fieldName.Replace(">k__BackingField", "", StringComparison.Ordinal).Replace("<", "", StringComparison.Ordinal);
 }

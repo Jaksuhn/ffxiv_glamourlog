@@ -32,7 +32,10 @@ internal static class SourceContextMenu {
                     cfc.QueueDuty(levelSync: false);
             });
             if (Svc.Interface.IsPluginLoaded("AutoDuty")) {
-                menu.AddItem("AutoDuty", () => AutoDutyIpc.Get().FarmOutfit(cfcId));
+                menu.AddItem("AutoDuty", () => {
+                    AutoDutyIpc.Get().FarmOutfit(cfcId);
+                    owner.Close();
+                });
             }
         }
 
