@@ -10,8 +10,8 @@
 
 namespace GlamourLog.Resources.Localization {
     using System;
-
-
+    
+    
     /// <summary>
     ///   A strongly-typed resource class, for looking up localized strings, etc.
     /// </summary>
@@ -23,15 +23,15 @@ namespace GlamourLog.Resources.Localization {
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class UIStrings {
-
+        
         private static global::System.Resources.ResourceManager resourceMan;
-
+        
         private static global::System.Globalization.CultureInfo resourceCulture;
-
+        
         [global::System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
         internal UIStrings() {
         }
-
+        
         /// <summary>
         ///   Returns the cached ResourceManager instance used by this class.
         /// </summary>
@@ -45,7 +45,7 @@ namespace GlamourLog.Resources.Localization {
                 return resourceMan;
             }
         }
-
+        
         /// <summary>
         ///   Overrides the current thread's CurrentUICulture property for all
         ///   resource lookups using this strongly typed resource class.
@@ -59,7 +59,7 @@ namespace GlamourLog.Resources.Localization {
                 resourceCulture = value;
             }
         }
-
+        
         /// <summary>
         ///   Looks up a localized string similar to When the armoire window is open, all entries that already exist inside the armoire will be hidden..
         /// </summary>
@@ -1282,6 +1282,33 @@ namespace GlamourLog.Resources.Localization {
         internal static string Guide_LootWindow_Title {
             get {
                 return ResourceManager.GetString("Guide_LootWindow_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to GlamourLog is shown in the same language as Dalamud&apos;s. Translations are made by the community on [e]Crowdin[/e]. If your language is missing or incomplete, you can help translate it there..
+        /// </summary>
+        internal static string Guide_Translations_Intro {
+            get {
+                return ResourceManager.GetString("Guide_Translations_Intro", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Open Crowdin.
+        /// </summary>
+        internal static string Guide_Translations_OpenCrowdin {
+            get {
+                return ResourceManager.GetString("Guide_Translations_OpenCrowdin", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Translations.
+        /// </summary>
+        internal static string Guide_Translations_Title {
+            get {
+                return ResourceManager.GetString("Guide_Translations_Title", resourceCulture);
             }
         }
         

@@ -192,9 +192,9 @@ internal sealed class PcSearchSelectClassDebugGuidePage : IGuidePage {
 
     private readonly record struct CapturedAtkValue(AtkValueType Type, string ValueExpression, string? Comment);
 
-    private sealed record DebugActionButtonBlock(string Label, System.Action OnClick) : GuideBlock<DebugActionButtonNode> {
-        protected override DebugActionButtonNode Create(float width) => new(width, Label, OnClick);
-        protected override void Relayout(DebugActionButtonNode node, float width) => node.Relayout(width);
+    private sealed record DebugActionButtonBlock(string Label, System.Action OnClick) : GuideBlock<ActionButtonNode> {
+        protected override ActionButtonNode Create(float width) => new(width, Label, OnClick);
+        protected override void Relayout(ActionButtonNode node, float width) => node.Relayout(width);
     }
 
     private sealed record JobPickerDebugBlock : GuideBlock<JobPickerDebugRowNode> {

@@ -3,12 +3,12 @@ using KamiToolKit.Nodes;
 
 namespace GlamourLog.Nodes.GuideWindow;
 
-internal sealed class DebugActionButtonNode : ResNode {
+internal sealed class ActionButtonNode : ResNode {
     private const float RowHeight = 28f;
 
     private readonly TextButtonNode _button;
 
-    public DebugActionButtonNode(float width, string label, System.Action onClick) {
+    public ActionButtonNode(float width, string label, System.Action onClick) {
         _button = new TextButtonNode {
             Size = new Vector2(width, RowHeight),
             String = label,

@@ -649,7 +649,7 @@
     <value>Stored {0} items in </value>
   </data>
   <data name="Store_StoredSuffix" xml:space="preserve">
-    <value></value>
+    <value />
   </data>
   <data name="AutoDuty_InvalidDuty" xml:space="preserve">
     <value>GlamourLog: invalid duty.</value>
@@ -789,6 +789,15 @@ saved by having these pieces stored as outfits instead of being loose inside the
   </data>
   <data name="Guide_Icons_WarningDresser" xml:space="preserve">
     <value>[h]Dresser warning[/h] is shown if the item is currently stored in the dresser but could be stored in the armoire. Also applies to sets.</value>
+  </data>
+  <data name="Guide_Translations_Title" xml:space="preserve">
+    <value>Translations</value>
+  </data>
+  <data name="Guide_Translations_Intro" xml:space="preserve">
+    <value>GlamourLog is shown in the same language as Dalamud's. Translations are made by the community on [e]Crowdin[/e]. If your language is missing or incomplete, you can help translate it there.</value>
+  </data>
+  <data name="Guide_Translations_OpenCrowdin" xml:space="preserve">
+    <value>Open Crowdin</value>
   </data>
   <data name="Guide_Integrations_Title" xml:space="preserve">
     <value>Plugin Integrations</value>
