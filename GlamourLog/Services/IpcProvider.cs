@@ -21,6 +21,7 @@ internal sealed class IpcProvider : IPluginService, IDisposable {
         RegisterFunc("IsBusy", () => Svc.Automation.CurrentTask is not null);
         RegisterFunc("ReadyToStore", IsReadyToStore);
         RegisterFunc("IsItemStorable", (uint itemId) => OwnershipService.Get().IsItemStorable(itemId));
+        RegisterFunc("HasAnythingToStore", () => (int)OwnershipService.Get().GetStoreTargets()); // flags: 1 = armoire, 2 = dresser
     }
 
     public void Dispose() {

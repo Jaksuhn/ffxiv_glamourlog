@@ -36,6 +36,15 @@ internal enum ItemStorageState {
     Armoire,
 }
 
+// which storage(s) have something storable from the inventory; exposed over ipc as an int
+[Flags]
+internal enum StoreTargets {
+    None = 0,
+    Armoire = 1 << 0,
+    Dresser = 1 << 1,
+    All = Armoire | Dresser,
+}
+
 // mirage location (set cumulative) for badges
 internal enum SetStorageState {
     None,

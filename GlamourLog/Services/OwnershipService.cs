@@ -327,6 +327,36 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
     internal bool IsItemStorable(uint itemId)
         => IsArmoireStorable(itemId) || IsDresserStorable(itemId);
 
+    // which store-all tasks would have something to do with the current inventory
+    internal unsafe StoreTargets GetStoreTargets() {
+        var result = StoreTargets.None;
+        var inventory = InventoryManager.Instance();
+        if (inventory is null)
+            return result;
+
+        var seen = new HashSet<uint>();
+        foreach (var type in InventoryType.FullInventory) {
+            var container = inventory->GetInventoryContainer(type);
+            if (container is null)
+                continue;
+
+            for (var i = 0; i < container->Size; i++) {
+                var baseId = ItemUtil.GetBaseId(container->Items[i].ItemId).ItemId;
+                if (baseId == 0 || !seen.Add(baseId) || Item.GetRow(baseId).EquipSlotCategory.RowId == 0)
+                    continue;
+
+                if (!result.HasFlag(StoreTargets.Armoire) && IsArmoireStorable(baseId))
+                    result |= StoreTargets.Armoire;
+                if (!result.HasFlag(StoreTargets.Dresser) && IsDresserStorable(baseId))
+                    result |= StoreTargets.Dresser;
+                if (result == StoreTargets.All)
+                    return result;
+            }
+        }
+
+        return result;
+    }
+
     private static bool IsArmoireStorable(uint itemId) {
         var baseId = ItemUtil.GetBaseId(itemId).ItemId;
         if (baseId == 0 || !Svc.Items.IsCabinetItem(baseId) || Svc.Items.IsInCabinet(baseId))
