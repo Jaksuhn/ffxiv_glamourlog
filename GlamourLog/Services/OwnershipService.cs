@@ -342,7 +342,7 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
 
             for (var i = 0; i < container->Size; i++) {
                 var baseId = ItemUtil.GetBaseId(container->Items[i].ItemId).ItemId;
-                if (baseId == 0 || !seen.Add(baseId) || Item.GetRow(baseId).EquipSlotCategory.RowId == 0)
+                if (baseId == 0 || !seen.Add(baseId) || !Item.TryGetRow(baseId, out var row) || row.EquipSlotCategory.RowId == 0)
                     continue;
 
                 if (!result.HasFlag(StoreTargets.Armoire) && IsArmoireStorable(baseId))
