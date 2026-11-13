@@ -439,6 +439,9 @@ internal sealed unsafe class OwnershipService : IPluginService, IDisposable {
 
         if (pieceSheetSlot is null)
             return false;
+        // check cache first or every slot looks storable
+        if (!mirage->PrismBoxLoaded)
+            return !setRow.IsSetSlotCollected(pieceSheetSlot.Value);
         if (outfitIndices.Count == 0)
             return true;
 
