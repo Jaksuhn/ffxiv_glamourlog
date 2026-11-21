@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
 	<PropertyGroup>
-		<Version>15.79</Version>
+		<Version>15.81</Version>
 		<LangVersion>preview</LangVersion>
 		<Author>croizat</Author>
 		<Name>Glamour Log</Name>
@@ -45,7 +45,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="croizat.clib" Version="1.0.106" />
+		<PackageReference Include="croizat.clib" Version="1.0.117" />
 		<PackageReference Include="KamiToolKit" Version="2.2.38" />
 	</ItemGroup>
 </Project>

@@ -97,6 +97,12 @@ internal static unsafe class CatalogBuilder {
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 
+            if (row.EquipSlotCategory.RowId is 0) {
+                // I have no idea how something has a name at this point but no ESC. I had one report like this
+                IPluginLog.Get().Warning($"Skipping armoire item [#{itemId}] {name} because it has no equip slot category.");
+                continue;
+            }
+
             var items = new ReadOnlyCollection<uint>([itemId]);
             var isUnobtainable = UnobtainableService.Get().Apply(false, items);
             entries.Add(new GlamourSet {
