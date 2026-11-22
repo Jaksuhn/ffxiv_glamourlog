@@ -120,9 +120,9 @@ internal sealed class FilterModeRowNode : ResNode {
             InitializeComponentEvents();
         }
 
-        internal bool Selected {
+        internal unsafe bool Selected {
             set {
-                IsChecked = value;
+                Component->SetChecked(value);
                 _selectedImage.IsVisible = value;
             }
         }

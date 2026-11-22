@@ -11,7 +11,7 @@ public static class SimpleScrollList {
             AutoHideScrollBar = autoHideScrollBar,
         };
         scroll.ContentNode.ItemSpacing = 0f;
-        scroll.ContentNode.FitWidth = true;
+        scroll.ContentNode.StretchWidth = true;
         scroll.ContentNode.FitContents = true;
         scroll.Size = size;
         return scroll;
@@ -27,7 +27,7 @@ public static class SimpleScrollList {
             ContentNode.Width = contentWidth;
 
             if (ContentNode is LayoutListNode layout)
-                layout.RecalculateLayout();
+                layout.UpdateLayout();
         }
     }
 }

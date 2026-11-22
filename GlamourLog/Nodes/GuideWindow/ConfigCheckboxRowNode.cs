@@ -21,7 +21,7 @@ internal sealed class ConfigCheckboxRowNode : ResNode {
             Size = new Vector2(checkboxWidth, RowHeight),
             String = label,
             IsChecked = read(),
-            OnClick = write,
+            OnChecked = write,
         };
         _checkbox.AttachNode(this);
 

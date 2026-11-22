@@ -142,7 +142,7 @@ public unsafe partial class GuideWindow : NativeAddon {
             Position = new Vector2(innerLeft, leftListTop),
             Size = new Vector2(LeftColumnWidth, leftListH),
             ItemSpacing = 0f,
-            FitWidth = true,
+            StretchWidth = true,
         };
         _leftNavList.AttachNode(this);
 
@@ -198,7 +198,7 @@ public unsafe partial class GuideWindow : NativeAddon {
         }
 
         SyncLeftNav();
-        _rightScroll.RecalculateSizes();
+        _rightScroll.UpdateLayout();
     }
 
     // hiding in-place leaves collisions and results in overlaps which makes clicking on some rows impossible in certain collapse orders
@@ -259,9 +259,9 @@ public unsafe partial class GuideWindow : NativeAddon {
 
         _rightTitle.String = _selectedPage.Title;
         RebuildRightPanePage(_selectedPage);
-        _rightScroll.RecalculateSizes();
+        _rightScroll.UpdateLayout();
         RelayoutRightPaneBlocks();
-        _rightScroll.RecalculateSizes();
+        _rightScroll.UpdateLayout();
         _rightScroll.ScrollBarNode.ScrollPosition = 0;
     }
 

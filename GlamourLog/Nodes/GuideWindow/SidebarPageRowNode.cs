@@ -29,7 +29,7 @@ internal sealed class SidebarPageRowNode : ListButtonNode {
     public void SetPageSelected(bool selected) {
         _showSelected = selected;
         HoverBackgroundNode.IsVisible = false;
-        Selected = _showSelected;
+        IsSelected = _showSelected;
         SelectedBackgroundNode.IsVisible = _showSelected;
     }
 

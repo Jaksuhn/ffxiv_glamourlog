@@ -62,7 +62,7 @@ public sealed class GatheringNoteSearchNode : ResNode {
         Input = new TextInputNode {
             Position = inputPos,
             Size = inputSize,
-            PlaceholderString = null,
+            ShowPlaceholderString = false,
             MaxCharacters = 4096,
             ShowLimitText = false,
             OnInputReceived = onInputChanged,

@@ -44,7 +44,7 @@ internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
 
         List = new GlamourSetListNode {
             Position = new Vector2(0f, headerHeight),
-            OptionsList = [],
+            Options = [],
             AutoResetScroll = false,
             ItemSpacing = itemSpacing,
         };
@@ -69,7 +69,7 @@ internal sealed unsafe class LogWindowSetListColumnNode : ResNode {
 
     public void PrepareForClose() {
         CollapseDropDowns();
-        List.ScrollBarNode.OnValueChanged = null;
+        List.ScrollBarNode.OnScrollChanged = null;
         var bar = (AtkComponentScrollBar*)List.ScrollBarNode;
         bar->IsBeingDragged = false;
         bar->SetContentNode(null, null);

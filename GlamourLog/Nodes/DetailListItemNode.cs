@@ -50,7 +50,7 @@ internal sealed class DetailListRowData {
     public uint DungeonChestRowId { get; init; } // duty chest row; left-click opens map marker
 }
 
-internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRowData>, ITreeListItemNode {
+internal sealed unsafe class DetailListItemNode : TreeListItemNode<DetailListRowData>, IListItemNode {
     public static float ItemHeight => 30f;
     private const float PieceIconSize = 22f;
     private const float PieceTextBoxHeight = 19f; // ellipsis needs extra height vs line size

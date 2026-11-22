@@ -64,7 +64,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
             var button = new ListButtonNode {
                 Size = new Vector2(buttonWidth, 24f),
                 String = string.Empty,
-                Selected = captured == selectedCategoryId,
+                IsSelected = captured == selectedCategoryId,
             };
             button.LabelNode.Position = new Vector2(4f, 1f);
             button.LabelNode.Size = new Vector2(button.Width - CategoryCountWidth - CategoryCountRightInset - 8f, button.Height - 2f);
@@ -103,7 +103,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
             CategoryList.ContentNode.AddNode(button);
         }
 
-        CategoryList.RecalculateSizes();
+        CategoryList.UpdateLayout();
         SyncCountLayouts();
         ResetScrollToTop();
     }
@@ -114,7 +114,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
                 continue;
 
             btn.LabelNode.String = Loc.Category(categoryId);
-            btn.Selected = categoryId == selectedCategoryId;
+            btn.IsSelected = categoryId == selectedCategoryId;
             if (refreshCounts && countByButton.TryGetValue(btn, out var countNode)) {
                 var cr = categoryRows(categoryId);
                 var counts = q.CountCompletions(cr);
@@ -128,7 +128,7 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
         foreach (var btn in buttons) {
             if (!buttonCategoryMap.TryGetValue(btn, out var categoryId))
                 continue;
-            btn.Selected = categoryId == selectedCategoryId;
+            btn.IsSelected = categoryId == selectedCategoryId;
         }
     }
 
@@ -150,11 +150,11 @@ internal sealed unsafe class LogWindowCategoryColumnNode : ResNode {
 
     public void ResetScrollToTop() {
         CategoryList.ScrollBarNode.ScrollPosition = 0;
-        CategoryList.RecalculateSizes();
+        CategoryList.UpdateLayout();
     }
 
     public void PrepareForClose() {
-        CategoryList.ScrollBarNode.OnValueChanged = null;
+        CategoryList.ScrollBarNode.OnScrollChanged = null;
         var bar = (AtkComponentScrollBar*)CategoryList.ScrollBarNode;
         bar->IsBeingDragged = false;
         bar->SetContentNode(null, null);

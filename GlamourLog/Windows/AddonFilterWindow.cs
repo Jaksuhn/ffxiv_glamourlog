@@ -135,7 +135,7 @@ internal unsafe class AddonFilterWindow : NativeAddon {
                 String = option.Label,
                 TextTooltip = option.Tooltip,
                 IsChecked = option.Read(C),
-                OnClick = _ => {
+                OnChecked = _ => {
                     option.Flip(C);
                     cb.IsChecked = option.Read(C);
                     C.Save();

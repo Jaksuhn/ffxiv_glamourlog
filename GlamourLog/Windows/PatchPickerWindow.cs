@@ -69,7 +69,7 @@ internal sealed unsafe class PatchPickerWindow : NativeAddon {
                 Position = new Vector2(x, rowY + 2f),
                 Size = new Vector2(22f),
                 String = string.Empty,
-                OnClick = value => SetGroupSelection(controls, value),
+                OnChecked = value => SetGroupSelection(controls, value),
             });
             var selector = AddNode(new ListButtonNode {
                 Position = new Vector2(x + 24f, rowY),
@@ -140,7 +140,7 @@ internal sealed unsafe class PatchPickerWindow : NativeAddon {
         foreach (var candidate in _groups) {
             var onClick = candidate.Selector.OnClick;
             candidate.Selector.OnClick = null;
-            candidate.Selector.Selected = ReferenceEquals(candidate, group);
+            candidate.Selector.IsSelected = ReferenceEquals(candidate, group);
             candidate.Selector.OnClick = onClick;
         }
         _selectedGroup = group;
@@ -161,7 +161,7 @@ internal sealed unsafe class PatchPickerWindow : NativeAddon {
                     Position = new Vector2(x + index % columns * columnWidth, y + index / columns * 24f),
                     Size = new Vector2(columnWidth, 24f),
                     String = string.Format(UIStrings.PatchPicker_Patch, patch),
-                    OnClick = value => {
+                    OnChecked = value => {
                         if (_syncingCheckboxes)
                             return;
                         if (value)

@@ -102,7 +102,7 @@ internal unsafe class FilterWindow : NativeAddon {
             Size = new Vector2(120f, 22f),
             String = Addon.GetRow(3136).Text.ToString(),
             IsChecked = _draft.PartialClassJobMatch,
-            OnClick = value => {
+            OnChecked = value => {
                 _draft?.PartialClassJobMatch = value;
             },
         });
@@ -123,7 +123,7 @@ internal unsafe class FilterWindow : NativeAddon {
             Position = new Vector2(expansionX, y),
             Size = new Vector2(expansionWidth - 124f, 22f),
             String = Addon.GetRow(970).Text.ToString(),
-            OnClick = _ => {
+            OnChecked = _ => {
                 if (_draft is null || _syncingExpansionControls)
                     return;
                 _draft.ExpansionRowIds.Clear();
@@ -150,7 +150,7 @@ internal unsafe class FilterWindow : NativeAddon {
                 Position = new Vector2(sectionX + column * expansionColumnWidth, y + 6f + row * 22f),
                 Size = new Vector2(expansionColumnWidth, 22f),
                 String = expansion.Name,
-                OnClick = value => {
+                OnChecked = value => {
                     if (_draft is null || _syncingExpansionControls)
                         return;
                     if (_draft.UseCustomPatches) {
@@ -420,19 +420,12 @@ internal unsafe class FilterWindow : NativeAddon {
         }
     }
 
-    private static void SetCheckedQuiet(CheckboxNode node, bool value) {
-        var onClick = node.OnClick;
-        node.OnClick = null;
-        node.IsChecked = value;
-        node.OnClick = onClick;
-    }
+    private static void SetCheckedQuiet(CheckboxNode node, bool value)
+        => node.SetValueSilent(value);
 
-    private static void SetCheckedQuiet(ButtonBase node, bool value) {
-        var onClick = node.OnClick;
-        node.OnClick = null;
-        node.IsChecked = value;
-        node.OnClick = onClick;
-    }
+    // ButtonBase.IsChecked was removed in KamiToolKit 3; set native state directly (doesn't fire OnClick).
+    private static unsafe void SetCheckedQuiet(ButtonBase node, bool value)
+        => node.Component->SetChecked(value);
 
     private CheckboxSelectionState CustomExpansionState(uint rowId) {
         if (_draft is null || !_patchesByExpansion.TryGetValue(rowId, out var available) || available.Count == 0)

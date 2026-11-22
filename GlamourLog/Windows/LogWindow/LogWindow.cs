@@ -168,7 +168,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         _setListColumn.SortControl.SortDirectionButton.OnClick = OnSetListSortDirectionToggle;
         _setListColumn.SyncSortDirectionChrome();
 
-        SetList!.OnItemSelected = item => {
+        SetList!.OnOptionSelected = item => {
             if (item is null)
                 return;
             if (ReferenceEquals(_selectedSet, item.Set))
@@ -185,7 +185,7 @@ internal unsafe partial class LogWindow : NativeAddon {
         };
         _detailColumn.AttachNode(this);
 
-        DetailList!.OnItemSelected = _ => { };
+        DetailList!.OnOptionSelected = _ => { };
         DetailList.OnPieceLeftClick = OnDetailPieceItemLeftClick;
         DetailList.OnItemRightClick = id => PieceContextMenu.Open(this, id, _contextMenu);
         DetailList.OnSourceHeaderRightClick = (cfcId, nav) => SourceContextMenu.Open(this, cfcId, nav, _contextMenu);

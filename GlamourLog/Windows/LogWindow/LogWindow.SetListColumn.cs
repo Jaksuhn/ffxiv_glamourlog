@@ -70,7 +70,7 @@ internal unsafe partial class LogWindow {
             }
         }
 
-        SetList.OptionsList = [.. _setListOptions];
+        SetList.Options = [.. _setListOptions];
         if (_pendingClearSetSelection) {
             _pendingClearSetSelection = false;
             SetList.ClearSelection();
@@ -94,19 +94,19 @@ internal unsafe partial class LogWindow {
         if (SetList is null)
             return;
 
-        SetList.SelectedItems.Clear();
+        SetList.SelectedOptions.Clear();
         if (_selectedSet is not { } selected)
             return;
 
-        if (SetList.OptionsList.Find(r => ReferenceEquals(r.Set, selected)) is not null and var row)
-            SetList.SelectedItems.Add(row);
+        if (SetList.Options.Find(r => ReferenceEquals(r.Set, selected)) is not null and var row)
+            SetList.SelectedOptions.Add(row);
     }
 
     private void ScrollSetListToSet(GlamourSet set) {
         if (SetList is null)
             return;
 
-        var index = SetList.OptionsList.FindIndex(r => r.Set.ItemId == set.ItemId);
+        var index = SetList.Options.FindIndex(r => r.Set.ItemId == set.ItemId);
         if (index < 0)
             return;
 
@@ -115,10 +115,10 @@ internal unsafe partial class LogWindow {
             return;
 
         var nodeCount = Math.Max(1, (int)(SetList.Height / stride));
-        var maxScroll = Math.Max(0, SetList.OptionsList.Count - nodeCount);
+        var maxScroll = Math.Max(0, SetList.Options.Count - nodeCount);
         var scroll = Math.Clamp(index, 0, maxScroll);
 
-        SetList.ScrollBarNode.OnValueChanged?.Invoke(scroll * stride);
+        SetList.ScrollBarNode.OnScrollChanged?.Invoke(scroll * stride);
     }
 
     private void ClearSetSearchIfActive() {

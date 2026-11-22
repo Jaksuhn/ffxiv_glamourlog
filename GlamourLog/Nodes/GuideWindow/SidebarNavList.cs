@@ -17,7 +17,7 @@ internal sealed class SidebarNavList : VerticalListNode {
             node.AttachNode(this);
         }
 
-        RecalculateLayout();
+        UpdateLayout();
     }
 
     public void ReleaseManagedNodes() {

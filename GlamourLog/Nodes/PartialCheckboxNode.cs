@@ -29,9 +29,9 @@ internal sealed class PartialCheckboxNode : CheckboxNode {
 
     internal void SetSelectionState(CheckboxSelectionState state) {
         _partialIndicator.IsVisible = state == CheckboxSelectionState.Partial;
-        var onClick = OnClick;
-        OnClick = null;
+        var onClick = OnChecked;
+        OnChecked = null;
         IsChecked = state == CheckboxSelectionState.All; // writing IsChecked fires OnClick
-        OnClick = onClick;
+        OnChecked = onClick;
     }
 }

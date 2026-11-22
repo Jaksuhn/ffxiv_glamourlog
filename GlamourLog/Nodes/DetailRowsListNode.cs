@@ -52,7 +52,7 @@ internal sealed unsafe class DetailRowsListNode : NestableTreeListNode<DetailLis
     public void AttachInteractivity() => SyncNodeCallbacks();
 
     public void DetachInteractivity() {
-        OnItemSelected = null;
+        OnOptionSelected = null;
         OnPieceLeftClick = null;
         OnItemRightClick = null;
         OnSourceHeaderRightClick = null;
